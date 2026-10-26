@@ -1,6 +1,6 @@
 # 01 — Metrics
 
-**Status:** DRAFT v2 — Q1–Q3 validated, block attribution (section F) awaiting validation
+**Status:** VALIDATED (v3) — sections A–F validated by Zaille75; section E "lost opportunity" is a proposal
 
 Every stat is computed **per player**. A pet or summon (e.g. a minion) counts for its owner.
 Each stat exists at three scopes: **turn**, **combat** and **run**.
@@ -56,6 +56,21 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
 Records (best combat, fastest kill…), combat duration (turns and real time), potion use,
 cards played, energy spent, gold, etc.
 
+### E1. "Lost opportunity" (low priority, proposal)
+Idea: show what a player could have done instead of something useless.
+
+| Stat | Definition | Reliability | Tag |
+|---|---|---|---|
+| Unused energy | Energy a player still had when their turn ended **and that was lost** (energy kept for the next turn by a relic or power is not counted). | Exact | v2 |
+| Energy spent on wasted block | For each block card, its energy cost × the share of its block that was wasted or useless. Example: a 1-energy Defend whose 5 block was fully wasted → 1 energy lost. | Exact | v2 |
+| Damage opportunity lost (estimate) | Energy lost (two stats above) × that player's **average damage per energy** in this combat. Example: 2 energy lost, 6 damage/energy on average → ~12 damage. Always shown with "~" because it is an estimate. | Estimate | v2 |
+
+Notes:
+- A player could not always have attacked instead: their hand may have had no playable attack.
+  Possible refinement: count it only if a playable attack was in hand when the block card was played.
+- 0-cost block cards and block from relics/powers cost no energy, so they never create a lost opportunity.
+- No blame for block that was useful: only the wasted share counts.
+
 ---
 
 ## F. Block attribution: "prevented", "wasted" and "useless help"
@@ -85,6 +100,7 @@ the player could already absorb, which is exactly your example. It is also easy 
 | 5 | A gives B 5, C gives B 5, B has 0. Enemy hits for 5. | A: 5 prevented (first). C: 5 useless help. |
 | 6 | Multi-hit: 3 hits of 4 on B, who has own 5 + 5 from A. | Hit 1: B 4. Hit 2: B 1 + A 3. Hit 3: A 2, B loses 2 HP. Totals: B 5, A 5 prevented. |
 | 7 | A gives the whole team 4 block (one card). | One layer per recipient, each attributed separately. |
+| 8 | A has 5 own block. B gives A 5. **Then** A gives himself 5 more. Enemy hits A for 10. | A: 5 prevented (oldest layer). B: 5 prevented. A: **5 wasted** (newest layer, never used). |
 
 ### Edge cases
 | Case | Rule |
@@ -93,13 +109,12 @@ the player could already absorb, which is exactly your example. It is also easy 
 | Block removed by an enemy effect (not by damage) | Counts as wasted / useless help (it saved nothing). |
 | Damage that ignores block (HP loss) | Consumes no layer. |
 | Damage from any source absorbed by block (enemy, self-damage, friendly fire) | Counts as prevented: the block did save HP. Shown with its source in the detail. |
-| Block **left when the combat ends** | **Not counted as wasted.** Defending on the last turn is normal, so it would only add noise. ⚠ To validate. |
+| Block **left when the combat ends** | **Counted** as wasted / useless help, like any other block that saved nothing. |
 | Block consumed or converted by a card instead of damage (e.g. a card that spends block) | Consumed FIFO, counted neither as prevented nor as wasted, but tracked as "block spent". |
 | Block gain modified (Frail, Dexterity…) | The layer records the amount **actually gained**. |
 | Block created by a relic, potion or power | The giver is the player who owns that relic, potion or power. |
 | Block gained when the player dies/the combat ends in the same instant | Ignored. |
 
-### Open questions — Zaille75 to answer
-- **F1.** Is FIFO OK? The alternative "own block first, then allies' gifts" would make example 4
-  give the credit to B instead of A.
-- **F2.** Is it OK that block left at the end of combat is not counted as wasted?
+### Decisions
+- **F1.** FIFO validated (oldest layer absorbs first, whoever gave it).
+- **F2.** Block left at the end of combat is wasted / useless help too.

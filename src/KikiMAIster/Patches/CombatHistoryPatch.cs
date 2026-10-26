@@ -15,7 +15,8 @@ public static class CombatHistoryPatch
     {
         try
         {
-            ModLog.Info(Describe(combatState, entry));
+            if (entry is CardDrawnEntry) return; // noise
+            ModLog.Info("[Add] " + Describe(combatState, entry));
             SpikeTally.Record(entry);
         }
         catch (Exception e)
@@ -35,6 +36,9 @@ public static class CombatHistoryPatch
             $"cardOwner={b.CardPlay?.Card.Owner.Creature.Name ?? "-"}",
         PowerReceivedEntry p =>
             $"POWER R{combatState.RoundNumber} {Who(p.Applier)} -> {Who(p.Actor)}: {p.Power.Id.Entry} x{p.Amount} type={p.Power.Type}",
+        CreatureAttackedEntry a =>
+            $"ATTACK R{combatState.RoundNumber} by {Who(a.Actor)}: " +
+            string.Join(" | ", a.DamageResults.Select(r => $"{Who(r.Receiver)} {DiagnosticPatches.Dmg(r)}")),
         _ => $"OTHER {entry.GetType().Name}: {entry.HumanReadableString}"
     };
 
