@@ -1,5 +1,6 @@
 using KikiMAIster.Core;
 using MegaCrit.Sts2.Core.Runs;
+using MegaCrit.Sts2.Core.Saves;
 
 namespace KikiMAIster;
 
@@ -17,9 +18,11 @@ public static class RunStore
         }
     }
 
-    /// Same seed, ascension and players = same run (the game keeps the seed when a run is continued).
+    /// Same profile, seed, ascension and players = same run (the game keeps the seed when a run is continued).
+    /// The player ids keep a solo run and a co-op run apart; the profile keeps the game's profiles apart.
     public static string KeyOf(IRunState run) =>
-        $"{run.Rng.StringSeed}_A{run.AscensionLevel}_{string.Join('-', run.Players.Select(p => p.NetId).OrderBy(id => id))}";
+        $"P{SaveManager.Instance.CurrentProfileId}_{run.Rng.StringSeed}_A{run.AscensionLevel}_" +
+        string.Join('-', run.Players.Select(p => p.NetId).OrderBy(id => id));
 
     private static string? PathOf(string key) =>
         Dir == null ? null : System.IO.Path.Combine(Dir, string.Concat(key.Select(c => char.IsLetterOrDigit(c) || c is '_' or '-' ? c : '_')) + ".txt");
