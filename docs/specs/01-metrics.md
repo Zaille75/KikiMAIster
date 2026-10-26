@@ -52,6 +52,15 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
 | Damage blocked | Incoming damage absorbed by this player's block, whoever gave it. | v1 |
 | Debuffs received | Debuffs and status cards this player received from enemies. | v1 |
 
+## D2. Pets & summons (e.g. Osty, the Necrobinder's summon)
+| Stat | Definition | Tag |
+|---|---|---|
+| Damage dealt by pet | Counted in the owner's damage, and shown as source "pet" in the detail. | v1 |
+| Damage absorbed by pet | Enemy damage the pet took instead of its owner. Counted as **protection** for the owner (it saved HP). | v1 |
+| Pet deaths | Number of times the pet died. | v1 |
+
+**Q5 — Zaille75 to answer:** OK to count damage absorbed by the pet as protection (section C), not as damage taken?
+
 ## E. Later extensions (not in v1)
 Records (best combat, fastest kill…), combat duration (turns and real time), potion use,
 cards played, energy spent, gold, etc.

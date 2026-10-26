@@ -40,3 +40,19 @@ affects_gameplay, min_game_version. DLL loaded with `LoadFromAssemblyPath`. Work
   - `Hook.AfterDamageReceived` is not called for kills → not usable as the main source.
   - Debuff expiry shows as PowerReceived with a negative amount and `Applier = null`.
   - `DamageResult.UnblockedDamage` excludes overkill (Volley: unblocked=5 overkill=10 killed=True).
+- **v0.0.2, Necrobinder solo, 1 fight:** everything captured this time (damage, Poison, Doom, Osty).
+  - Likely cause of the v0.0.1 gap: the JIT inlined the private `CombatHistory.Add` into the `DamageReceived` /
+    `PowerReceived` wrappers, bypassing our patch. **Rule: patch the public wrappers (DamageReceived,
+    PowerReceived, BlockGained, CreatureAttacked…), never the private `Add`.**
+  - Poison tick: `Dealer = null`, `props = Unblockable, Unpowered` → attribute with our own stack tracking.
+  - The **final Poison tick that kills the last enemy is missing** (IsEnding, and not an attack). Fallback
+    needed: `Creature.LoseHpInternal` postfix while `CombatManager.IsEnding`, with dealer/card context
+    taken from a `Hook.BeforeDamageReceived` prefix.
+  - Power-triggered damage (e.g. SLEIGHT_OF_FLESH: "deal 9 when you apply a debuff"): dealer = player,
+    `card = null`, `props = Unpowered` → source "power".
+  - Osty (pet, named "Osty" here) takes enemy hits aimed at the Necrobinder and its damage is credited to the owner via `PetOwner`.
+  - Doom: kills via `Hook.AfterDiedToDoom` → kill credit to the Doom applier.
+
+## Multiplayer lobby
+Peers exchange `PeerVersionInfo`: only mods with `affects_gameplay: true` must match. KikiMAIster
+(`affects_gameplay: false`) goes into `otherMods` and should not block friends without it (confirm in co-op).
