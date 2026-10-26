@@ -28,6 +28,23 @@
 4. **Persistence** (`Core/`): saves the current run's stats so Save & Quit / Continue doesn't lose
    them, plus the end-of-run JSON export.
 
+## Capture layer (Phase 2, game v0.111)
+| Event | Game hook | Notes |
+|---|---|---|
+| Run / combat start | `Hook.BeforeCombatStart` | New `IRunState` object = new run (persistence across Save & Quit: Phase 4). |
+| Round start | `Hook.BeforeSideTurnStart` (player side) | |
+| Block cleared at turn start | `Hook.AfterBlockCleared` → `BlockObserved(actual block)` | Handles Barricade-like effects (block kept). |
+| Combat end | `Hook.AfterCombatEnd` | Remaining block → wasted / useless help. |
+| Damage | `CombatHistory.DamageReceived` + `CreatureAttacked` + `Creature.LoseHpInternal` (fallback) | Deduplicated per `DamageResult`; fallback covers the final hit the history skips. |
+| Damage source | `CreatureCmd.Damage` prefix: card, else **call-stack walk** to find the calling power/relic/orb/potion | Debuff that damages its own holder = damage-over-time, credited by stacks. |
+| Block | `CreatureCmd.GainBlock` prefix (giver) + `CombatHistory.BlockGained` (final amount) | Giver: card owner › potion user › single owner of the power/relic › receiver. |
+| Block removed | `CreatureCmd.LoseBlock` | Removed by the player itself = "spent", otherwise wasted. |
+| Powers | `CombatHistory.PowerReceived` | |
+| Healing | `CreatureCmd.Heal` | Healer = player playing a card / using a potion, else the healed player. |
+
+Rule learned in the spike: patch the public `CombatHistory` wrappers, never the private `Add` (JIT inlining).
+`tools/PatchCheck` (run by `build.sh`) verifies that every patch matches exactly one game method.
+
 ## Safety rules
 - Every patch is wrapped in try/catch and logs errors; the mod must **never** crash the game.
 - The mod never modifies game state.

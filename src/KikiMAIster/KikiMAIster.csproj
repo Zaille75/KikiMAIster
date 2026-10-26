@@ -19,6 +19,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The stats engine is compiled into the mod: one DLL to ship. -->
+    <Compile Include="../KikiMAIster.Core/**/*.cs" Exclude="../KikiMAIster.Core/obj/**;../KikiMAIster.Core/bin/**" LinkBase="Core" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="KikiMAIster.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

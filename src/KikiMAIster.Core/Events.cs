@@ -54,6 +54,10 @@ public sealed record BlockGained(Actor Receiver, Actor Giver, int Amount, Source
 /// All remaining block on the creature disappeared without absorbing damage (turn start, combat end…).
 public sealed record BlockCleared(Actor Creature) : StatEvent;
 
+/// The creature's real block after the game cleared it at turn start. Layers above that amount
+/// disappeared without absorbing damage (covers full clears and effects that keep some block).
+public sealed record BlockObserved(Actor Creature, int ActualBlock) : StatEvent;
+
 /// Part of the block disappeared without absorbing damage (removed by an effect, or spent by a card).
 public sealed record BlockRemoved(Actor Creature, int Amount, bool SpentByCard) : StatEvent;
 

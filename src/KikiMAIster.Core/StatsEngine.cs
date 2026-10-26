@@ -36,6 +36,7 @@ public sealed class StatsEngine
             case BlockGained b: OnBlockGained(b); break;
             case BlockCleared b: OnBlockCleared(b); break;
             case BlockRemoved b: OnBlockRemoved(b); break;
+            case BlockObserved b: OnBlockObserved(b); break;
             case PowerChanged p: OnPowerChanged(p); break;
             case Healed h: OnHealed(h); break;
         }
@@ -183,6 +184,15 @@ public sealed class StatsEngine
         if (!b.Creature.IsPlayerSide) return;
         var owner = b.Creature.PlayerId;
         foreach (var layer in Ledger(owner).Clear()) CreditUnused(owner, layer, layer.Amount);
+    }
+
+    private void OnBlockObserved(BlockObserved b)
+    {
+        if (!b.Creature.IsPlayerSide) return;
+        var owner = b.Creature.PlayerId;
+        var excess = Ledger(owner).Total - b.ActualBlock;
+        if (excess <= 0) return;
+        foreach (var (layer, taken) in Ledger(owner).Consume(excess)) CreditUnused(owner, layer, taken);
     }
 
     private void OnBlockRemoved(BlockRemoved b)

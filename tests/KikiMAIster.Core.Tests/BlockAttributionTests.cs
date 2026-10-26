@@ -178,4 +178,20 @@ public class BlockAttributionTests : TestBase
         Assert.Equal(5, Combat(IdA).WastedBlock);
         Assert.Equal(0, Engine.Get(Scope.Turn, IdA).WastedBlock);
     }
+
+    [Fact]
+    public void BlockObserved_AfterTurnStart_ExcessIsWasted_OldestFirst()
+    {
+        Block(A, B, 4);
+        Block(A, A, 6);
+        Engine.Handle(new BlockObserved(A, 0));      // normal clear
+        Assert.Equal(4, Combat(IdB).UselessHelp);
+        Assert.Equal(6, Combat(IdA).WastedBlock);
+
+        Block(A, A, 10);
+        Engine.Handle(new BlockObserved(A, 7));      // an effect kept 7 block
+        Assert.Equal(9, Combat(IdA).WastedBlock);
+        EnemyHits(A, blocked: 7, hp: 0);
+        Assert.Equal(7, Combat(IdA).PreventedOwnBlock);
+    }
 }
