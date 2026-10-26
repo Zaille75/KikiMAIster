@@ -212,7 +212,7 @@ public static class Overlay
         {
             _summaryButton.Text = Loc.T("summary.button");
             _summaryButton.TooltipText = Loc.T("summary.tip");
-            _summaryButton.Visible = Capture.Engine.LastCombat != null;
+            _summaryButton.Visible = CombatSummary.HasData;
         }
 
         var engine = Capture.Engine;

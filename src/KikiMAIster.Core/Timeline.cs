@@ -10,5 +10,10 @@ public sealed record RoundTotals(double Damage, double Prevented, double HpLost,
 /// Totals of every player at the end of a round. Round 0 = start of the combat (all zero).
 public sealed record RoundPoint(int Round, IReadOnlyDictionary<ulong, RoundTotals> Players);
 
-/// A finished combat: its round-by-round cumulative totals.
-public sealed record CombatRecord(int Number, bool Victory, IReadOnlyList<RoundPoint> Rounds);
+/// A combat of the run: its round-by-round cumulative totals. Victory is null while the combat is in progress
+/// (the last point is then the round being played).
+public sealed record CombatRecord(int Number, string Name, bool? Victory, IReadOnlyList<RoundPoint> Rounds)
+{
+    public bool InProgress => Victory == null;
+    public int LastRound => Rounds.Count > 0 ? Rounds[^1].Round : 0;
+}

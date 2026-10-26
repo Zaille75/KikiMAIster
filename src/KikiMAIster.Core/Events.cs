@@ -37,7 +37,8 @@ public sealed record RunStarted : StatEvent;
 
 public sealed record PlayerInfo(ulong PlayerId, string Name, string Character);
 
-public sealed record CombatStarted(IReadOnlyList<PlayerInfo> Players) : StatEvent;
+/// Name: the encounter's name in the game language ("" if unknown).
+public sealed record CombatStarted(IReadOnlyList<PlayerInfo> Players, string Name = "") : StatEvent;
 
 /// A new round starts (player turn then enemy turn = one round).
 public sealed record RoundStarted(int Round) : StatEvent;

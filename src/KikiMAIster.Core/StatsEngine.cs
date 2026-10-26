@@ -16,10 +16,21 @@ public sealed class StatsEngine
     public int Round { get; private set; }
 
     private readonly List<RoundPoint> _timeline = new();
+    private readonly List<CombatRecord> _combats = new();
     private int _combatNumber;
+    private string _combatName = "";
+
+    /// Finished combats of this run, oldest first.
+    public IReadOnlyList<CombatRecord> Combats => _combats;
 
     /// The last finished combat (null before the first one ends).
-    public CombatRecord? LastCombat { get; private set; }
+    public CombatRecord? LastCombat => _combats.Count > 0 ? _combats[^1] : null;
+
+    /// The combat being played, with a live point for the current round (null outside combat).
+    public CombatRecord? CurrentCombat => InCombat
+        ? new CombatRecord(_combatNumber, _combatName, null,
+            _timeline.Where(p => p.Round < Round).Append(Point(Round)).ToList())
+        : null;
     public bool InCombat { get; private set; }
 
     /// Block absorbed or removed that no recorded layer covered (should stay 0; non-zero = capture gap).
@@ -58,6 +69,8 @@ public sealed class StatsEngine
     {
         foreach (var s in _stats.Values) s.Clear();
         _players.Clear();
+        _combats.Clear();
+        _combatNumber = 0;
         ResetCombatState();
     }
 
@@ -82,6 +95,7 @@ public sealed class StatsEngine
         }
         _timeline.Clear();
         _combatNumber++;
+        _combatName = c.Name;
         AddRoundPoint(0);
     }
 
@@ -93,8 +107,10 @@ public sealed class StatsEngine
         _stats[Scope.Turn].Clear();
     }
 
-    private void AddRoundPoint(int round) =>
-        _timeline.Add(new RoundPoint(round, _stats[Scope.Combat].ToDictionary(kv => kv.Key, kv => RoundTotals.Of(kv.Value))));
+    private void AddRoundPoint(int round) => _timeline.Add(Point(round));
+
+    private RoundPoint Point(int round) =>
+        new(round, _stats[Scope.Combat].ToDictionary(kv => kv.Key, kv => RoundTotals.Of(kv.Value)));
 
     private void OnCombatEnded(CombatEnded c)
     {
@@ -105,8 +121,8 @@ public sealed class StatsEngine
         if (InCombat)
         {
             if (_timeline.Count == 0 || _timeline[^1].Round < Round) AddRoundPoint(Round);
-            else _timeline[^1] = _timeline[^1] with { Players = _stats[Scope.Combat].ToDictionary(kv => kv.Key, kv => RoundTotals.Of(kv.Value)) };
-            LastCombat = new CombatRecord(_combatNumber, c.Victory, _timeline.ToList());
+            else _timeline[^1] = Point(_timeline[^1].Round);
+            _combats.Add(new CombatRecord(_combatNumber, _combatName, c.Victory, _timeline.ToList()));
         }
         InCombat = false;
     }

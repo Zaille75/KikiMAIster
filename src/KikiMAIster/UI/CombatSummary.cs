@@ -4,8 +4,9 @@ using KikiMAIster.Core;
 
 namespace KikiMAIster.UI;
 
-/// End-of-combat summary (spec 02-ui §2): a cumulative chart per round, one line per player, for a chosen stat.
-/// Opens by itself when a combat ends; the overlay's "Summary" button reopens the last one.
+/// Combat summary (spec 02-ui §2): a cumulative chart per round, one line per player, for a chosen stat.
+/// A selector picks the combat: the one in progress (updated live) or any finished combat of the run.
+/// Opens by itself when a combat ends; the overlay's "Summary" button opens it at any time.
 public static class CombatSummary
 {
     private sealed record Metric(string Key, Func<RoundTotals, double> Value);
@@ -23,6 +24,9 @@ public static class CombatSummary
     private static PanelContainer? _panel;
     private static VBoxContainer? _content;
     private static int _shownCombat;
+    private static int _selected;
+    private static string _liveSignature = "";
+    private static bool _rebuildPending;
     private static string _metric = "summary.damage";
 
     private static ModConfig Cfg => ModConfig.Current;
@@ -44,25 +48,57 @@ public static class CombatSummary
         layer.AddChild(_panel);
     }
 
-    /// Called by the overlay timer: opens the summary once for each newly finished combat.
+    /// True when there is something to show (a combat in progress or finished in this run).
+    public static bool HasData => Capture.Engine.CurrentCombat != null || Capture.Engine.LastCombat != null;
+
+    /// Called by the overlay timer: opens the summary once for each newly finished combat, and keeps the
+    /// chart of the combat in progress up to date.
     public static void ShowIfNewCombatEnded()
     {
-        var combat = Capture.Engine.LastCombat;
-        if (combat == null || combat.Number == _shownCombat) return;
-        _shownCombat = combat.Number;
-        Show();
+        var last = Capture.Engine.LastCombat;
+        if (last != null && last.Number != _shownCombat)
+        {
+            _shownCombat = last.Number;
+            _selected = last.Number;
+            Show();
+            return;
+        }
+        if (_panel is not { Visible: true } || Selected() is not { } selected) return;
+        if (_rebuildPending || (selected.InProgress && Signature(selected) != _liveSignature))
+        {
+            _rebuildPending = false;
+            Rebuild(selected);
+        }
     }
 
     public static void Toggle()
     {
         if (_panel == null) return;
-        if (_panel.Visible) _panel.Visible = false;
-        else Show();
+        if (_panel.Visible)
+        {
+            _panel.Visible = false;
+            return;
+        }
+        // Opens on the combat in progress, else on the last finished one.
+        _selected = (Capture.Engine.CurrentCombat ?? Capture.Engine.LastCombat)?.Number ?? 0;
+        Show();
     }
+
+    /// The selected combat: in progress (live) or finished; falls back to the newest one.
+    private static CombatRecord? Selected()
+    {
+        var engine = Capture.Engine;
+        if (engine.CurrentCombat is { } live && live.Number == _selected) return live;
+        return engine.Combats.FirstOrDefault(c => c.Number == _selected) ?? engine.CurrentCombat ?? engine.LastCombat;
+    }
+
+    private static string Signature(CombatRecord c) =>
+        $"{c.Number}:{c.LastRound}:" + string.Join(',', c.Rounds[^1].Players.Select(kv =>
+            $"{kv.Value.Damage:F0}/{kv.Value.Prevented:F0}/{kv.Value.HpLost:F0}/{kv.Value.DebuffStacks:F0}"));
 
     private static void Show()
     {
-        if (_panel == null || _content == null || Capture.Engine.LastCombat is not { } combat) return;
+        if (_panel == null || _content == null || Selected() is not { } combat) return;
         Rebuild(combat);
         _panel.Visible = true;
         _panel.CallDeferred(Control.MethodName.ResetSize);
@@ -79,14 +115,28 @@ public static class CombatSummary
             child.QueueFree();
         }
 
-        // Title line: "Combat 3 · Victory · 5 rounds" + close.
+        _selected = combat.Number;
+        _liveSignature = combat.InProgress ? Signature(combat) : "";
+
+        // Combat selector (in progress first, then finished combats, newest first) + close.
         var header = new HBoxContainer();
-        var rounds = combat.Rounds.Count > 0 ? combat.Rounds[^1].Round : 0;
-        var title = Overlay.MakeLabel(
-            $"{Loc.T("summary.title")} {combat.Number} · {Loc.T(combat.Victory ? "summary.victory" : "summary.defeat")} · " +
-            $"{rounds} {Loc.T("summary.rounds")}", Overlay.Accent);
-        title.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        header.AddChild(title);
+        var picker = new OptionButton { FocusMode = Control.FocusModeEnum.None, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        picker.AddThemeFontSizeOverride("font_size", Overlay.FontSize);
+        var choices = new List<CombatRecord>();
+        if (Capture.Engine.CurrentCombat is { } live) choices.Add(live);
+        choices.AddRange(Capture.Engine.Combats.Reverse());
+        foreach (var c in choices)
+        {
+            picker.AddItem(Label(c), c.Number);
+            if (c.Number == combat.Number && c.InProgress == combat.InProgress) picker.Select(picker.ItemCount - 1);
+        }
+        picker.ItemSelected += index => Capture.Safe("CombatSummary.Pick", () =>
+        {
+            // Rebuilt on the next timer tick: the picker cannot remove itself while its popup is closing.
+            _selected = picker.GetItemId((int)index);
+            _rebuildPending = true;
+        });
+        header.AddChild(picker);
         var close = Overlay.MakeButton("✕");
         close.Pressed += () => Capture.Safe("CombatSummary.Close", () => _panel!.Visible = false);
         header.AddChild(close);
@@ -114,6 +164,15 @@ public static class CombatSummary
         _panel!.CallDeferred(Control.MethodName.ResetSize);
     }
 
+    /// "Combat 4 · Jaw Worm · Victory · 5 rounds" or "▶ Combat 5 · Cultist · in progress (round 2)".
+    private static string Label(CombatRecord c)
+    {
+        var name = c.Name == "" ? "" : $" · {c.Name}";
+        return c.InProgress
+            ? $"▶ {Loc.T("summary.title")} {c.Number}{name} · {Loc.T("summary.inProgress")} ({Loc.T("summary.round").ToLowerInvariant()} {c.LastRound})"
+            : $"{Loc.T("summary.title")} {c.Number}{name} · {Loc.T(c.Victory == true ? "summary.victory" : "summary.defeat")} · {c.LastRound} {Loc.T("summary.rounds")}";
+    }
+
     private static List<ulong> Players(CombatRecord combat) =>
         combat.Rounds.SelectMany(r => r.Players.Keys).Distinct().OrderBy(id => id).ToList();
 
@@ -122,7 +181,7 @@ public static class CombatSummary
         var chart = new Control { CustomMinimumSize = new Vector2(ChartWidth, ChartHeight) };
         var plotW = ChartWidth - AxisLeft - 10;
         var plotH = ChartHeight - AxisBottom - 8;
-        var lastRound = Math.Max(1, combat.Rounds.Count > 0 ? combat.Rounds[^1].Round : 1);
+        var lastRound = Math.Max(1, combat.LastRound);
         var max = NiceMax(combat.Rounds.SelectMany(r => r.Players.Values).Select(metric.Value).DefaultIfEmpty(0).Max());
 
         float X(int round) => AxisLeft + plotW * round / lastRound;

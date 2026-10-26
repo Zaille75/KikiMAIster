@@ -29,6 +29,18 @@ public static class CombatFlowPatches
         if (_runKey != null) RunStore.Save(_runKey, _floor, Capture.Engine);
     }
 
+    private static string EncounterName(ICombatState? combatState)
+    {
+        try
+        {
+            return combatState?.Encounter?.Title.GetFormattedText() ?? "";
+        }
+        catch (Exception)
+        {
+            return "";
+        }
+    }
+
     /// Starts tracking a run the first time it is seen, and restores its saved totals if it is a continued run.
     private static void EnsureRun(IRunState runState)
     {
@@ -80,7 +92,8 @@ public static class CombatFlowPatches
             KikiMAIster.UI.Overlay.EnsureAttached("combat start");
             var players = combatState?.Players ?? runState.Players;
             Capture.Emit(new CombatStarted(players.Select(p =>
-                new PlayerInfo(p.NetId, Capture.PlayerName(p, players.Count), p.Character.Id.Entry)).ToList()));
+                new PlayerInfo(p.NetId, Capture.PlayerName(p, players.Count), p.Character.Id.Entry)).ToList(),
+                EncounterName(combatState)));
         });
     }
 
