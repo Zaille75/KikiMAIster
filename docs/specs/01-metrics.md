@@ -147,3 +147,4 @@ the player could already absorb, which is exactly your example. It is also easy 
 - **F4 (v0.4.5).** A block card that **also did something else** during its play (applied a power or debuff, dealt
   damage, healed, drew cards, channeled an orb, created a card) is never wasted: its unused block is useless.
   Known limit: an effect triggered by something else during that play (a relic reacting to it) also counts.
+- **F5 (v0.4.6).** An **Ethereal** block card is never wasted either (not playing it would have lost it anyway).

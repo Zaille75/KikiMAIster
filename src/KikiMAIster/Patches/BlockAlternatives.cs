@@ -9,7 +9,7 @@ namespace KikiMAIster.Patches;
 /// Decides, at the end of each player turn, whether each block card played that turn had a real alternative:
 /// an attack that was in hand when the block card was played, was never played, and could be paid with the
 /// block card's energy + the energy left at the end of the turn (spec 01-metrics §F, wasted vs useless).
-/// A block card that also did something else (debuff, damage, draw…) never counts as wasted.
+/// A block card that also did something else (debuff, damage, draw…) or is Ethereal never counts as wasted.
 public static class BlockAlternatives
 {
     private sealed class Play
@@ -20,6 +20,7 @@ public static class BlockAlternatives
         public required List<CardModel> AttacksInHand { get; init; }
         public bool GaveBlock { get; set; }
         public bool HadOtherEffect { get; set; }
+        public required bool Ethereal { get; init; }
     }
 
     private static readonly ConditionalWeakTable<CardPlay, Play> Plays = new();
@@ -59,6 +60,7 @@ public static class BlockAlternatives
             Id = ++_nextId,
             Owner = cardPlay.Player,
             EnergySpent = cardPlay.Resources.EnergySpent,
+            Ethereal = cardPlay.Card.Keywords.Contains(CardKeyword.Ethereal),
             AttacksInHand = hand.Where(c => c != cardPlay.Card && c.Type == CardType.Attack).ToList()
         };
         Plays.AddOrUpdate(cardPlay, play);
@@ -82,10 +84,10 @@ public static class BlockAlternatives
         {
             var state = play.Owner.PlayerCombatState;
             var budget = play.EnergySpent + (state?.Energy ?? 0);
-            var alternative = state == null || play.HadOtherEffect ? null : play.AttacksInHand.FirstOrDefault(c =>
+            var alternative = state == null || play.HadOtherEffect || play.Ethereal ? null : play.AttacksInHand.FirstOrDefault(c =>
                 !used.Contains(c) && state.Hand.Cards.Contains(c) && Cost(c) <= budget && PlayableExceptEnergy(c));
             if (alternative != null) used.Add(alternative);
-            ModLog.Info($"block play {play.Id}: other effect {play.HadOtherEffect}, energy budget {budget}, attacks in hand when played: " +
+            ModLog.Info($"block play {play.Id}: other effect {play.HadOtherEffect}, ethereal {play.Ethereal}, energy budget {budget}, attacks in hand when played: " +
                         $"[{string.Join(", ", play.AttacksInHand.Select(c => Capture.IdOf(c)))}] → alternative: " +
                         (alternative != null ? Capture.IdOf(alternative) : "none"));
             Capture.Emit(new BlockPlayResolved(play.Id, alternative != null));
