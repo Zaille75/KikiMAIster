@@ -43,6 +43,7 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
 | Wasted block ("gâché") | Block this player gave (to themselves or an ally) that never absorbed anything, **while a real alternative existed**: a playable attack stayed in hand (rule in section F). | v1 |
 | Useless block ("inutile") | Block that never absorbed anything **with no alternative**: no playable attack in hand, or block from a relic, power, potion or auto-played card. | v1 |
 | …of which given to allies | Part of the wasted + useless block that was given to allies (co-op detail). | v1 |
+| Damage prevented — relics & powers | HP loss reduced by a relic or power on the player or their pet (Tungsten Rod, Intangible, Buffer…), per source. Included in the "Prevented" total. If several reduce the same hit, the saving is shared equally. | v1 |
 | Damage prevented — Weak & co. | Damage enemies did **not** deal because of this player's Weak (or similar) on them. | v2 |
 | Healing | HP restored, to self and to allies, shown separately. | v1 |
 

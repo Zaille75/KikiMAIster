@@ -8,6 +8,7 @@ using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.Powers;
+using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.ValueProps;
@@ -103,35 +104,47 @@ public static class BlockAndPowerPatches
                 };
                 id = $"{stat}~DOWN@{id}";
             }
-            var e = new PowerChanged(Capture.ToActor(applier), Capture.ToActor(power.Owner), id, value, debuff);
-
-            if (temporary && _heldDown is { } held && held.Target == e.Target) _heldDown = null;
-            if (id.EndsWith("~DOWN"))
-            {
-                if (_lastTemporaryTarget == e.Target)
-                {
-                    _lastTemporaryTarget = null;
-                    return;
-                }
-                FlushHeldDown();
-                _heldDown = e;
-                return;
-            }
-            Capture.Emit(e);
-            _lastTemporaryTarget = temporary ? e.Target : null;
+            // The stat loss a temporary power applies to its holder is already counted as that temporary power.
+            if (id.EndsWith("~DOWN") && TakeSuppressed(power.Owner)) return;
+            Capture.Emit(new PowerChanged(Capture.ToActor(applier), Capture.ToActor(power.Owner), id, value, debuff));
         });
     }
 
-    private static PowerChanged? _heldDown;
-    private static Actor? _lastTemporaryTarget;
+    // Temporary "down" powers (Enfeebling Touch…) apply a real Strength/Dexterity/Focus loss to their holder.
+    // That loss is skipped (it is counted once, as the temporary power). Decided when the command starts, from
+    // the call stack, because the history entry may come later.
+    private static readonly ConditionalWeakTable<Creature, StrongBox<int>> Suppressed = new();
 
-    /// Emits a held "down" change that no temporary power followed. Called before any other event.
-    public static void FlushHeldDown()
+    private static void SuppressIfFromTemporaryPower(PowerModel power, Creature target, decimal amount)
     {
-        _lastTemporaryTarget = null;
-        if (_heldDown is not { } held) return;
-        _heldDown = null;
-        Capture.Emit(held);
+        if (amount >= 0 || power is not (StrengthPower or DexterityPower or FocusPower)) return;
+        var caller = Capture.CallingModelType();
+        if (caller == null || !(typeof(TemporaryStrengthPower).IsAssignableFrom(caller) ||
+                                typeof(TemporaryDexterityPower).IsAssignableFrom(caller) ||
+                                typeof(TemporaryFocusPower).IsAssignableFrom(caller))) return;
+        Suppressed.GetOrCreateValue(target).Value++;
+    }
+
+    private static bool TakeSuppressed(Creature target)
+    {
+        if (!Suppressed.TryGetValue(target, out var box) || box.Value <= 0) return false;
+        box.Value--;
+        return true;
+    }
+
+    [HarmonyPatch(typeof(PowerCmd), nameof(PowerCmd.Apply), typeof(PlayerChoiceContext), typeof(PowerModel), typeof(Creature),
+        typeof(decimal), typeof(Creature), typeof(CardModel), typeof(bool))]
+    public static class PowerApply
+    {
+        public static void Prefix(PowerModel power, Creature target, decimal amount) =>
+            Capture.Safe("PowerCmd.Apply", () => SuppressIfFromTemporaryPower(power, target, amount));
+    }
+
+    [HarmonyPatch(typeof(PowerCmd), nameof(PowerCmd.ModifyAmount))]
+    public static class PowerModify
+    {
+        public static void Prefix(PowerModel power, decimal offset) =>
+            Capture.Safe("PowerCmd.ModifyAmount", () => SuppressIfFromTemporaryPower(power, power.Owner, offset));
     }
 
     [HarmonyPatch(typeof(CreatureCmd), nameof(CreatureCmd.Heal))]

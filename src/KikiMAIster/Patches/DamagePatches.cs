@@ -8,6 +8,7 @@ using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Powers;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
+using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.ValueProps;
 
@@ -57,6 +58,27 @@ public static class DamagePatches
             var call = new DamageCall(dealer, null, model);
             foreach (var c in creatures) LastCallOnTarget.AddOrUpdate(c, WithDot(call, c));
         });
+    }
+
+    /// HP loss reduced by relics/powers (Tungsten Rod, Intangible, Buffer…): credited as damage prevented to the
+    /// player (or pet owner) hit. Called only by real damage commands, not by previews.
+    [HarmonyPatch(typeof(Hook), nameof(Hook.ModifyHpLost))]
+    public static class HpLossModifiers
+    {
+        public static void Postfix(Creature target, decimal amount, decimal __result, ref IEnumerable<AbstractModel> modifiers)
+        {
+            var models = modifiers?.ToList();
+            Capture.Safe("Hook.ModifyHpLost", () =>
+            {
+                var saved = (double)(decimal.Truncate(amount) - decimal.Truncate(__result));
+                if (saved <= 0 || models == null || models.Count == 0) return;
+                var actor = Capture.ToActor(target);
+                if (!actor.IsPlayerSide) return;
+                // Several modifiers on one hit: shared equally.
+                foreach (var m in models)
+                    Capture.Emit(new HpLossPrevented(actor, saved / models.Count, Capture.SourceOf(m.GetType()).ToString()));
+            });
+        }
     }
 
     [HarmonyPatch(typeof(Creature), nameof(Creature.LoseHpInternal))]

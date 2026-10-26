@@ -40,6 +40,7 @@ public sealed class StatsEngine
             case BlockObserved b: OnBlockObserved(b); break;
             case PowerChanged p: OnPowerChanged(p); break;
             case Healed h: OnHealed(h); break;
+            case HpLossPrevented h: OnHpLossPrevented(h); break;
             case BlockPlayResolved r: _hadAlternative[r.PlayId] = r.HadAlternative; break;
         }
     }
@@ -240,6 +241,16 @@ public sealed class StatsEngine
         credit(Stats(Scope.Combat, layer.GiverId));
         credit(Stats(Scope.Run, layer.GiverId));
         if (layer.Round == Round) credit(Stats(Scope.Turn, layer.GiverId));
+    }
+
+    private void OnHpLossPrevented(HpLossPrevented h)
+    {
+        if (h.Amount <= 0 || !h.Target.IsPlayerSide || h.Target.PlayerId == 0) return;
+        Each(h.Target.PlayerId, s =>
+        {
+            s.PreventedByEffects += h.Amount;
+            PlayerStats.Add(s.PreventedByEffectSource, h.SourceId, h.Amount);
+        });
     }
 
     // ---------- Powers & healing ----------

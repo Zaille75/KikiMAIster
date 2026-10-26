@@ -45,6 +45,11 @@ public sealed class PlayerStats
     public double UnusedOwn => WastedBlock + UselessBlock - UnusedGivenToAllies;
     public double BlockSpent { get; set; }
     public double AbsorbedByPet { get; set; }
+    /// HP loss avoided thanks to relics/powers that reduce it (Tungsten Rod, Intangible…), per source.
+    public double PreventedByEffects { get; set; }
+    public Dictionary<string, double> PreventedByEffectSource { get; } = new();
+    /// Everything that really stopped damage: own block, block given to allies, pet, relics/powers.
+    public double PreventedTotal => PreventedOwnBlock + PreventedForAllies + AbsorbedByPet + PreventedByEffects;
     public double PetDeaths { get; set; }
     public double HealingSelf { get; set; }
     public double HealingAllies { get; set; }

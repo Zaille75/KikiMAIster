@@ -52,6 +52,10 @@ public sealed record DamageDealt(
 /// PlayId: the card play that gave the block (0 = not a card the player chose: relic, power, potion, auto-play).
 public sealed record BlockGained(Actor Receiver, Actor Giver, int Amount, Source Source, int PlayId = 0) : StatEvent;
 
+/// HP loss reduced by a relic or power (Tungsten Rod, Intangible, Buffer…) on a player or pet. SourceId: the
+/// model that reduced it ("Relic:TUNGSTEN_ROD"…).
+public sealed record HpLossPrevented(Actor Target, double Amount, string SourceId) : StatEvent;
+
 /// End of the player's turn: whether a block card play had a real alternative (spec 01-metrics §F, "wasted" vs "useless").
 public sealed record BlockPlayResolved(int PlayId, bool HadAlternative) : StatEvent;
 

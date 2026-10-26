@@ -439,10 +439,12 @@ public static class Overlay
             ("tip.col.wasted", N(s.WastedBlock), false), ("tip.col.useless", N(s.UselessBlock), false),
             ("tip.unusedAllies", N(s.UnusedGivenToAllies), true), ("tip.spent", N(s.BlockSpent), false),
             ("tip.pet", N(s.AbsorbedByPet), false), ("tip.petDeaths", N(s.PetDeaths), false),
-            ("tip.healSelf", N(s.HealingSelf), false), ("tip.healAllies", N(s.HealingAllies), true));
+            ("tip.byEffects", N(s.PreventedByEffects), false),
+            ("tip.healSelf", N(s.HealingSelf), false), ("tip.healAllies", N(s.HealingAllies), true))
+            + (s.PreventedByEffectSource.Count == 0 ? "" : "\n" + Lines(s.PreventedByEffectSource));
         return new[]
         {
-            new Cell("col.prevented", N(s.PreventedOwnBlock + s.PreventedForAllies + s.AbsorbedByPet), tip),
+            new Cell("col.prevented", N(s.PreventedTotal), tip),
             new Cell("col.forAllies", N(s.PreventedForAllies), tip),
             new Cell("col.wasted", N(s.WastedBlock), tip),
             new Cell("col.useless", N(s.UselessBlock), tip)
@@ -500,7 +502,7 @@ public static class Overlay
             $"{kv.Value.WastedBlock:F1}:{kv.Value.UselessBlock + kv.Value.BlockSpent:F1}:{kv.Value.BlockGainedSelf + kv.Value.BlockGivenToAllies:F1}:" +
             $"{kv.Value.HpLost:F1}:{kv.Value.DamageBlocked:F1}:{kv.Value.DebuffsApplied.Values.Sum(t => t.Stacks):F1}:{kv.Value.DebuffsApplied.Values.Sum(t => t.Count)}:" +
             $"{kv.Value.DebuffsReceived.Count}:{kv.Value.FriendlyDamage + kv.Value.SelfDamage:F1}:{kv.Value.FriendlyDebuffs.Count}:" +
-            $"{kv.Value.HealingSelf + kv.Value.HealingAllies:F1}:{kv.Value.AbsorbedByPet:F1}:{kv.Value.Kills}"));
+            $"{kv.Value.HealingSelf + kv.Value.HealingAllies:F1}:{kv.Value.AbsorbedByPet:F1}:{kv.Value.PreventedByEffects:F1}:{kv.Value.Kills}"));
 
     private static string N(double v) => Math.Round(v).ToString("0", CultureInfo.InvariantCulture);
 

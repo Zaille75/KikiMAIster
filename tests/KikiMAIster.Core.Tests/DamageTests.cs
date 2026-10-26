@@ -69,6 +69,18 @@ public class DamageTests : TestBase
     }
 
     [Fact]
+    public void HpLossReducedByRelic_CountsAsPrevented()
+    {
+        Engine.Handle(new HpLossPrevented(A, 1, "Relic:TUNGSTEN_ROD"));
+        Engine.Handle(new HpLossPrevented(PetA, 1, "Relic:TUNGSTEN_ROD"));
+        Engine.Handle(new HpLossPrevented(Enemy, 5, "Power:INTANGIBLE_POWER"));
+
+        Assert.Equal(2, Combat(IdA).PreventedByEffects);
+        Assert.Equal(2, Combat(IdA).PreventedByEffectSource["Relic:TUNGSTEN_ROD"]);
+        Assert.Equal(2, Combat(IdA).PreventedTotal);
+    }
+
+    [Fact]
     public void DebuffsApplied_CountedPerType()
     {
         Power(A, Enemy, "VULNERABLE_POWER", 2);
