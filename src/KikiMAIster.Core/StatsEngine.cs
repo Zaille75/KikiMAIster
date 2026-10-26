@@ -41,6 +41,9 @@ public sealed class StatsEngine
             case PowerChanged p: OnPowerChanged(p); break;
             case Healed h: OnHealed(h); break;
             case HpLossPrevented h: OnHpLossPrevented(h); break;
+            case PetHpGiven p when p.Giver.IsPlayerSide && p.Giver.PlayerId != 0 && p.Amount > 0:
+                Each(p.Giver.PlayerId, s => s.PetHpGiven += p.Amount);
+                break;
             case BlockPlayResolved r: _hadAlternative[r.PlayId] = r.HadAlternative; break;
         }
     }

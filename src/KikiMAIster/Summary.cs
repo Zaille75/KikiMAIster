@@ -20,7 +20,7 @@ public static class Summary
             ModLog.Info($"  Protection: blockSelf={F(s.BlockGainedSelf)} blockToAllies={F(s.BlockGivenToAllies)} " +
                         $"preventedOwn={F(s.PreventedOwnBlock)} preventedAllies={F(s.PreventedForAllies)} " +
                         $"wasted={F(s.WastedBlock)} useless={F(s.UselessBlock)} unusedToAllies={F(s.UnusedGivenToAllies)} spent={F(s.BlockSpent)} " +
-                        $"pet={F(s.AbsorbedByPet)} byEffects={F(s.PreventedByEffects)} petDeaths={F(s.PetDeaths)} healSelf={F(s.HealingSelf)} healAllies={F(s.HealingAllies)}");
+                        $"pet={F(s.AbsorbedByPet)} byEffects={F(s.PreventedByEffects)} petHp={F(s.PetHpGiven)} petDeaths={F(s.PetDeaths)} healSelf={F(s.HealingSelf)} healAllies={F(s.HealingAllies)}");
             ModLog.Info($"  Taken: hpLost={F(s.HpLost)} (enemies={F(s.HpLostFromEnemies)} allies={F(s.HpLostFromAllies)} " +
                         $"self={F(s.HpLostFromSelf)} other={F(s.HpLostOther)}) blocked={F(s.DamageBlocked)} debuffs={Powers(s.DebuffsReceived)}");
             ModLog.Info($"  Friendly fire: damage={F(s.FriendlyDamage)} self={F(s.SelfDamage)} debuffs={Powers(s.FriendlyDebuffs)}");

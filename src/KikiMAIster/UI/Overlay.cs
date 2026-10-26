@@ -30,6 +30,7 @@ public static class Overlay
     private static IReadOnlyList<string> _damageColumns = Array.Empty<string>();
     private static IReadOnlyList<string> _debuffColumns = Array.Empty<string>();
     private static bool _solo;
+    private static bool _anyPetHp;
     private static Button? _langButton;
     private static Label? _title;
     private static bool _dragging;
@@ -38,7 +39,8 @@ public static class Overlay
     private static readonly Section[] Sections =
     {
         new("damage", DamageRow, () => new[] { "col.total" }.Concat(_damageColumns).ToList()),
-        new("protection", ProtectionRow, () => Fixed("col.prevented", "col.forAllies", "col.wasted", "col.useless")),
+        new("protection", ProtectionRow, () => Fixed("col.prevented", "col.forAllies", "col.wasted", "col.useless")
+            .Concat(_anyPetHp ? new[] { "col.petHp" } : Array.Empty<string>()).ToList()),
         new("debuffs", DebuffRow, () => _debuffColumns.Count > 0 ? _debuffColumns : new[] { "col.noDebuff" }),
         new("taken", TakenRow, () => Fixed("col.hpLost", "col.blocked", "col.debuffs")),
         new("friendly", FriendlyRow, () => Fixed("col.toAllies", "col.self", "col.debuffs")),
@@ -228,6 +230,7 @@ public static class Overlay
         _debuffColumns = stats.Values.SelectMany(x => x.DebuffsApplied)
             .GroupBy(kv => DebuffColumn(kv.Key)).OrderByDescending(g => g.Sum(kv => kv.Value.Stacks)).Select(g => g.Key).ToList();
         _solo = players.Count == 1;
+        _anyPetHp = stats.Values.Any(x => x.PetHpGiven > 0);
         foreach (var section in Sections)
         {
             var open = Cfg.OpenSections.Contains(section.Key);
@@ -438,6 +441,7 @@ public static class Overlay
             ("tip.preventedOwn", N(s.PreventedOwnBlock), false), ("tip.preventedAllies", N(s.PreventedForAllies), true),
             ("tip.col.wasted", N(s.WastedBlock), false), ("tip.col.useless", N(s.UselessBlock), false),
             ("tip.unusedAllies", N(s.UnusedGivenToAllies), true), ("tip.spent", N(s.BlockSpent), false),
+            ("tip.col.petHp", N(s.PetHpGiven), false),
             ("tip.pet", N(s.AbsorbedByPet), false), ("tip.petDeaths", N(s.PetDeaths), false),
             ("tip.byEffects", N(s.PreventedByEffects), false),
             ("tip.healSelf", N(s.HealingSelf), false), ("tip.healAllies", N(s.HealingAllies), true))
@@ -447,7 +451,8 @@ public static class Overlay
             new Cell("col.prevented", N(s.PreventedTotal), tip),
             new Cell("col.forAllies", N(s.PreventedForAllies), tip),
             new Cell("col.wasted", N(s.WastedBlock), tip),
-            new Cell("col.useless", N(s.UselessBlock), tip)
+            new Cell("col.useless", N(s.UselessBlock), tip),
+            new Cell("col.petHp", N(s.PetHpGiven), tip)
         };
     }
 
@@ -502,7 +507,7 @@ public static class Overlay
             $"{kv.Value.WastedBlock:F1}:{kv.Value.UselessBlock + kv.Value.BlockSpent:F1}:{kv.Value.BlockGainedSelf + kv.Value.BlockGivenToAllies:F1}:" +
             $"{kv.Value.HpLost:F1}:{kv.Value.DamageBlocked:F1}:{kv.Value.DebuffsApplied.Values.Sum(t => t.Stacks):F1}:{kv.Value.DebuffsApplied.Values.Sum(t => t.Count)}:" +
             $"{kv.Value.DebuffsReceived.Count}:{kv.Value.FriendlyDamage + kv.Value.SelfDamage:F1}:{kv.Value.FriendlyDebuffs.Count}:" +
-            $"{kv.Value.HealingSelf + kv.Value.HealingAllies:F1}:{kv.Value.AbsorbedByPet:F1}:{kv.Value.PreventedByEffects:F1}:{kv.Value.Kills}"));
+            $"{kv.Value.HealingSelf + kv.Value.HealingAllies:F1}:{kv.Value.AbsorbedByPet:F1}:{kv.Value.PreventedByEffects:F1}:{kv.Value.PetHpGiven:F1}:{kv.Value.Kills}"));
 
     private static string N(double v) => Math.Round(v).ToString("0", CultureInfo.InvariantCulture);
 

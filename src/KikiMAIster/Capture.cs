@@ -83,6 +83,18 @@ public static class Capture
         return model.Id.Entry;
     }
 
+    /// True when a method of `type` (or of its async state machines) is on the current call stack.
+    public static bool IsInsideCall(Type type)
+    {
+        foreach (var frame in new StackTrace(1, false).GetFrames())
+        {
+            var t = frame.GetMethod()?.DeclaringType;
+            while (t is { IsNested: true } && t.Name.StartsWith('<')) t = t.DeclaringType;
+            if (t == type) return true;
+        }
+        return false;
+    }
+
     /// Finds which game model (power, relic, orb, potion, card) is calling the current game command,
     /// by walking the call stack. Only valid in a prefix of a command, before its first await.
     public static Type? CallingModelType()

@@ -20,6 +20,8 @@ public static class Loc
         ["col.wasted"] = ("Wasted", "Gâché"),
         ["col.useless"] = ("Useless", "Inutile"),
         ["col.noDebuff"] = ("None", "Aucun"),
+        ["col.petHp"] = ("Pet HP", "PV familier"),
+        ["tip.col.petHp"] = ("HP given to your pet (summon, max HP, heal), never wasted", "PV donnés au familier (invocation, PV max, soins), jamais gâchés"),
         ["tip.col.prevented"] = ("Damage actually stopped: your block, your pet, relics/powers (Tungsten Rod…)", "Dégâts réellement arrêtés : ton armure, ton familier, reliques/pouvoirs (Tige de tungstène…)"),
         ["tip.col.forAllies"] = ("Damage stopped by block you gave to allies", "Dégâts arrêtés par l'armure donnée aux alliés"),
         ["tip.col.wasted"] = ("Block that stopped nothing, while a useful playable card (attack, debuff, draw…) stayed in hand", "Armure qui n'a rien arrêté, alors qu'une carte utile jouable (attaque, affaiblissement, pioche…) est restée en main"),

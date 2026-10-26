@@ -61,6 +61,7 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
 | Damage dealt by pet | Counted in the owner's damage, and shown as source "pet" in the detail. | v1 |
 | Damage absorbed by pet | Enemy damage the pet took instead of its owner. Counted as **protection** for the owner (it saved HP). | v1 |
 | Pet deaths | Number of times the pet died. | v1 |
+| Pet HP given | HP given to the pet: summon, revive, max HP gain, heal (a heal that is part of a summon counts once). Credited to the player who gave it. Separate from block: **never wasted or useless**. A block card that also summons has "another effect" (F4), so its unused block is never wasted either. Not part of "Prevented" (the damage the pet then absorbs already is). | v1 |
 
 **Q5 — validated:** damage absorbed by the pet counts as protection for its owner, not as damage taken.
 

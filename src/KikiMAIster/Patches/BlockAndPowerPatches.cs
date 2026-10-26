@@ -156,7 +156,27 @@ public static class BlockAndPowerPatches
             var healed = (int)Math.Min(amount, creature.MaxHp - creature.CurrentHp);
             if (healed <= 0) return;
             BlockAlternatives.OnEffect();
-            Capture.Emit(new Healed(Capture.ToActor(Capture.CurrentActingPlayer), Capture.ToActor(creature), healed));
+            var healer = Capture.ToActor(Capture.CurrentActingPlayer);
+            var target = Capture.ToActor(creature);
+            if (target.Kind == ActorKind.Pet)
+            {
+                // The heal that is part of a summon is already counted by History.Summoned.
+                if (!Capture.IsInsideCall(typeof(OstyCmd)))
+                    Capture.Emit(new PetHpGiven(healer.Kind == ActorKind.Player ? healer : Actor.Player(target.PlayerId, 0), healed));
+                return;
+            }
+            Capture.Emit(new Healed(healer, target, healed));
+        });
+    }
+
+    /// Summon (new pet, revive, max HP gain): HP given to the pet, and an effect of the card being played.
+    [HarmonyPatch(typeof(CombatHistory), nameof(CombatHistory.Summoned))]
+    public static class Summoned
+    {
+        public static void Prefix(int amount, Player player) => Capture.Safe("History.Summoned", () =>
+        {
+            BlockAlternatives.OnEffect();
+            Capture.Emit(new PetHpGiven(Capture.ToActor(player), amount));
         });
     }
 }

@@ -52,6 +52,10 @@ public sealed record DamageDealt(
 /// PlayId: the card play that gave the block (0 = not a card the player chose: relic, power, potion, auto-play).
 public sealed record BlockGained(Actor Receiver, Actor Giver, int Amount, Source Source, int PlayId = 0) : StatEvent;
 
+/// HP given to a pet (summon, max HP gain, heal). Giver: the player who gave it. Separate from block:
+/// never wasted or useless.
+public sealed record PetHpGiven(Actor Giver, double Amount) : StatEvent;
+
 /// HP loss reduced by a relic or power (Tungsten Rod, Intangible, Buffer…) on a player or pet. SourceId: the
 /// model that reduced it ("Relic:TUNGSTEN_ROD"…).
 public sealed record HpLossPrevented(Actor Target, double Amount, string SourceId) : StatEvent;

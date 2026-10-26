@@ -51,6 +51,8 @@ public sealed class PlayerStats
     /// Everything that really stopped damage: own block, block given to allies, pet, relics/powers.
     public double PreventedTotal => PreventedOwnBlock + PreventedForAllies + AbsorbedByPet + PreventedByEffects;
     public double PetDeaths { get; set; }
+    /// HP given to pets (summon, max HP gain, heal): what the pet could then absorb.
+    public double PetHpGiven { get; set; }
     public double HealingSelf { get; set; }
     public double HealingAllies { get; set; }
 

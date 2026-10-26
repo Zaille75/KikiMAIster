@@ -81,6 +81,17 @@ public class DamageTests : TestBase
     }
 
     [Fact]
+    public void PetHpGiven_TrackedSeparately_NeverWastedOrUseless()
+    {
+        Engine.Handle(new PetHpGiven(A, 6));
+        Engine.Handle(new PetHpGiven(A, 3));
+        Engine.Handle(new CombatEnded(true));
+
+        Assert.Equal(9, Combat(IdA).PetHpGiven);
+        Assert.Equal(0, Combat(IdA).WastedBlock + Combat(IdA).UselessBlock);
+    }
+
+    [Fact]
     public void DebuffsApplied_CountedPerType()
     {
         Power(A, Enemy, "VULNERABLE_POWER", 2);
