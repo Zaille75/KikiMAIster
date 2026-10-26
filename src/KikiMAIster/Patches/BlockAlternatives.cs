@@ -62,6 +62,9 @@ public static class BlockAlternatives
             var alternative = state == null ? null : play.AttacksInHand.FirstOrDefault(c =>
                 !used.Contains(c) && state.Hand.Cards.Contains(c) && Cost(c) <= budget && PlayableExceptEnergy(c));
             if (alternative != null) used.Add(alternative);
+            ModLog.Info($"block play {play.Id}: energy budget {budget}, attacks in hand when played: " +
+                        $"[{string.Join(", ", play.AttacksInHand.Select(c => Capture.IdOf(c)))}] → alternative: " +
+                        (alternative != null ? Capture.IdOf(alternative) : "none"));
             Capture.Emit(new BlockPlayResolved(play.Id, alternative != null));
         }
         ThisTurn.Clear();

@@ -26,6 +26,7 @@ public static class Capture
 
     public static void Emit(StatEvent e)
     {
+        Patches.BlockAndPowerPatches.FlushHeldDown();
         try
         {
             Engine.Handle(e);

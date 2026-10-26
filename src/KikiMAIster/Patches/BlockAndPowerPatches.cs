@@ -9,6 +9,7 @@ using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.Powers;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.ValueProps;
 
 namespace KikiMAIster.Patches;
@@ -86,8 +87,39 @@ public static class BlockAndPowerPatches
                 value = -value;
                 debuff = true;
             }
-            Capture.Emit(new PowerChanged(Capture.ToActor(applier), Capture.ToActor(power.Owner), id, value, debuff));
+            var e = new PowerChanged(Capture.ToActor(applier), Capture.ToActor(power.Owner), id, value, debuff);
+
+            // Temporary "down" powers (Enfeebling Touch…) apply a Strength/Dexterity/Focus loss together with
+            // themselves: before (first application) or right after (stacking). The loss counts only once, as the
+            // temporary power: a loss is held back and dropped if its temporary power comes next.
+            var temporary = power is TemporaryStrengthPower or TemporaryDexterityPower or TemporaryFocusPower;
+            if (temporary && _heldDown is { } held && held.Target == e.Target) _heldDown = null;
+            if (id.EndsWith("~DOWN"))
+            {
+                if (_lastTemporaryTarget == e.Target)
+                {
+                    _lastTemporaryTarget = null;
+                    return;
+                }
+                FlushHeldDown();
+                _heldDown = e;
+                return;
+            }
+            Capture.Emit(e);
+            _lastTemporaryTarget = temporary ? e.Target : null;
         });
+    }
+
+    private static PowerChanged? _heldDown;
+    private static Actor? _lastTemporaryTarget;
+
+    /// Emits a held "down" change that no temporary power followed. Called before any other event.
+    public static void FlushHeldDown()
+    {
+        _lastTemporaryTarget = null;
+        if (_heldDown is not { } held) return;
+        _heldDown = null;
+        Capture.Emit(held);
     }
 
     [HarmonyPatch(typeof(CreatureCmd), nameof(CreatureCmd.Heal))]
