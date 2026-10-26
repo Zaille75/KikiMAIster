@@ -45,6 +45,13 @@ public static class BlockAlternatives
         if (InProgress.TryPeek(out var play) && play != null) play.HadOtherEffect = true;
     }
 
+    /// Another card discarded or exhausted by the play in progress (Survivor…). The played card itself going to
+    /// its pile is not an effect.
+    public static void OnCardEffect(CardModel card)
+    {
+        if (InProgress.TryPeek(out var play) && play != null && play.Card != card) play.HadOtherEffect = true;
+    }
+
     public static void OnPlayFinished()
     {
         if (InProgress.Count > 0) InProgress.Pop();

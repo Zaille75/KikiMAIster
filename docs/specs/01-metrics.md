@@ -147,7 +147,7 @@ the player could already absorb, which is exactly your example. It is also easy 
   - Same rule for block given to allies; the part given to allies is also shown as "…of which given to allies".
   - In the examples above, "useless help" now reads "wasted or useless (given to an ally)".
 - **F4 (v0.4.5).** A block card that **also did something else** during its play (applied a power or debuff, dealt
-  damage, healed, drew cards, channeled an orb, created a card) is never wasted: its unused block is useless.
+  damage, healed, drew cards, discarded or exhausted another card, channeled an orb, created a card, summoned) is never wasted: its unused block is useless.
   Known limit: an effect triggered by something else during that play (a relic reacting to it) also counts.
 - **F6 (v0.4.7).** The alternative is not only an attack: any **useful card** counts, meaning an attack, or a skill or power
   that gives no block (debuff, draw, buff…). Status cards, curses and other block cards are not alternatives.

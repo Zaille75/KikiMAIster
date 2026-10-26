@@ -171,6 +171,18 @@ public static class CombatFlowPatches
         public static void Prefix() => Capture.Safe("AfterCardDrawn", BlockAlternatives.OnEffect);
     }
 
+    [HarmonyPatch(typeof(Hook), nameof(Hook.AfterCardDiscarded))]
+    public static class CardDiscarded
+    {
+        public static void Prefix(CardModel card) => Capture.Safe("AfterCardDiscarded", () => BlockAlternatives.OnCardEffect(card));
+    }
+
+    [HarmonyPatch(typeof(Hook), nameof(Hook.AfterCardExhausted))]
+    public static class CardExhausted
+    {
+        public static void Prefix(CardModel card) => Capture.Safe("AfterCardExhausted", () => BlockAlternatives.OnCardEffect(card));
+    }
+
     [HarmonyPatch(typeof(Hook), nameof(Hook.AfterOrbChanneled))]
     public static class OrbChanneled
     {
