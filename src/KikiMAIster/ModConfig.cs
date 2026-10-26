@@ -15,6 +15,8 @@ public sealed class ModConfig
     public float Scale { get; set; } = 1f;
     /// "auto" (game language), "en" or "fr".
     public string Language { get; set; } = "auto";
+    /// Open the combat summary by itself when a combat ends.
+    public bool AutoSummary { get; set; } = true;
     /// Not saved: every section starts folded when the game starts.
     public List<string> OpenSections { get; set; } = new();
 
@@ -49,6 +51,7 @@ public sealed class ModConfig
                     case "opacity": c.Opacity = Float(v, c.Opacity); break;
                     case "scale": c.Scale = Float(v, c.Scale); break;
                     case "language": c.Language = v; break;
+                    case "autoSummary": c.AutoSummary = v == "true"; break;
                 }
             }
         }
@@ -72,7 +75,7 @@ public sealed class ModConfig
             {
                 $"x={X.ToString(ci)}", $"y={Y.ToString(ci)}", $"visible={(Visible ? "true" : "false")}",
                 $"scope={Scope}", $"opacity={Opacity.ToString(ci)}", $"scale={Scale.ToString(ci)}",
-                $"language={Language}"
+                $"language={Language}", $"autoSummary={(AutoSummary ? "true" : "false")}"
             });
         }
         catch (Exception e)

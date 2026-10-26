@@ -2,6 +2,7 @@ using Godot;
 using HarmonyLib;
 using KikiMAIster.UI;
 using MegaCrit.Sts2.Core.Nodes;
+using MegaCrit.Sts2.Core.Nodes.Screens.Map;
 
 namespace KikiMAIster.Patches;
 
@@ -11,6 +12,13 @@ public static class UiPatches
     public static class AttachOverlay
     {
         public static void Postfix(NGame __instance) => Capture.Safe("NGame._Ready", () => Overlay.Attach(__instance));
+    }
+
+    /// Leaving the rewards for the map closes the summary that opened at the end of the combat.
+    [HarmonyPatch(typeof(NMapScreen), nameof(NMapScreen.Open))]
+    public static class MapOpened
+    {
+        public static void Postfix() => Capture.Safe("NMapScreen.Open", CombatSummary.HideAutoShown);
     }
 
     [HarmonyPatch(typeof(NGame), nameof(NGame._Input))]

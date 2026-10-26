@@ -27,6 +27,8 @@ public static class CombatSummary
     private static int _selected;
     private static string _liveSignature = "";
     private static bool _rebuildPending;
+    /// Opened by itself at the end of a combat: closed again when the map opens.
+    private static bool _autoShown;
     private static string _metric = "summary.damage";
 
     private static ModConfig Cfg => ModConfig.Current;
@@ -59,8 +61,10 @@ public static class CombatSummary
         if (last != null && last.Number != _shownCombat)
         {
             _shownCombat = last.Number;
+            if (!Cfg.AutoSummary) return;
             _selected = last.Number;
             Show();
+            _autoShown = true;
             return;
         }
         if (_panel is not { Visible: true } || Selected() is not { } selected) return;
@@ -74,6 +78,7 @@ public static class CombatSummary
     public static void Toggle()
     {
         if (_panel == null) return;
+        _autoShown = false;
         if (_panel.Visible)
         {
             _panel.Visible = false;
@@ -82,6 +87,14 @@ public static class CombatSummary
         // Opens on the combat in progress, else on the last finished one.
         _selected = (Capture.Engine.CurrentCombat ?? Capture.Engine.LastCombat)?.Number ?? 0;
         Show();
+    }
+
+    /// Back on the map (rewards done) or a new combat: closes a summary that opened by itself.
+    public static void HideAutoShown()
+    {
+        if (!_autoShown || _panel == null) return;
+        _autoShown = false;
+        _panel.Visible = false;
     }
 
     /// The selected combat: in progress (live) or finished; falls back to the newest one.
@@ -161,6 +174,16 @@ public static class CombatSummary
         var metric = Metrics.First(m => m.Key == _metric);
         _content.AddChild(BuildChart(combat, metric));
         _content.AddChild(BuildLegend(combat, metric));
+
+        var auto = new CheckBox { Text = Loc.T("summary.auto"), ButtonPressed = Cfg.AutoSummary, FocusMode = Control.FocusModeEnum.None };
+        auto.AddThemeFontSizeOverride("font_size", Overlay.FontSize);
+        auto.AddThemeColorOverride("font_color", Overlay.Muted);
+        auto.Toggled += on => Capture.Safe("CombatSummary.Auto", () =>
+        {
+            Cfg.AutoSummary = on;
+            Cfg.Save();
+        });
+        _content.AddChild(auto);
         _panel!.CallDeferred(Control.MethodName.ResetSize);
     }
 

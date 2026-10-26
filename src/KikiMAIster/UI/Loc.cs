@@ -69,6 +69,7 @@ public static class Loc
         ["summary.button"] = ("Summary", "Résumé"),
         ["summary.tip"] = ("Combats of this run, round by round (the current one is updated live)", "Combats de cette partie, tour par tour (celui en cours est mis à jour en direct)"),
         ["summary.inProgress"] = ("in progress", "en cours"),
+        ["summary.auto"] = ("Show at the end of each combat", "Afficher à la fin de chaque combat"),
         ["summary.title"] = ("Combat", "Combat"),
         ["summary.victory"] = ("Victory", "Victoire"),
         ["summary.defeat"] = ("Defeat", "Défaite"),

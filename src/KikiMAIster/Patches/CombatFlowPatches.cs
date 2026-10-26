@@ -90,6 +90,7 @@ public static class CombatFlowPatches
             BlockAlternatives.Reset();
             _combatOpen = true;
             KikiMAIster.UI.Overlay.EnsureAttached("combat start");
+            KikiMAIster.UI.CombatSummary.HideAutoShown();
             var players = combatState?.Players ?? runState.Players;
             Capture.Emit(new CombatStarted(players.Select(p =>
                 new PlayerInfo(p.NetId, Capture.PlayerName(p, players.Count), p.Character.Id.Entry)).ToList(),
