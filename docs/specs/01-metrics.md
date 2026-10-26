@@ -59,28 +59,34 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
 | Damage absorbed by pet | Enemy damage the pet took instead of its owner. Counted as **protection** for the owner (it saved HP). | v1 |
 | Pet deaths | Number of times the pet died. | v1 |
 
-**Q5 — Zaille75 to answer:** OK to count damage absorbed by the pet as protection (section C), not as damage taken?
+**Q5 — validated:** damage absorbed by the pet counts as protection for its owner, not as damage taken.
 
 ## E. Later extensions (not in v1)
 Records (best combat, fastest kill…), combat duration (turns and real time), potion use,
 cards played, energy spent, gold, etc.
 
-### E1. "Lost opportunity" (low priority, proposal)
+### E1. "Lost opportunity" (low priority, v2)
 Idea: show what a player could have done instead of something useless.
 
-| Stat | Definition | Reliability | Tag |
-|---|---|---|---|
-| Unused energy | Energy a player still had when their turn ended **and that was lost** (energy kept for the next turn by a relic or power is not counted). | Exact | v2 |
-| Energy spent on wasted block | For each block card, its energy cost × the share of its block that was wasted or useless. Example: a 1-energy Defend whose 5 block was fully wasted → 1 energy lost. | Exact | v2 |
-| Damage opportunity lost (estimate) | Energy lost (two stats above) × that player's **average damage per energy** in this combat. Example: 2 energy lost, 6 damage/energy on average → ~12 damage. Always shown with "~" because it is an estimate. | Estimate | v2 |
+| Stat | Definition | Reliability |
+|---|---|---|
+| Unused energy | Energy a player still had when their turn ended **and that was lost** (energy kept for the next turn by a relic or power is not counted). | Exact |
+| Energy spent on wasted block | For each block card: its energy cost × the share of its block that ended up wasted or useless. Example: a 1-energy Defend whose 5 block was fully wasted → 1 energy lost. | Exact |
+| Missed damage (estimate) | Damage a real attack from the hand could have dealt instead of the wasted block (rule below). Shown with "~". | Estimate |
 
-Notes:
-- A player could not always have attacked instead: their hand may have had no playable attack.
-  Possible refinement: count it only if a playable attack was in hand when the block card was played.
-- 0-cost block cards and block from relics/powers cost no energy, so they never create a lost opportunity.
-- No blame for block that was useful: only the wasted share counts.
+**Missed damage rule** (no averages: only real cards that were really in hand):
+1. When a block card is played, the mod records the attack cards in hand that were **playable** at that
+   moment, with the game's own damage preview against each living enemy.
+2. At the end of the turn, if some of that card's block ended up wasted, a candidate attack counts only if:
+   - it was **still not played** at the end of the turn (otherwise it was not an alternative);
+   - its cost ≤ the block card's cost + energy left unused at the end of the turn.
+3. The best candidate is kept (highest previewed damage, capped at the enemy's HP + block). Missed damage =
+   that damage × the wasted share of the block card. Each attack card can be used for only one block card.
+4. No candidate → no missed damage (the player had no alternative).
 
----
+Known limits (why it stays an estimate): cards that draw cards (what would have been drawn is unknown),
+attacks with random or conditional effects, and the enemy's later actions.
+0-cost block cards and block from relics/powers cost no energy, so they never create a lost opportunity.
 
 ## F. Block attribution: "prevented", "wasted" and "useless help"
 
