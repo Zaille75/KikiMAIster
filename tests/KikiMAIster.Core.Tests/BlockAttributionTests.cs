@@ -224,4 +224,27 @@ public class BlockAttributionTests : TestBase
         Assert.Equal(6, Combat(IdA).UnusedGivenToAllies);
         Assert.Equal(0, Combat(IdA).UnusedOwn);
     }
+
+    [Fact]
+    public void PreviousTurn_HoldsTheFinishedRound_WithItsWastedBlockAndReason()
+    {
+        var choice = new BlockChoice("Card:DEFEND", "Card:STRIKE", new[] { "Card:STRIKE" }, 5, 0);
+        Engine.Handle(new BlockGained(A, A, 5, Source.Card("DEFEND"), PlayId: 3));
+        Hit(A, Enemy, 0, 7);
+        Engine.Handle(new BlockPlayResolved(3, true, choice));
+        Engine.Handle(new RoundStarted(2));
+        Engine.Handle(new BlockObserved(A, 0));
+
+        var prev = Engine.Get(Scope.PreviousTurn, IdA);
+        Assert.Equal(7, prev.DamageDealt);
+        Assert.Equal(5, prev.WastedBlock);
+        var why = Assert.Single(prev.WastedPlays);
+        Assert.Equal(5, why.Amount);
+        Assert.Equal("Card:STRIKE", why.Choice.Alternative);
+        Assert.Equal(0, Engine.Get(Scope.Turn, IdA).DamageDealt);
+
+        // New events go to the current turn only.
+        Hit(A, Enemy, 0, 3);
+        Assert.Equal(7, Engine.Get(Scope.PreviousTurn, IdA).DamageDealt);
+    }
 }

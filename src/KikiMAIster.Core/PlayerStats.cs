@@ -1,6 +1,8 @@
 namespace KikiMAIster.Core;
 
-public enum Scope { Turn, Combat, Run }
+/// Turn: the round being played. PreviousTurn: the last finished round (frozen when a new round starts or the
+/// combat ends, then completed by what is only known afterwards, e.g. its wasted block).
+public enum Scope { Turn, PreviousTurn, Combat, Run }
 
 /// Count and total stacks of one power (e.g. Vulnerable applied 3 times for 5 stacks).
 public sealed class PowerTally
@@ -43,6 +45,8 @@ public sealed class PlayerStats
     /// Part of the wasted + useless block that this player had given to allies (co-op detail).
     public double UnusedGivenToAllies { get; set; }
     public double UnusedOwn => WastedBlock + UselessBlock - UnusedGivenToAllies;
+    /// Why block was wasted: one entry per block card play (not saved with the run).
+    public List<WastedPlay> WastedPlays { get; } = new();
     public double BlockSpent { get; set; }
     public double AbsorbedByPet { get; set; }
     /// HP loss avoided thanks to relics/powers that reduce it (Tungsten Rod, Intangible…), per source.
@@ -64,6 +68,13 @@ public sealed class PlayerStats
     public double HpLost => HpLostFromEnemies + HpLostFromAllies + HpLostFromSelf + HpLostOther;
     public double DamageBlocked { get; set; }
     public Dictionary<string, PowerTally> DebuffsReceived { get; } = new();
+
+    internal static void AddWasted(List<WastedPlay> list, int playId, int round, BlockChoice choice, double amount)
+    {
+        var entry = list.FirstOrDefault(w => w.PlayId == playId);
+        if (entry == null) list.Add(entry = new WastedPlay(playId, round, choice));
+        entry.Amount += amount;
+    }
 
     internal static void AddPower(Dictionary<string, PowerTally> map, string powerId, double stacks)
     {

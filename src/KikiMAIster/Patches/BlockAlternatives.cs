@@ -2,7 +2,9 @@ using System.Runtime.CompilerServices;
 using KikiMAIster.Core;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.MonsterMoves.Intents;
 
 namespace KikiMAIster.Patches;
 
@@ -17,6 +19,7 @@ public static class BlockAlternatives
     {
         public required int Id { get; init; }
         public required Player Owner { get; init; }
+        public required CardModel Card { get; init; }
         public required int EnergySpent { get; init; }
         public required List<CardModel> UsefulCardsInHand { get; init; }
         public bool GaveBlock { get; set; }
@@ -60,6 +63,7 @@ public static class BlockAlternatives
         {
             Id = ++_nextId,
             Owner = cardPlay.Player,
+            Card = cardPlay.Card,
             EnergySpent = cardPlay.Resources.EnergySpent,
             Ethereal = cardPlay.Card.Keywords.Contains(CardKeyword.Ethereal),
             UsefulCardsInHand = hand.Where(c => c != cardPlay.Card && IsUseful(c)).ToList()
@@ -91,7 +95,8 @@ public static class BlockAlternatives
             ModLog.Info($"block play {play.Id}: other effect {play.HadOtherEffect}, ethereal {play.Ethereal}, energy budget {budget}, useful cards in hand when played: " +
                         $"[{string.Join(", ", play.UsefulCardsInHand.Select(c => Capture.IdOf(c)))}] → alternative: " +
                         (alternative != null ? Capture.IdOf(alternative) : "none"));
-            Capture.Emit(new BlockPlayResolved(play.Id, alternative != null));
+            Capture.Emit(new BlockPlayResolved(play.Id, alternative != null,
+                alternative == null || state == null ? null : Explain(play, alternative, state)));
         }
         ThisTurn.Clear();
     }
@@ -100,6 +105,28 @@ public static class BlockAlternatives
     /// cards are not an alternative to a block card.
     private static bool IsUseful(CardModel card) =>
         card.Type == CardType.Attack || (card.Type is CardType.Skill or CardType.Power && !card.GainsBlock);
+
+    /// The reason shown on wasted block: useful cards left in hand, block at the end of the turn and the attack
+    /// damage the enemies announced against this player.
+    private static BlockChoice Explain(Play play, CardModel alternative, PlayerCombatState state)
+    {
+        var creature = play.Owner.Creature;
+        var useful = state.Hand.Cards.Where(IsUseful).Select(c => $"Card:{Capture.IdOf(c)}").ToList();
+        var incoming = 0;
+        try
+        {
+            foreach (var enemy in creature.CombatState?.Enemies ?? Array.Empty<Creature>())
+                if (enemy.IsAlive && enemy.Monster != null)
+                    incoming += enemy.Monster.NextMove.Intents.OfType<AttackIntent>()
+                        .Sum(i => i.GetTotalDamage(new[] { creature }, enemy));
+        }
+        catch (Exception e)
+        {
+            ModLog.Error("incoming damage", e);
+        }
+        return new BlockChoice($"Card:{Capture.IdOf(play.Card)}", $"Card:{Capture.IdOf(alternative)}", useful,
+            creature.Block, incoming);
+    }
 
     private static int Cost(CardModel card) => Math.Max(0, card.EnergyCost.GetWithModifiers(CostModifiers.All));
 

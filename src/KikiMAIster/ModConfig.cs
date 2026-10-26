@@ -47,7 +47,7 @@ public sealed class ModConfig
                     case "x": c.X = Float(v, c.X); break;
                     case "y": c.Y = Float(v, c.Y); break;
                     case "visible": c.Visible = v == "true"; break;
-                    case "scope": c.Scope = v; break;
+                    case "scope": c.Scope = v == "Turn" ? "PreviousTurn" : v; break;
                     case "opacity": c.Opacity = Float(v, c.Opacity); break;
                     case "scale": c.Scale = Float(v, c.Scale); break;
                     case "language": c.Language = v; break;

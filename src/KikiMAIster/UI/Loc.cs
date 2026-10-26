@@ -8,6 +8,7 @@ public static class Loc
     private static readonly Dictionary<string, (string En, string Fr)> Strings = new()
     {
         ["scope.Turn"] = ("Turn", "Tour"),
+        ["scope.PreviousTurn"] = ("Last turn", "Tour préc."),
         ["scope.Combat"] = ("Combat", "Combat"),
         ["scope.Run"] = ("Run", "Partie"),
         ["section.damage"] = ("Damage", "Dégâts"),
@@ -66,6 +67,10 @@ public static class Loc
         ["src.unknown"] = ("Other", "Autre"),
         ["lang.tip"] = ("Language: click to switch English / French", "Langue : cliquer pour passer en anglais / français"),
         ["row.tip"] = ("Click to show or hide the details", "Cliquer pour afficher ou masquer le détail"),
+        ["why.title"] = ("Why wasted:", "Pourquoi gâché :"),
+        ["why.wasted"] = ("Round {0} · {1}: {2} wasted. In hand: {3} · block {4} · incoming attack {5} → {6} could have been played instead.",
+            "Tour {0} · {1} : {2} gâché(s). En main : {3} · armure {4} · attaque annoncée {5} → {6} aurait pu être jouée à la place."),
+        ["why.more"] = ("…and {0} more", "…et {0} autre(s)"),
         ["summary.button"] = ("Summary", "Résumé"),
         ["summary.tip"] = ("Combats of this run, round by round (the current one is updated live)", "Combats de cette partie, tour par tour (celui en cours est mis à jour en direct)"),
         ["summary.inProgress"] = ("in progress", "en cours"),

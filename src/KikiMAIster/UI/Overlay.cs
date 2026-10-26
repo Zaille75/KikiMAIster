@@ -49,7 +49,12 @@ public static class Overlay
 
     private static ModConfig Cfg => ModConfig.Current;
 
-    private static Scope CurrentScope => Enum.TryParse<Scope>(Cfg.Scope, out var s) ? s : Scope.Combat;
+    /// The scopes offered in the header ("Turn", the round in progress, is not shown: v0.7.0).
+    private static readonly Scope[] ShownScopes = { Scope.PreviousTurn, Scope.Combat, Scope.Run };
+
+    private static Scope CurrentScope =>
+        Enum.TryParse<Scope>(Cfg.Scope, out var s) && ShownScopes.Contains(s) ? s
+        : s == Scope.Turn ? Scope.PreviousTurn : Scope.Combat;
 
     private static bool IsAttached => _layer != null && GodotObject.IsInstanceValid(_layer) && _layer.IsInsideTree();
 
@@ -122,7 +127,7 @@ public static class Overlay
         header.AddChild(title);
         _title = title;
 
-        foreach (var scope in Enum.GetValues<Scope>())
+        foreach (var scope in ShownScopes)
         {
             var b = MakeButton(Loc.T($"scope.{scope}"));
             b.Pressed += () => Capture.Safe("Overlay.Scope", () =>
@@ -458,7 +463,8 @@ public static class Overlay
             ("tip.pet", N(s.AbsorbedByPet), false), ("tip.petDeaths", N(s.PetDeaths), false),
             ("tip.byEffects", N(s.PreventedByEffects), false),
             ("tip.healSelf", N(s.HealingSelf), false), ("tip.healAllies", N(s.HealingAllies), true))
-            + (s.PreventedByEffectSource.Count == 0 ? "" : "\n" + Lines(s.PreventedByEffectSource));
+            + (s.PreventedByEffectSource.Count == 0 ? "" : "\n" + Lines(s.PreventedByEffectSource))
+            + WastedReasons(s);
         return new[]
         {
             new Cell("col.prevented", N(s.PreventedTotal), tip),
@@ -467,6 +473,19 @@ public static class Overlay
             new Cell("col.useless", N(s.UselessBlock), tip),
             new Cell("col.petHp", N(s.PetHpGiven), tip)
         };
+    }
+
+    /// Why block was wasted, most recent first (at most 5): "Round 3 · Defend: 5 wasted. In hand: Strike ·
+    /// block 12 · incoming attack 7 → Strike could have been played instead."
+    private static string WastedReasons(PlayerStats s)
+    {
+        if (s.WastedPlays.Count == 0) return "";
+        var lines = s.WastedPlays.OrderByDescending(w => w.PlayId).Take(5).Select(w =>
+            string.Format(Loc.T("why.wasted"), w.Round, GameNames.Of(w.Choice.BlockCard), N(w.Amount),
+                string.Join(", ", w.Choice.UsefulInHand.Select(GameNames.Of)), w.Choice.BlockAtTurnEnd,
+                w.Choice.IncomingDamage, GameNames.Of(w.Choice.Alternative)));
+        var more = s.WastedPlays.Count > 5 ? "\n" + string.Format(Loc.T("why.more"), s.WastedPlays.Count - 5) : "";
+        return "\n\n" + Loc.T("why.title") + "\n" + string.Join('\n', lines) + more;
     }
 
     /// One column per debuff: "x/y" = times applied / total stacks.
@@ -520,7 +539,7 @@ public static class Overlay
             $"{kv.Value.WastedBlock:F1}:{kv.Value.UselessBlock + kv.Value.BlockSpent:F1}:{kv.Value.BlockGainedSelf + kv.Value.BlockGivenToAllies:F1}:" +
             $"{kv.Value.HpLost:F1}:{kv.Value.DamageBlocked:F1}:{kv.Value.DebuffsApplied.Values.Sum(t => t.Stacks):F1}:{kv.Value.DebuffsApplied.Values.Sum(t => t.Count)}:" +
             $"{kv.Value.DebuffsReceived.Count}:{kv.Value.FriendlyDamage + kv.Value.SelfDamage:F1}:{kv.Value.FriendlyDebuffs.Count}:" +
-            $"{kv.Value.HealingSelf + kv.Value.HealingAllies:F1}:{kv.Value.AbsorbedByPet:F1}:{kv.Value.PreventedByEffects:F1}:{kv.Value.PetHpGiven:F1}:{kv.Value.Kills}"));
+            $"{kv.Value.HealingSelf + kv.Value.HealingAllies:F1}:{kv.Value.AbsorbedByPet:F1}:{kv.Value.PreventedByEffects:F1}:{kv.Value.PetHpGiven:F1}:{kv.Value.WastedPlays.Count}:{kv.Value.Kills}"));
 
     internal static string N(double v) => Math.Round(v).ToString("0", CultureInfo.InvariantCulture);
 

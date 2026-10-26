@@ -6,12 +6,13 @@ public sealed class StatsEngine
 {
     private readonly Dictionary<Scope, Dictionary<ulong, PlayerStats>> _stats = new()
     {
-        [Scope.Turn] = new(), [Scope.Combat] = new(), [Scope.Run] = new()
+        [Scope.Turn] = new(), [Scope.PreviousTurn] = new(), [Scope.Combat] = new(), [Scope.Run] = new()
     };
     private readonly Dictionary<ulong, PlayerInfo> _players = new();
     private readonly Dictionary<ulong, BlockLedger> _block = new();
     private readonly Dictionary<(int CreatureId, string PowerId), DotLedger> _dots = new();
     private readonly Dictionary<int, bool> _hadAlternative = new();
+    private readonly Dictionary<int, (int Round, BlockChoice Choice)> _choices = new();
 
     public int Round { get; private set; }
 
@@ -61,7 +62,10 @@ public sealed class StatsEngine
             case PetHpGiven p when p.Giver.IsPlayerSide && p.Giver.PlayerId != 0 && p.Amount > 0:
                 Each(p.Giver.PlayerId, s => s.PetHpGiven += p.Amount);
                 break;
-            case BlockPlayResolved r: _hadAlternative[r.PlayId] = r.HadAlternative; break;
+            case BlockPlayResolved r:
+                _hadAlternative[r.PlayId] = r.HadAlternative;
+                if (r.Choice != null) _choices[r.PlayId] = (Round, r.Choice);
+                break;
         }
     }
 
@@ -84,6 +88,7 @@ public sealed class StatsEngine
     private void OnCombatStarted(CombatStarted c)
     {
         _stats[Scope.Turn].Clear();
+        _stats[Scope.PreviousTurn].Clear();
         _stats[Scope.Combat].Clear();
         ResetCombatState();
         InCombat = true;
@@ -104,7 +109,17 @@ public sealed class StatsEngine
         // A new round closes the previous one on the chart.
         if (InCombat && r.Round > 1 && _timeline[^1].Round < r.Round - 1) AddRoundPoint(r.Round - 1);
         Round = r.Round;
-        _stats[Scope.Turn].Clear();
+        FreezeTurn();
+    }
+
+    /// The round that just ended becomes "previous turn"; a fresh "turn" starts.
+    private void FreezeTurn()
+    {
+        var finished = _stats[Scope.Turn];
+        _stats[Scope.Turn] = new Dictionary<ulong, PlayerStats>();
+        if (finished.Count == 0) return;
+        _stats[Scope.PreviousTurn] = finished;
+        foreach (var id in finished.Keys) Stats(Scope.Turn, id);
     }
 
     private void AddRoundPoint(int round) => _timeline.Add(Point(round));
@@ -120,6 +135,7 @@ public sealed class StatsEngine
                 CreditUnused(owner, layer, layer.Amount);
         if (InCombat)
         {
+            FreezeTurn();
             if (_timeline.Count == 0 || _timeline[^1].Round < Round) AddRoundPoint(Round);
             else _timeline[^1] = Point(_timeline[^1].Round);
             _combats.Add(new CombatRecord(_combatNumber, _combatName, c.Victory, _timeline.ToList()));
@@ -133,6 +149,7 @@ public sealed class StatsEngine
         _block.Clear();
         _dots.Clear();
         _hadAlternative.Clear();
+        _choices.Clear();
     }
 
     // ---------- Damage ----------
@@ -277,15 +294,19 @@ public sealed class StatsEngine
         // Wasted only when the play was resolved with a real alternative; anything else is useless.
         var wasted = _hadAlternative.GetValueOrDefault(layer.PlayId);
         var toAlly = layer.GiverId != owner;
+        var hasChoice = _choices.TryGetValue(layer.PlayId, out var choice);
         Action<PlayerStats> credit = s =>
         {
             if (wasted) s.WastedBlock += amount;
             else s.UselessBlock += amount;
             if (toAlly) s.UnusedGivenToAllies += amount;
+            if (wasted && hasChoice) PlayerStats.AddWasted(s.WastedPlays, layer.PlayId, layer.Round, choice.Choice, amount);
         };
         credit(Stats(Scope.Combat, layer.GiverId));
         credit(Stats(Scope.Run, layer.GiverId));
+        // Block is found unused when the next round starts: it belongs to the round it was played in.
         if (layer.Round == Round) credit(Stats(Scope.Turn, layer.GiverId));
+        else if (layer.Round == Round - 1) credit(Stats(Scope.PreviousTurn, layer.GiverId));
     }
 
     private void OnHpLossPrevented(HpLossPrevented h)
@@ -333,7 +354,9 @@ public sealed class StatsEngine
 
     private void Each(ulong playerId, Action<PlayerStats> update)
     {
-        foreach (var scope in _stats.Keys) update(Stats(scope, playerId));
+        // Live events never go to the frozen previous turn.
+        foreach (var scope in _stats.Keys)
+            if (scope != Scope.PreviousTurn) update(Stats(scope, playerId));
     }
 
     private PlayerStats Stats(Scope scope, ulong playerId)

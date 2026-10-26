@@ -62,7 +62,23 @@ public sealed record PetHpGiven(Actor Giver, double Amount) : StatEvent;
 public sealed record HpLossPrevented(Actor Target, double Amount, string SourceId) : StatEvent;
 
 /// End of the player's turn: whether a block card play had a real alternative (spec 01-metrics §F, "wasted" vs "useless").
-public sealed record BlockPlayResolved(int PlayId, bool HadAlternative) : StatEvent;
+/// Choice: why it had an alternative (for the explanation shown on wasted block), when it had one.
+public sealed record BlockPlayResolved(int PlayId, bool HadAlternative, BlockChoice? Choice = null) : StatEvent;
+
+/// A block card played while a useful card stayed in hand. Card ids are "Card:ID" keys.
+/// UsefulInHand: useful cards still unplayed in hand at the end of the turn. BlockAtTurnEnd: the player's block
+/// when the turn ended. IncomingDamage: attack damage the enemies announced against that player.
+public sealed record BlockChoice(string BlockCard, string Alternative, IReadOnlyList<string> UsefulInHand,
+    int BlockAtTurnEnd, int IncomingDamage);
+
+/// Wasted block of one block card play, with the reason (spec 01-metrics §F).
+public sealed class WastedPlay(int playId, int round, BlockChoice choice)
+{
+    public int PlayId { get; } = playId;
+    public int Round { get; } = round;
+    public BlockChoice Choice { get; } = choice;
+    public double Amount { get; set; }
+}
 
 /// All remaining block on the creature disappeared without absorbing damage (turn start, combat end…).
 public sealed record BlockCleared(Actor Creature) : StatEvent;
