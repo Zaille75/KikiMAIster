@@ -29,20 +29,49 @@ public static class CombatFlowPatches
         if (_runKey != null) RunStore.Save(_runKey, _floor, Capture.Engine);
     }
 
+    /// Starts tracking a run the first time it is seen, and restores its saved totals if it is a continued run.
+    private static void EnsureRun(IRunState runState)
+    {
+        _floor = runState.TotalFloor;
+        if (_currentRun != null && _currentRun.TryGetTarget(out var run) && ReferenceEquals(run, runState)) return;
+        _currentRun = new WeakReference<IRunState>(runState);
+        _runKey = null;
+        Capture.Emit(new RunStarted());
+        Capture.Safe("run key", () => _runKey = RunStore.KeyOf(runState));
+        if (_runKey != null) RunStore.TryRestore(_runKey, _floor, Capture.Engine);
+    }
+
+    // New or continued run, solo or co-op: show the right run totals before the first combat.
+    [HarmonyPatch(typeof(RunManager), nameof(RunManager.SetUpNewSingleplayer))]
+    public static class NewSolo
+    {
+        public static void Prefix(RunState state) => Capture.Safe("SetUpNewSingleplayer", () => EnsureRun(state));
+    }
+
+    [HarmonyPatch(typeof(RunManager), nameof(RunManager.SetUpNewMultiplayer))]
+    public static class NewCoop
+    {
+        public static void Prefix(RunState state) => Capture.Safe("SetUpNewMultiplayer", () => EnsureRun(state));
+    }
+
+    [HarmonyPatch(typeof(RunManager), nameof(RunManager.SetUpSavedSingleplayer))]
+    public static class SavedSolo
+    {
+        public static void Prefix(RunState state) => Capture.Safe("SetUpSavedSingleplayer", () => EnsureRun(state));
+    }
+
+    [HarmonyPatch(typeof(RunManager), nameof(RunManager.SetUpSavedMultiplayer))]
+    public static class SavedCoop
+    {
+        public static void Prefix(RunState state) => Capture.Safe("SetUpSavedMultiplayer", () => EnsureRun(state));
+    }
+
     [HarmonyPatch(typeof(Hook), nameof(Hook.BeforeCombatStart))]
     public static class CombatStart
     {
         public static void Prefix(IRunState runState, ICombatState? combatState) => Capture.Safe("BeforeCombatStart", () =>
         {
-            _floor = runState.TotalFloor;
-            if (_currentRun == null || !_currentRun.TryGetTarget(out var run) || !ReferenceEquals(run, runState))
-            {
-                _currentRun = new WeakReference<IRunState>(runState);
-                _runKey = null;
-                Capture.Emit(new RunStarted());
-                Capture.Safe("run key", () => _runKey = RunStore.KeyOf(runState));
-                if (_runKey != null) RunStore.TryRestore(_runKey, _floor, Capture.Engine);
-            }
+            EnsureRun(runState);
             Capture.CardPlayers.Clear();
             Capture.PotionUser = null;
             DamagePatches.Reset();
