@@ -15,6 +15,8 @@ public static class CombatFlowPatches
 {
     private static WeakReference<IRunState>? _currentRun;
     private static bool _combatOpen;
+    private static string? _runKey;
+    private static int _floor;
 
     /// Ends the combat once, whether it was won (AfterCombatEnd) or lost (LoseCombat).
     private static void EndCombat(bool victory)
@@ -24,6 +26,7 @@ public static class CombatFlowPatches
         DamagePatches.FlushPending();
         Capture.Emit(new CombatEnded(victory));
         Summary.LogCombat(Capture.Engine);
+        if (_runKey != null) RunStore.Save(_runKey, _floor, Capture.Engine);
     }
 
     [HarmonyPatch(typeof(Hook), nameof(Hook.BeforeCombatStart))]
@@ -31,10 +34,14 @@ public static class CombatFlowPatches
     {
         public static void Prefix(IRunState runState, ICombatState? combatState) => Capture.Safe("BeforeCombatStart", () =>
         {
+            _floor = runState.TotalFloor;
             if (_currentRun == null || !_currentRun.TryGetTarget(out var run) || !ReferenceEquals(run, runState))
             {
                 _currentRun = new WeakReference<IRunState>(runState);
+                _runKey = null;
                 Capture.Emit(new RunStarted());
+                Capture.Safe("run key", () => _runKey = RunStore.KeyOf(runState));
+                if (_runKey != null) RunStore.TryRestore(_runKey, _floor, Capture.Engine);
             }
             Capture.CardPlayers.Clear();
             Capture.PotionUser = null;
@@ -43,7 +50,7 @@ public static class CombatFlowPatches
             KikiMAIster.UI.Overlay.EnsureAttached("combat start");
             var players = combatState?.Players ?? runState.Players;
             Capture.Emit(new CombatStarted(players.Select(p =>
-                new PlayerInfo(p.NetId, p.Creature.Name, p.Character.Id.Entry)).ToList()));
+                new PlayerInfo(p.NetId, Capture.PlayerName(p, players.Count), p.Character.Id.Entry)).ToList()));
         });
     }
 

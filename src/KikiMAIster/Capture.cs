@@ -4,6 +4,8 @@ using KikiMAIster.Core;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Platform;
+using MegaCrit.Sts2.Core.Runs;
 
 namespace KikiMAIster;
 
@@ -56,6 +58,24 @@ public static class Capture
 
     /// The player currently acting through a card or a potion, if any.
     public static Player? CurrentActingPlayer => CardPlayers.Count > 0 ? CardPlayers.Peek() : PotionUser;
+
+    /// Solo: the character name. Co-op: the player's Steam name, so two players of the same character differ.
+    public static string PlayerName(Player p, int playerCount)
+    {
+        if (playerCount > 1)
+        {
+            try
+            {
+                var name = PlatformUtil.GetPlayerNameRaw(RunManager.Instance.NetService.Platform, p.NetId);
+                if (!string.IsNullOrWhiteSpace(name)) return name;
+            }
+            catch (Exception e)
+            {
+                ModLog.Error("player name", e);
+            }
+        }
+        return p.Creature.Name;
+    }
 
     public static string IdOf(AbstractModel model) => model.Id.Entry;
 

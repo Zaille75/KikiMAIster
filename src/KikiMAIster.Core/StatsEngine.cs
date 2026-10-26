@@ -49,6 +49,13 @@ public sealed class StatsEngine
         ResetCombatState();
     }
 
+    /// Puts back the run totals saved before a Save & Quit (see RunSnapshot). Call right after RunStarted.
+    public void RestoreRun(IEnumerable<PlayerInfo> players, IReadOnlyDictionary<ulong, PlayerStats> runStats)
+    {
+        foreach (var p in players) _players[p.PlayerId] = p;
+        foreach (var (id, s) in runStats) _stats[Scope.Run][id] = s;
+    }
+
     private void OnCombatStarted(CombatStarted c)
     {
         _stats[Scope.Turn].Clear();

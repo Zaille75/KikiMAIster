@@ -10,8 +10,8 @@ public static class Overlay
 {
     private sealed record Section(string Key, Func<StatsEngine, ulong, PlayerStats, IReadOnlyList<Cell>> Row, string[] Columns);
 
-    /// One table cell: text, optional tooltip, optional bar share (0..1).
-    private sealed record Cell(string Text, string Tooltip = "", double? Bar = null);
+    /// One table cell: text and optional tooltip.
+    private sealed record Cell(string Text, string Tooltip = "");
 
     private const int FontSize = 13;
     private static readonly Color Text = new(0.93f, 0.9f, 0.82f);
@@ -23,6 +23,7 @@ public static class Overlay
     private static VBoxContainer? _body;
     private static readonly Dictionary<string, Button> ScopeButtons = new();
     private static readonly HashSet<string> Expanded = new();
+    private static IReadOnlyList<string> _damageColumns = Array.Empty<string>();
     private static Button? _langButton;
     private static Label? _title;
     private static bool _dragging;
@@ -196,6 +197,7 @@ public static class Overlay
         }
 
         var players = stats.Keys.OrderBy(id => id).ToList();
+        _damageColumns = DamageColumns(stats);
         foreach (var section in Sections)
         {
             var open = Cfg.OpenSections.Contains(section.Key);
@@ -220,16 +222,15 @@ public static class Overlay
         var box = new VBoxContainer();
         box.AddThemeConstantOverride("separation", 2);
         var details = new List<Control>();
-        var columns = section.Columns.Length == 0 ? 3 : section.Columns.Length + 1;
-        var grid = new GridContainer { Columns = columns };
+        var headers = section.Key == "damage"
+            ? new[] { Loc.T("col.total") }.Concat(_damageColumns.Select(ColumnName)).ToArray()
+            : section.Columns.Select(Loc.T).ToArray();
+        var grid = new GridContainer { Columns = headers.Length + 1 };
         grid.AddThemeConstantOverride("h_separation", 10);
         grid.AddThemeConstantOverride("v_separation", 1);
 
-        if (section.Columns.Length > 0)
-        {
-            grid.AddChild(MakeLabel("", Muted));
-            foreach (var c in section.Columns) grid.AddChild(MakeLabel(Loc.T(c), Muted, HorizontalAlignment.Right));
-        }
+        grid.AddChild(MakeLabel("", Muted));
+        foreach (var h in headers) grid.AddChild(MakeLabel(h, Muted, HorizontalAlignment.Right));
 
         foreach (var id in players)
         {
@@ -244,9 +245,7 @@ public static class Overlay
             grid.AddChild(name);
             foreach (var cell in cells)
             {
-                Control c = cell.Bar is { } share
-                    ? MakeBar(share, CharacterColor(info?.Character), cell.Tooltip)
-                    : MakeLabel(cell.Text, Text, HorizontalAlignment.Right);
+                Control c = MakeLabel(cell.Text, Text, HorizontalAlignment.Right);
                 MakeClickable(c, rowKey, cell.Tooltip);
                 grid.AddChild(c);
             }
@@ -304,8 +303,41 @@ public static class Overlay
             (Loc.T("tip.intoBlock"), N(s.DamageIntoBlock)), (Loc.T("tip.overkill"), N(s.Overkill)),
             (Loc.T("tip.kills"), N(s.Kills)), (Loc.T("tip.biggestHit"), N(s.BiggestHit)))
             + "\n\n" + Loc.T("tip.bySource") + ":\n" + Lines(s.DamageBySource);
-        return new[] { new Cell("", tip, share), new Cell($"{N(s.DamageDealt)} ({share:P0})", tip) };
+        var byColumn = s.DamageBySource.GroupBy(kv => DamageColumn(kv.Key)).ToDictionary(g => g.Key, g => g.Sum(kv => kv.Value));
+        return new[] { new Cell($"{N(s.DamageDealt)} ({share:P0})", tip) }
+            .Concat(_damageColumns.Select(c => new Cell(N(byColumn.GetValueOrDefault(c)), tip))).ToArray();
     }
+
+    /// Damage columns: cards, then each damage-over-time debuff by name (Poison, Doom…), then the other kinds.
+    /// Only kinds that dealt damage in the current scope are shown.
+    private static IReadOnlyList<string> DamageColumns(IReadOnlyDictionary<ulong, PlayerStats> stats)
+    {
+        var totals = stats.Values.SelectMany(s => s.DamageBySource)
+            .GroupBy(kv => DamageColumn(kv.Key)).ToDictionary(g => g.Key, g => g.Sum(kv => kv.Value));
+        var order = new[] { "cat.cards", "dot", "cat.powers", "cat.pet", "cat.orbs", "cat.relics", "cat.potions", "cat.other" };
+        return totals.Where(kv => kv.Value >= 0.5)
+            .OrderBy(kv => Array.IndexOf(order, kv.Key.StartsWith("DamageOverTime:") ? "dot" : kv.Key))
+            .ThenByDescending(kv => kv.Value)
+            .Select(kv => kv.Key).ToList();
+    }
+
+    private static string DamageColumn(string sourceKey)
+    {
+        if (sourceKey.StartsWith("DamageOverTime:")) return sourceKey;
+        var kind = sourceKey.Split(':')[0];
+        return kind switch
+        {
+            "Card" => "cat.cards",
+            "Power" => "cat.powers",
+            "Pet" => "cat.pet",
+            "Orb" => "cat.orbs",
+            "Relic" => "cat.relics",
+            "Potion" => "cat.potions",
+            _ => "cat.other"
+        };
+    }
+
+    private static string ColumnName(string column) => column.StartsWith("cat.") ? Loc.T(column) : GameNames.Of(column);
 
     private static IReadOnlyList<Cell> ProtectionRow(StatsEngine e, ulong id, PlayerStats s)
     {
@@ -406,18 +438,5 @@ public static class Overlay
         b.AddThemeFontSizeOverride("font_size", FontSize);
         b.AddThemeColorOverride("font_color", Text);
         return b;
-    }
-
-    private static Control MakeBar(double share, Color color, string tooltip)
-    {
-        var bar = new ProgressBar
-        {
-            MinValue = 0, MaxValue = 1, Step = 0.001, Value = share, ShowPercentage = false,
-            CustomMinimumSize = new Vector2(120, 12), SizeFlagsVertical = Control.SizeFlags.ShrinkCenter,
-            TooltipText = tooltip, MouseFilter = Control.MouseFilterEnum.Pass
-        };
-        bar.AddThemeStyleboxOverride("fill", new StyleBoxFlat { BgColor = color });
-        bar.AddThemeStyleboxOverride("background", new StyleBoxFlat { BgColor = new Color(1, 1, 1, 0.08f) });
-        return bar;
     }
 }
