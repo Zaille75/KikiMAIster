@@ -226,7 +226,7 @@ public static class Overlay
         var players = stats.Keys.OrderBy(id => id).ToList();
         _damageColumns = DamageColumns(stats);
         _debuffColumns = stats.Values.SelectMany(x => x.DebuffsApplied)
-            .GroupBy(kv => kv.Key).OrderByDescending(g => g.Sum(kv => kv.Value.Stacks)).Select(g => g.Key).ToList();
+            .GroupBy(kv => DebuffColumn(kv.Key)).OrderByDescending(g => g.Sum(kv => kv.Value.Stacks)).Select(g => g.Key).ToList();
         _solo = players.Count == 1;
         foreach (var section in Sections)
         {
@@ -454,8 +454,17 @@ public static class Overlay
     {
         var tip = (s.DebuffsApplied.Count == 0 ? Loc.T("tip.none") : Powers(s.DebuffsApplied))
                   + "\n\n" + Loc.T("tip.debuffXY") + "\n" + Loc.T("tip.dot") + ": " + N(s.DotDamage);
-        return s.DebuffsApplied.Select(kv => new Cell(kv.Key, $"{kv.Value.Count}/{N(kv.Value.Stacks)}", tip))
+        return s.DebuffsApplied.GroupBy(kv => DebuffColumn(kv.Key))
+            .Select(g => new Cell(g.Key, $"{g.Sum(kv => kv.Value.Count)}/{N(g.Sum(kv => kv.Value.Stacks))}", tip))
             .Append(new Cell("col.noDebuff", "-", tip)).ToArray();
+    }
+
+    /// "STRENGTH_POWER~DOWN@ENFEEBLING_TOUCH_POWER" → "STRENGTH_POWER~DOWN": one column per effect, whatever
+    /// card or power caused it; the details (tooltip) keep the origin.
+    private static string DebuffColumn(string powerKey)
+    {
+        var at = powerKey.IndexOf('@');
+        return at > 0 ? powerKey[..at] : powerKey;
     }
 
     private static IReadOnlyList<Cell> TakenRow(StatsEngine e, ulong id, PlayerStats s)

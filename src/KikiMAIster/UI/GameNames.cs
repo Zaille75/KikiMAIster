@@ -31,6 +31,9 @@ public static class GameNames
 
     private static string Resolve(string key)
     {
+        // A stat loss from a temporary power: "Force − (Toucher affaiblissant)".
+        var at = key.IndexOf('@');
+        if (at > 0) return $"{Of(key[..at])} ({Of(key[(at + 1)..])})";
         // A buff applied with a negative amount (Strength down…): "Force −".
         if (key.EndsWith("~DOWN")) return Of(key[..^5]) + " −";
         if (key == "Pet") return Loc.T("src.pet");

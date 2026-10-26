@@ -146,7 +146,27 @@ public static class CombatFlowPatches
         public static void Prefix() => Capture.Safe("CardPlayFinished", () =>
         {
             if (Capture.CardPlayers.Count > 0) Capture.CardPlayers.Pop();
+            BlockAlternatives.OnPlayFinished();
         });
+    }
+
+    // Effects other than block during a card play (spec §F, F4): draw, orb, created card.
+    [HarmonyPatch(typeof(Hook), nameof(Hook.AfterCardDrawn))]
+    public static class CardDrawn
+    {
+        public static void Prefix() => Capture.Safe("AfterCardDrawn", BlockAlternatives.OnEffect);
+    }
+
+    [HarmonyPatch(typeof(Hook), nameof(Hook.AfterOrbChanneled))]
+    public static class OrbChanneled
+    {
+        public static void Prefix() => Capture.Safe("AfterOrbChanneled", BlockAlternatives.OnEffect);
+    }
+
+    [HarmonyPatch(typeof(Hook), nameof(Hook.AfterCardGeneratedForCombat))]
+    public static class CardGenerated
+    {
+        public static void Prefix() => Capture.Safe("AfterCardGeneratedForCombat", BlockAlternatives.OnEffect);
     }
 
     [HarmonyPatch(typeof(Hook), nameof(Hook.BeforePotionUsed))]

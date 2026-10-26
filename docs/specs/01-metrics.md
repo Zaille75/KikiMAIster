@@ -27,7 +27,7 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
 
 | Stat | Definition | Tag |
 |---|---|---|
-| Debuffs applied | Count and total stacks of each debuff this player put on **enemies** (Vulnerable, Weak, Poison, …). Shown as one column per debuff, "x/y" = times applied / total stacks. A buff applied with a negative amount (Strength down, Dexterity down) counts as a debuff, shown as "Force −". | v1 |
+| Debuffs applied | Count and total stacks of each debuff this player put on **enemies** (Vulnerable, Weak, Poison, …). Shown as one column per debuff, "x/y" = times applied / total stacks. A buff applied with a negative amount (Strength down, Dexterity down) counts as a debuff, shown as "Force −". The overview has one column per effect: a temporary loss (Enfeebling Touch…) is counted in "Force −", whatever card caused it; the details list each origin. | v1 |
 | Damage from damage-over-time debuffs | Damage from DoT debuffs (Poison…) is credited to the players who applied the stacks, **split in proportion to the stacks each one applied** and still active. Example: A applies 6 Poison, B applies 4 → each tick is credited 60% to A and 40% to B. | v1 |
 | Doom kills | When Doom kills an enemy, the HP it removes counts as damage-over-time for the Doom appliers (split by stacks) and the kill goes to the biggest share. | v1 |
 | Friendly fire | Debuffs and status cards (Wound, Dazed…) a player puts on **an ally or on themselves**, and damage a player deals to allies or themselves. Shown in its own section, never mixed with enemy stats. | v1 |
@@ -144,3 +144,6 @@ the player could already absorb, which is exactly your example. It is also easy 
     no alternative, block from relics/powers/potions/auto-play, or block played on the turn the combat ended.
   - Same rule for block given to allies; the part given to allies is also shown as "…of which given to allies".
   - In the examples above, "useless help" now reads "wasted or useless (given to an ally)".
+- **F4 (v0.4.5).** A block card that **also did something else** during its play (applied a power or debuff, dealt
+  damage, healed, drew cards, channeled an orb, created a card) is never wasted: its unused block is useless.
+  Known limit: an effect triggered by something else during that play (a relic reacting to it) also counts.

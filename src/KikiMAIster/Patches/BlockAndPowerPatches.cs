@@ -77,6 +77,7 @@ public static class BlockAndPowerPatches
     {
         public static void Prefix(PowerModel power, decimal amount, Creature? applier) => Capture.Safe("History.PowerReceived", () =>
         {
+            BlockAlternatives.OnEffect();
             var id = Capture.IdOf(power);
             var value = (double)amount;
             var debuff = power.Type == PowerType.Debuff;
@@ -87,12 +88,23 @@ public static class BlockAndPowerPatches
                 value = -value;
                 debuff = true;
             }
+            // Temporary "down" powers (Enfeebling Touch…) apply a Strength/Dexterity/Focus loss together with
+            // themselves: before (first application) or right after (stacking). The loss counts only once, under
+            // "<STAT>~DOWN@<TEMPORARY POWER>": the overlay groups it with the stat, the details keep the origin.
+            // A loss is held back and dropped if its temporary power comes next.
+            var temporary = power is TemporaryStrengthPower or TemporaryDexterityPower or TemporaryFocusPower;
+            if (temporary && debuff)
+            {
+                var stat = power switch
+                {
+                    TemporaryStrengthPower => ModelDb.GetId<StrengthPower>().Entry,
+                    TemporaryDexterityPower => ModelDb.GetId<DexterityPower>().Entry,
+                    _ => ModelDb.GetId<FocusPower>().Entry
+                };
+                id = $"{stat}~DOWN@{id}";
+            }
             var e = new PowerChanged(Capture.ToActor(applier), Capture.ToActor(power.Owner), id, value, debuff);
 
-            // Temporary "down" powers (Enfeebling Touch…) apply a Strength/Dexterity/Focus loss together with
-            // themselves: before (first application) or right after (stacking). The loss counts only once, as the
-            // temporary power: a loss is held back and dropped if its temporary power comes next.
-            var temporary = power is TemporaryStrengthPower or TemporaryDexterityPower or TemporaryFocusPower;
             if (temporary && _heldDown is { } held && held.Target == e.Target) _heldDown = null;
             if (id.EndsWith("~DOWN"))
             {
@@ -130,6 +142,7 @@ public static class BlockAndPowerPatches
             if (!CombatManager.Instance.IsInProgress || creature.IsDead) return;
             var healed = (int)Math.Min(amount, creature.MaxHp - creature.CurrentHp);
             if (healed <= 0) return;
+            BlockAlternatives.OnEffect();
             Capture.Emit(new Healed(Capture.ToActor(Capture.CurrentActingPlayer), Capture.ToActor(creature), healed));
         });
     }

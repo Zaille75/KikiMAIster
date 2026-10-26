@@ -38,6 +38,7 @@ public static class DamagePatches
             Capture.Safe("CreatureCmd.Damage", () =>
             {
                 if (targets == null) return;
+                BlockAlternatives.OnEffect();
                 // The call stack is only needed when the card is unknown (powers, relics, orbs, poison…).
                 var call = new DamageCall(dealer, cardSource, cardSource == null ? Capture.CallingModelType() : null);
                 foreach (var t in targets) LastCallOnTarget.AddOrUpdate(t, WithDot(call, t));
