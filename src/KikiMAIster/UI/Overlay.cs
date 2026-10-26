@@ -214,17 +214,17 @@ public static class Overlay
             });
             header.Pressed += Fold;
 
-            _body.AddChild(header);
             if (players.Count == 1)
             {
                 // Solo: the table is always shown, without the name column; opening the section adds its details.
                 var id = players[0];
                 var cells = section.Row(engine, id, stats[id]);
-                _body.AddChild(BuildSoloTable(section, cells, Fold));
+                _body.AddChild(BuildSoloTable(section, header, cells, Fold));
                 var detail = cells.FirstOrDefault(c => c.Tooltip != "")?.Tooltip ?? "";
                 if (open && detail != "") _body.AddChild(BuildDetail(null, Accent, detail));
                 continue;
             }
+            _body.AddChild(header);
             if (open) _body.AddChild(BuildTable(section, engine, stats, players));
         }
     }
@@ -233,13 +233,17 @@ public static class Overlay
         ? new[] { Loc.T("col.total") }.Concat(_damageColumns.Select(ColumnName)).ToArray()
         : section.Columns.Select(Loc.T).ToArray();
 
-    private static Control BuildSoloTable(Section section, IReadOnlyList<Cell> cells, Action fold)
+    /// Solo: the section title sits on the column-name line, the values on the line below.
+    private static Control BuildSoloTable(Section section, Button title, IReadOnlyList<Cell> cells, Action fold)
     {
         var headers = Headers(section);
-        var grid = new GridContainer { Columns = headers.Length };
+        var grid = new GridContainer { Columns = headers.Length + 1 };
         grid.AddThemeConstantOverride("h_separation", 12);
         grid.AddThemeConstantOverride("v_separation", 0);
+        title.CustomMinimumSize = new Vector2(130, 0);
+        grid.AddChild(title);
         foreach (var h in headers) grid.AddChild(MakeLabel(h, Muted, HorizontalAlignment.Right));
+        grid.AddChild(MakeLabel("", Muted));
         foreach (var cell in cells)
         {
             var c = MakeLabel(cell.Text, Text, HorizontalAlignment.Right);
@@ -252,10 +256,7 @@ public static class Overlay
             };
             grid.AddChild(c);
         }
-        var margin = new MarginContainer();
-        margin.AddThemeConstantOverride("margin_left", 14);
-        margin.AddChild(grid);
-        return margin;
+        return grid;
     }
 
     private static Control BuildTable(Section section, StatsEngine engine, IReadOnlyDictionary<ulong, PlayerStats> stats, List<ulong> players)
