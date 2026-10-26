@@ -28,3 +28,15 @@ everyone's stats (R1 — to confirm in-game).
 Manifest fields: id, name, author, description, version, has_pck, has_dll, dependencies [{id,min_version}],
 affects_gameplay, min_game_version. DLL loaded with `LoadFromAssemblyPath`. Workshop items have a Steam
 **branch-support** check (useful for beta vs default).
+
+## In-game test results
+- **v0.0.1, Necrobinder solo, 3 fights:** no crash. Block, cards and energy were logged. **No DamageReceived / PowerReceived
+  entries at all**, even though CreatureAttacked entries were present. Cause unknown; v0.0.2 re-test needed on Necrobinder.
+- **v0.0.2, Ironclad solo, 3 fights:** damage, Vulnerable, Strength and enemy debuffs captured at all four levels
+  (Add, History.DamageReceived, History.PowerReceived, Hook.AfterPowerAmountChanged).
+  - **The killing hit that ends the combat is missing** from DamageReceived: CreatureCmd skips the history
+    when `CombatManager.IsEnding`. It is present in `CreatureAttackedEntry.DamageResults` → capture both and
+    dedupe by DamageResult reference. A non-attack final kill (e.g. a Poison tick) still needs another source.
+  - `Hook.AfterDamageReceived` is not called for kills → not usable as the main source.
+  - Debuff expiry shows as PowerReceived with a negative amount and `Applier = null`.
+  - `DamageResult.UnblockedDamage` excludes overkill (Volley: unblocked=5 overkill=10 killed=True).
