@@ -194,7 +194,14 @@ public static class Overlay
         if (signature == _lastSignature) return;
         _lastSignature = signature;
 
-        foreach (var child in _body.GetChildren()) child.QueueFree();
+        // Remove old rows right away (QueueFree alone keeps them until the end of the frame), then let the
+        // panel shrink back to its content: containers grow on their own but never shrink.
+        foreach (var child in _body.GetChildren())
+        {
+            _body.RemoveChild(child);
+            child.QueueFree();
+        }
+        _panel.CallDeferred(Control.MethodName.ResetSize);
 
         if (stats.Count == 0)
         {
