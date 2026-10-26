@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Pure C# stats engine: no game or Godot references, so it can be unit-tested anywhere.
+       The mod compiles these sources directly into KikiMAIster.dll (single DLL to ship). -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>KikiMAIster.Core</RootNamespace>
+  </PropertyGroup>
+</Project>
