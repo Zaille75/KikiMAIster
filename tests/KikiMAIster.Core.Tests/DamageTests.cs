@@ -57,6 +57,18 @@ public class DamageTests : TestBase
     }
 
     [Fact]
+    public void DoomKill_CreditedToApplier_WithKill()
+    {
+        Power(A, Enemy, "DOOM_POWER", 6);
+        Power(A, Enemy, "DOOM_POWER", 6);
+        Engine.Handle(new DamageDealt(Actor.None, Enemy, 0, 13, 0, true, Source.Dot("DOOM_POWER")));
+
+        Assert.Equal(13, Combat(IdA).DamageDealt, 6);
+        Assert.Equal(13, Combat(IdA).DamageBySource["DamageOverTime:DOOM_POWER"], 6);
+        Assert.Equal(1, Combat(IdA).Kills);
+    }
+
+    [Fact]
     public void DebuffsApplied_CountedPerType()
     {
         Power(A, Enemy, "VULNERABLE_POWER", 2);

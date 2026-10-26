@@ -17,7 +17,9 @@ namespace KikiMAIster.Patches;
 /// the combat, so every HP loss is also kept as "pending" and emitted later if it was never reported.
 public static class DamagePatches
 {
-    private sealed record DamageCall(Creature? Dealer, CardModel? Card, Type? CallingModel);
+    /// DotPowerId: set when the calling model is a debuff on the target (Poison, Doom…). Decided when the command
+    /// starts, because a creature that dies loses its powers before a late (pending) report is made.
+    private sealed record DamageCall(Creature? Dealer, CardModel? Card, Type? CallingModel, string? DotPowerId = null);
 
     private sealed record PendingHit(DamageResult Result, DamageCall? Call);
 
@@ -38,7 +40,7 @@ public static class DamagePatches
                 if (targets == null) return;
                 // The call stack is only needed when the card is unknown (powers, relics, orbs, poison…).
                 var call = new DamageCall(dealer, cardSource, cardSource == null ? Capture.CallingModelType() : null);
-                foreach (var t in targets) LastCallOnTarget.AddOrUpdate(t, call);
+                foreach (var t in targets) LastCallOnTarget.AddOrUpdate(t, WithDot(call, t));
             });
     }
 
@@ -52,7 +54,7 @@ public static class DamagePatches
             var model = Capture.CallingModelType();
             var dealer = model != null && typeof(CardModel).IsAssignableFrom(model) ? Capture.CurrentActingPlayer?.Creature : null;
             var call = new DamageCall(dealer, null, model);
-            foreach (var c in creatures) LastCallOnTarget.AddOrUpdate(c, call);
+            foreach (var c in creatures) LastCallOnTarget.AddOrUpdate(c, WithDot(call, c));
         });
     }
 
@@ -74,7 +76,7 @@ public static class DamagePatches
             Capture.Safe("History.DamageReceived", () =>
             {
                 LastCallOnTarget.TryGetValue(receiver, out var call);
-                Report(result, dealer, cardSource, call?.CallingModel);
+                Report(result, dealer, cardSource, call);
             });
     }
 
@@ -88,7 +90,7 @@ public static class DamagePatches
                 foreach (var r in damageResults)
                 {
                     LastCallOnTarget.TryGetValue(r.Receiver, out var call);
-                    Report(r, attacker, call?.Card, call?.CallingModel);
+                    Report(r, attacker, call?.Card, call);
                 }
                 FlushPending();
             });
@@ -98,12 +100,13 @@ public static class DamagePatches
     public static void FlushPending()
     {
         foreach (var p in Pending)
-            Report(p.Result, p.Call?.Dealer, p.Call?.Card, p.Call?.CallingModel);
+            Report(p.Result, p.Call?.Dealer, p.Call?.Card, p.Call);
         Pending.Clear();
     }
 
-    private static void Report(DamageResult r, Creature? dealer, CardModel? card, Type? callingModel)
+    private static void Report(DamageResult r, Creature? dealer, CardModel? card, DamageCall? call)
     {
+        var callingModel = call?.CallingModel;
         if (Seen.TryGetValue(r, out _)) return;
         Seen.Add(r, true);
         if (r.TotalDamage + r.OverkillDamage <= 0) return;
@@ -111,10 +114,9 @@ public static class DamagePatches
         var target = r.Receiver;
         Source source;
         if (card != null) source = Source.Card(Capture.IdOf(card));
-        else if (callingModel != null && IsDebuffOn(target, callingModel, out var powerId) &&
-                 (dealer == null || dealer == target))
+        else if (call?.DotPowerId is { } powerId && (dealer == null || dealer == target))
         {
-            // Damage-over-time debuff (Poison, Constrict…): credited to whoever applied the stacks.
+            // Damage-over-time debuff (Poison, Constrict, Doom…): credited to whoever applied the stacks.
             source = Source.Dot(powerId);
             dealer = null;
         }
@@ -129,10 +131,10 @@ public static class DamagePatches
             r.BlockedDamage, r.UnblockedDamage, r.OverkillDamage, r.WasTargetKilled, source));
     }
 
-    private static bool IsDebuffOn(Creature target, Type powerType, out string powerId)
+    private static DamageCall WithDot(DamageCall call, Creature target)
     {
-        var power = target.Powers.FirstOrDefault(p => p.GetType() == powerType);
-        powerId = power != null ? Capture.IdOf(power) : "";
-        return power?.Type == PowerType.Debuff;
+        if (call.CallingModel == null) return call;
+        var power = target.Powers.FirstOrDefault(p => p.GetType() == call.CallingModel);
+        return power?.Type == PowerType.Debuff ? call with { DotPowerId = Capture.IdOf(power) } : call;
     }
 }

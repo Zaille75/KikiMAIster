@@ -66,3 +66,8 @@ Peers exchange `PeerVersionInfo`: only mods with `affects_gameplay: true` must m
 - `Callable.From(...).CallDeferred()` from the mod initializer never ran in v0.2.0, and nothing was logged.
 - The mod initializer runs on the main thread, and `NGame.Instance` is already ready at that point.
 - Working approach: attach on the first `NGame._Input` (any mouse move) or on `Hook.BeforeCombatStart`.
+
+## A creature loses its powers before a late damage report (v0.3.4)
+- A hit that ends the combat (here, Doom killing the last enemy) is reported late, from the pending list.
+- By then the dead creature no longer has its powers, so the "is this a debuff on the target?" check failed. The kill was credited to nobody, as `Power:DOOM_POWER` with no dealer.
+- Fix: the DoT power id is decided in the command prefix (`CreatureCmd.Damage` / `CreatureCmd.Kill`), while the power is still there.
