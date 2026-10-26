@@ -5,7 +5,10 @@
 ## What KikiMAIster is
 An all-in-one statistics mod for **Slay the Spire 2**, focused on **multiplayer (co-op)** runs.
 It shows, for each player, what they contributed to the fight: damage, debuffs, protection
-of allies, damage taken, and more. It also works in solo.
+of allies, damage taken, and more.
+
+**Solo is fully supported**: it uses the same stats with a single player. Solo is also our
+quickest way to test and debug most features.
 
 ## Who it is for
 - Zaille75 and the friends he plays with (first users).
@@ -27,6 +30,7 @@ of allies, damage taken, and more. It also works in solo.
 - Replays.
 
 ## Success criteria for v1.0
-- Zaille75 plays a full co-op run with the mod on the beta branch, with no crash.
+- Zaille75 plays a full solo run and a full co-op run with the mod on the beta branch, with no crash.
+- The UI is available in English and French.
 - The numbers shown match a manual check on a few sample fights.
 - The mod is published on the Steam Workshop and installable by friends in one click.

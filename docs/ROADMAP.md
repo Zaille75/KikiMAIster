@@ -3,7 +3,7 @@
 | Phase | Content | Done when |
 |---|---|---|
 | 0. Specs | Vision, metrics, UI, technical design | Zaille75 validates the specs |
-| 1. Spike | Toolchain + game DLLs + decompiled code; minimal mod that logs "player X dealt N damage" | Zaille75 sees the log lines in a real co-op fight |
+| 1. Spike | Toolchain + game DLLs + decompiled code; minimal mod that logs "player X dealt N damage" | Zaille75 sees the log lines in a solo fight, then in a co-op fight |
 | 2. Engine | Capture layer + stats engine for all [v1] metrics, with unit tests | Tests pass, logs match a manual check |
 | 3. Overlay | Live in-combat panel | Zaille75 uses it in a run |
 | 4. Summaries | End-of-combat + end-of-run screens, JSON export, persistence | Full run without data loss |
