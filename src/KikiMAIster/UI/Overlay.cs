@@ -170,9 +170,23 @@ public static class Overlay
 
     // ---------- Refresh ----------
 
+    /// Keeps the panel on screen: the saved position is where the player put it; when the panel grows past the
+    /// right (or bottom) edge it is shown further left (or up), and goes back once it shrinks.
+    private static void FitOnScreen()
+    {
+        if (_panel == null || _dragging) return;
+        var screen = _panel.GetViewportRect().Size;
+        var size = _panel.Size * _panel.Scale;
+        var x = Math.Max(0, Math.Min(Cfg.X, screen.X - size.X));
+        var y = Math.Max(0, Math.Min(Cfg.Y, screen.Y - size.Y));
+        var target = new Vector2(x, y);
+        if (_panel.Position != target) _panel.Position = target;
+    }
+
     private static void Refresh()
     {
         if (_panel == null || _body == null || !_panel.Visible) return;
+        FitOnScreen();
 
         foreach (var (key, b) in ScopeButtons)
         {
