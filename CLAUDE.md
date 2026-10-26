@@ -9,3 +9,8 @@ update the spec before changing behavior. Plan: `docs/ROADMAP.md`.
 - C# net9.0 + Harmony only, no BaseLib. Only `Patches/` may touch game internals; `Core/` stays pure C# and unit-tested.
 - The mod must never crash the game or change gameplay (`affects_gameplay: false`).
 - `lib/` (game DLLs, decompiled code) is copyrighted: keep it out of git.
+
+## Toolchain (Linux box)
+.NET 9 SDK + .NET 8 runtime installed in `~/.dotnet` (no system install, libicu missing). Prefix commands with:
+`export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 DOTNET_ROOT=~/.dotnet PATH=$PATH:~/.dotnet:~/.dotnet/tools`
+Decompiler: `ilspycmd` (global tool).
