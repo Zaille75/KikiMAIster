@@ -1,0 +1,11 @@
+{
+  "id": "KikiMAIster",
+  "name": "KikiMAIster",
+  "author": "Zaille75",
+  "description": "All-in-one co-op stats: damage, debuffs, protection, damage taken. Read-only, works in solo and multiplayer.",
+  "version": "0.0.1",
+  "has_pck": false,
+  "has_dll": true,
+  "dependencies": [],
+  "affects_gameplay": false
+}

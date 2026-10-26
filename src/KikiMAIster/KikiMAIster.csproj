@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>KikiMAIster</AssemblyName>
+    <RootNamespace>KikiMAIster</RootNamespace>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <!-- Game branch to build against: beta (default) or default -->
+    <GameBranch Condition="'$(GameBranch)' == ''">beta</GameBranch>
+    <GameLibDir>$(MSBuildThisFileDirectory)../../lib/$(GameBranch)/</GameLibDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="sts2"><HintPath>$(GameLibDir)sts2.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>$(GameLibDir)0Harmony.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="GodotSharp"><HintPath>$(GameLibDir)GodotSharp.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="KikiMAIster.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Target Name="CheckGameLibs" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(GameLibDir)sts2.dll')" Text="Game DLLs not found in $(GameLibDir). Copy them from the Windows install (see README)." />
+  </Target>
+</Project>

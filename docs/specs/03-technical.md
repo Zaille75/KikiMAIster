@@ -39,7 +39,7 @@
 - The build produces one DLL per branch if their APIs differ; otherwise one shared DLL.
 - `docs/COMPATIBILITY.md` tracks which game versions were tested.
 
-## Risks to verify in the spike (Phase 1)
+## Risks to verify in the spike (Phase 1) — see GAME-INTERNALS.md
 - R1: Does each client see damage events for **all** players (local simulation)?
 - R2: How can we link a damage instance to its **source** (card, power, orb, relic)?
 - R3: Can we read block **owner/giver** when block is absorbed, so we can compute "prevented for allies"?
