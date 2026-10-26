@@ -17,10 +17,10 @@ public static class Overlay
     /// Columns about allies, hidden in solo.
     private static readonly HashSet<string> AllyColumns = new() { "col.forAllies", "col.toAllies" };
 
-    private const int FontSize = 13;
-    private static readonly Color Text = new(0.93f, 0.9f, 0.82f);
-    private static readonly Color Muted = new(0.65f, 0.62f, 0.55f);
-    private static readonly Color Accent = new(0.95f, 0.78f, 0.35f);
+    internal const int FontSize = 13;
+    internal static readonly Color Text = new(0.93f, 0.9f, 0.82f);
+    internal static readonly Color Muted = new(0.65f, 0.62f, 0.55f);
+    internal static readonly Color Accent = new(0.95f, 0.78f, 0.35f);
 
     private static CanvasLayer? _layer;
     private static PanelContainer? _panel;
@@ -32,6 +32,7 @@ public static class Overlay
     private static bool _solo;
     private static bool _anyPetHp;
     private static Button? _langButton;
+    private static Button? _summaryButton;
     private static Label? _title;
     private static bool _dragging;
     private static string _lastSignature = "";
@@ -89,8 +90,10 @@ public static class Overlay
 
         var timer = new Godot.Timer { WaitTime = 0.3, Autostart = true };
         timer.Timeout += () => Capture.Safe("Overlay.Refresh", Refresh);
+        timer.Timeout += () => Capture.Safe("CombatSummary.Check", CombatSummary.ShowIfNewCombatEnded);
         _layer.AddChild(timer);
 
+        CombatSummary.Attach(_layer);
         root.AddChild(_layer);
         Refresh();
         ModLog.Info($"overlay attached (inside tree: {_layer.IsInsideTree()}, visible: {_panel.Visible})");
@@ -132,6 +135,10 @@ public static class Overlay
             ScopeButtons[scope.ToString()] = b;
             header.AddChild(b);
         }
+
+        _summaryButton = MakeButton("");
+        _summaryButton.Pressed += () => Capture.Safe("Overlay.Summary", CombatSummary.Toggle);
+        header.AddChild(_summaryButton);
 
         _langButton = MakeButton("");
         _langButton.TooltipText = Loc.T("lang.tip");
@@ -201,6 +208,12 @@ public static class Overlay
             _langButton.TooltipText = Loc.T("lang.tip");
         }
         if (_title != null) _title.TooltipText = Loc.T("hint");
+        if (_summaryButton != null)
+        {
+            _summaryButton.Text = Loc.T("summary.button");
+            _summaryButton.TooltipText = Loc.T("summary.tip");
+            _summaryButton.Visible = Capture.Engine.LastCombat != null;
+        }
 
         var engine = Capture.Engine;
         var stats = engine.Get(CurrentScope);
@@ -509,7 +522,7 @@ public static class Overlay
             $"{kv.Value.DebuffsReceived.Count}:{kv.Value.FriendlyDamage + kv.Value.SelfDamage:F1}:{kv.Value.FriendlyDebuffs.Count}:" +
             $"{kv.Value.HealingSelf + kv.Value.HealingAllies:F1}:{kv.Value.AbsorbedByPet:F1}:{kv.Value.PreventedByEffects:F1}:{kv.Value.PetHpGiven:F1}:{kv.Value.Kills}"));
 
-    private static string N(double v) => Math.Round(v).ToString("0", CultureInfo.InvariantCulture);
+    internal static string N(double v) => Math.Round(v).ToString("0", CultureInfo.InvariantCulture);
 
     /// Tooltip lines "label: value"; lines about allies are left out in solo.
     private static string Tip(params (string LabelKey, string Value, bool Ally)[] lines) =>
@@ -523,7 +536,7 @@ public static class Overlay
 
     private static string Pretty(string key) => GameNames.Of(key);
 
-    private static Color CharacterColor(string? character) => character switch
+    internal static Color CharacterColor(string? character) => character switch
     {
         "IRONCLAD" => new Color(0.85f, 0.3f, 0.25f),
         "SILENT" => new Color(0.35f, 0.75f, 0.4f),
@@ -533,7 +546,7 @@ public static class Overlay
         _ => new Color(0.75f, 0.75f, 0.75f)
     };
 
-    private static Label MakeLabel(string text, Color color, HorizontalAlignment align = HorizontalAlignment.Left)
+    internal static Label MakeLabel(string text, Color color, HorizontalAlignment align = HorizontalAlignment.Left)
     {
         var l = new Label { Text = text, HorizontalAlignment = align, MouseFilter = Control.MouseFilterEnum.Ignore };
         l.AddThemeColorOverride("font_color", color);
@@ -541,7 +554,7 @@ public static class Overlay
         return l;
     }
 
-    private static Button MakeButton(string text)
+    internal static Button MakeButton(string text)
     {
         var b = new Button { Text = text, Flat = true, FocusMode = Control.FocusModeEnum.None };
         b.AddThemeFontSizeOverride("font_size", FontSize);

@@ -14,6 +14,12 @@ public sealed class StatsEngine
     private readonly Dictionary<int, bool> _hadAlternative = new();
 
     public int Round { get; private set; }
+
+    private readonly List<RoundPoint> _timeline = new();
+    private int _combatNumber;
+
+    /// The last finished combat (null before the first one ends).
+    public CombatRecord? LastCombat { get; private set; }
     public bool InCombat { get; private set; }
 
     /// Block absorbed or removed that no recorded layer covered (should stay 0; non-zero = capture gap).
@@ -31,8 +37,8 @@ public sealed class StatsEngine
         {
             case RunStarted: OnRunStarted(); break;
             case CombatStarted c: OnCombatStarted(c); break;
-            case RoundStarted r: Round = r.Round; _stats[Scope.Turn].Clear(); break;
-            case CombatEnded: OnCombatEnded(); break;
+            case RoundStarted r: OnRoundStarted(r); break;
+            case CombatEnded c: OnCombatEnded(c); break;
             case DamageDealt d: OnDamage(d); break;
             case BlockGained b: OnBlockGained(b); break;
             case BlockCleared b: OnBlockCleared(b); break;
@@ -74,14 +80,34 @@ public sealed class StatsEngine
             // Make every player visible in all scopes, even with zero stats.
             foreach (var scope in _stats.Keys) Stats(scope, p.PlayerId);
         }
+        _timeline.Clear();
+        _combatNumber++;
+        AddRoundPoint(0);
     }
 
-    private void OnCombatEnded()
+    private void OnRoundStarted(RoundStarted r)
+    {
+        // A new round closes the previous one on the chart.
+        if (InCombat && r.Round > 1 && _timeline[^1].Round < r.Round - 1) AddRoundPoint(r.Round - 1);
+        Round = r.Round;
+        _stats[Scope.Turn].Clear();
+    }
+
+    private void AddRoundPoint(int round) =>
+        _timeline.Add(new RoundPoint(round, _stats[Scope.Combat].ToDictionary(kv => kv.Key, kv => RoundTotals.Of(kv.Value))));
+
+    private void OnCombatEnded(CombatEnded c)
     {
         // Block left at the end of combat counts as wasted / useless help (spec §F, decision F2).
         foreach (var (owner, ledger) in _block)
             foreach (var layer in ledger.Clear())
                 CreditUnused(owner, layer, layer.Amount);
+        if (InCombat)
+        {
+            if (_timeline.Count == 0 || _timeline[^1].Round < Round) AddRoundPoint(Round);
+            else _timeline[^1] = _timeline[^1] with { Players = _stats[Scope.Combat].ToDictionary(kv => kv.Key, kv => RoundTotals.Of(kv.Value)) };
+            LastCombat = new CombatRecord(_combatNumber, c.Victory, _timeline.ToList());
+        }
         InCombat = false;
     }
 
