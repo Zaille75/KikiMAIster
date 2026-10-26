@@ -8,7 +8,9 @@ namespace KikiMAIster.UI;
 /// a mod cannot register its own Godot script classes.
 public static class Overlay
 {
-    private sealed record Section(string Key, Func<StatsEngine, ulong, PlayerStats, IReadOnlyList<Cell>> Row, string[] Columns);
+    /// Main: the value shown on the closed section header in solo (spec 02-ui).
+    private sealed record Section(string Key, Func<StatsEngine, ulong, PlayerStats, IReadOnlyList<Cell>> Row, string[] Columns,
+        Func<PlayerStats, double> Main, string MainLabel);
 
     /// One table cell: text and optional tooltip.
     private sealed record Cell(string Text, string Tooltip = "");
@@ -31,11 +33,14 @@ public static class Overlay
 
     private static readonly Section[] Sections =
     {
-        new("damage", DamageRow, Array.Empty<string>()),
-        new("protection", ProtectionRow, new[] { "col.prevented", "col.forAllies", "col.wastedUseless" }),
-        new("debuffs", DebuffRow, new[] { "col.applied", "col.stacks", "col.dot" }),
-        new("taken", TakenRow, new[] { "col.hpLost", "col.blocked", "col.debuffs" }),
-        new("friendly", FriendlyRow, new[] { "col.toAllies", "col.self", "col.debuffs" }),
+        new("damage", DamageRow, Array.Empty<string>(), s => s.DamageDealt, "col.total"),
+        new("protection", ProtectionRow, new[] { "col.prevented", "col.forAllies", "col.wastedUseless" },
+            s => s.PreventedOwnBlock + s.PreventedForAllies + s.AbsorbedByPet, "col.prevented"),
+        new("debuffs", DebuffRow, new[] { "col.applied", "col.stacks", "col.dot" },
+            s => s.DebuffsApplied.Values.Sum(t => t.Count), "col.applied"),
+        new("taken", TakenRow, new[] { "col.hpLost", "col.blocked", "col.debuffs" }, s => s.HpLost, "col.hpLost"),
+        new("friendly", FriendlyRow, new[] { "col.toAllies", "col.self", "col.debuffs" },
+            s => s.FriendlyDamage + s.SelfDamage, "col.friendlyTotal"),
     };
 
     private static ModConfig Cfg => ModConfig.Current;
@@ -205,14 +210,33 @@ public static class Overlay
             header.Alignment = HorizontalAlignment.Left;
             header.AddThemeColorOverride("font_color", Accent);
             var key = section.Key;
-            header.Pressed += () => Capture.Safe("Overlay.Fold", () =>
+            void Fold() => Capture.Safe("Overlay.Fold", () =>
             {
                 if (!Cfg.OpenSections.Remove(key)) Cfg.OpenSections.Add(key);
                 Cfg.Save();
                 _lastSignature = "";
                 Refresh();
             });
-            _body.AddChild(header);
+            header.Pressed += Fold;
+
+            // Solo + closed section: the single value is shown on the header, no need to open it.
+            if (!open && players.Count == 1)
+            {
+                var row = new HBoxContainer();
+                header.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+                row.AddChild(header);
+                var value = MakeLabel(N(section.Main(stats[players[0]])), Text, HorizontalAlignment.Right);
+                value.MouseFilter = Control.MouseFilterEnum.Stop;
+                value.MouseDefaultCursorShape = Control.CursorShape.PointingHand;
+                value.TooltipText = Loc.T(section.MainLabel);
+                value.GuiInput += e =>
+                {
+                    if (e is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true }) Fold();
+                };
+                row.AddChild(value);
+                _body.AddChild(row);
+            }
+            else _body.AddChild(header);
             if (open) _body.AddChild(BuildTable(section, engine, stats, players));
         }
     }

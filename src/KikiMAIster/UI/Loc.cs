@@ -47,6 +47,7 @@ public static class Loc
         ["tip.other"] = ("Other", "Autres"),
         ["tip.none"] = ("Nothing yet", "Rien pour l'instant"),
         ["col.total"] = ("Total", "Total"),
+        ["col.friendlyTotal"] = ("Damage to allies and self", "Dégâts aux alliés et à soi"),
         ["cat.cards"] = ("Cards", "Cartes"),
         ["cat.powers"] = ("Powers", "Pouvoirs"),
         ["cat.pet"] = ("Pet", "Familier"),
