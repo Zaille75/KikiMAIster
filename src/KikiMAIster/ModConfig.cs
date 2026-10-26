@@ -17,6 +17,9 @@ public sealed class ModConfig
     public string Language { get; set; } = "auto";
     /// Open the combat summary by itself when a combat ends.
     public bool AutoSummary { get; set; } = true;
+    /// Summary window position; negative = default (top center).
+    public float SummaryX { get; set; } = -1;
+    public float SummaryY { get; set; } = -1;
     /// Not saved: every section starts folded when the game starts.
     public List<string> OpenSections { get; set; } = new();
 
@@ -52,6 +55,8 @@ public sealed class ModConfig
                     case "scale": c.Scale = Float(v, c.Scale); break;
                     case "language": c.Language = v; break;
                     case "autoSummary": c.AutoSummary = v == "true"; break;
+                    case "summaryX": c.SummaryX = float.Parse(v, CultureInfo.InvariantCulture); break;
+                    case "summaryY": c.SummaryY = float.Parse(v, CultureInfo.InvariantCulture); break;
                 }
             }
         }
@@ -75,7 +80,8 @@ public sealed class ModConfig
             {
                 $"x={X.ToString(ci)}", $"y={Y.ToString(ci)}", $"visible={(Visible ? "true" : "false")}",
                 $"scope={Scope}", $"opacity={Opacity.ToString(ci)}", $"scale={Scale.ToString(ci)}",
-                $"language={Language}", $"autoSummary={(AutoSummary ? "true" : "false")}"
+                $"language={Language}", $"autoSummary={(AutoSummary ? "true" : "false")}",
+                $"summaryX={SummaryX.ToString(CultureInfo.InvariantCulture)}", $"summaryY={SummaryY.ToString(CultureInfo.InvariantCulture)}"
             });
         }
         catch (Exception e)

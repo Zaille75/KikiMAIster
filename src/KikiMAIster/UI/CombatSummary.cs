@@ -44,6 +44,8 @@ public static class CombatSummary
             CornerRadiusBottomLeft = 6, CornerRadiusBottomRight = 6, CornerRadiusTopLeft = 6, CornerRadiusTopRight = 6,
             ContentMarginLeft = 10, ContentMarginRight = 10, ContentMarginTop = 8, ContentMarginBottom = 8
         });
+        _panel.MouseDefaultCursorShape = Control.CursorShape.Move;
+        _panel.GuiInput += OnDrag;
         _content = new VBoxContainer();
         _content.AddThemeConstantOverride("separation", 6);
         _panel.AddChild(_content);
@@ -115,9 +117,34 @@ public static class CombatSummary
         Rebuild(combat);
         _panel.Visible = true;
         _panel.CallDeferred(Control.MethodName.ResetSize);
-        // Top center of the screen, above the rewards.
+        // Where the player left it, else top center of the screen (above the rewards); always kept on screen.
         var screen = _panel.GetViewportRect().Size;
-        _panel.Position = new Vector2(Math.Max(0, (screen.X - ChartWidth - 40) / 2), 70);
+        var x = Cfg.SummaryX >= 0 ? Cfg.SummaryX : (screen.X - ChartWidth - 40) / 2;
+        var y = Cfg.SummaryY >= 0 ? Cfg.SummaryY : 70;
+        _panel.Position = new Vector2(Math.Clamp(x, 0, Math.Max(0, screen.X - ChartWidth - 40)), Math.Clamp(y, 0, Math.Max(0, screen.Y - 120)));
+    }
+
+    private static bool _dragging;
+
+    /// Drag the window by any empty area (buttons and the combat picker keep their clicks); position saved.
+    private static void OnDrag(InputEvent e)
+    {
+        if (_panel == null) return;
+        switch (e)
+        {
+            case InputEventMouseButton { ButtonIndex: MouseButton.Left } mb:
+                _dragging = mb.Pressed;
+                if (!mb.Pressed)
+                {
+                    Cfg.SummaryX = _panel.Position.X;
+                    Cfg.SummaryY = _panel.Position.Y;
+                    Cfg.Save();
+                }
+                break;
+            case InputEventMouseMotion mm when _dragging:
+                _panel.Position += mm.Relative;
+                break;
+        }
     }
 
     private static void Rebuild(CombatRecord combat)
@@ -201,7 +228,8 @@ public static class CombatSummary
 
     private static Control BuildChart(CombatRecord combat, Metric metric)
     {
-        var chart = new Control { CustomMinimumSize = new Vector2(ChartWidth, ChartHeight) };
+        // Pass: dragging on the chart moves the window too.
+        var chart = new Control { CustomMinimumSize = new Vector2(ChartWidth, ChartHeight), MouseFilter = Control.MouseFilterEnum.Pass };
         var plotW = ChartWidth - AxisLeft - 10;
         var plotH = ChartHeight - AxisBottom - 8;
         var lastRound = Math.Max(1, combat.LastRound);
