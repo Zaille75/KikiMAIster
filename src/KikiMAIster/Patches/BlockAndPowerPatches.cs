@@ -176,7 +176,9 @@ public static class BlockAndPowerPatches
         public static void Prefix(int amount, Player player) => Capture.Safe("History.Summoned", () =>
         {
             BlockAlternatives.OnEffect();
-            Capture.Emit(new PetHpGiven(Capture.ToActor(player), amount));
+            // A card that summons for every player (co-op) is credited to whoever played it, not to each pet owner.
+            var giver = Capture.CurrentActingPlayer ?? player;
+            Capture.Emit(new PetHpGiven(Capture.ToActor(giver), amount));
         });
     }
 }

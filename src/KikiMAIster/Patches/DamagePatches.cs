@@ -56,7 +56,8 @@ public static class DamagePatches
             var model = Capture.CallingModelType();
             var dealer = model != null && typeof(CardModel).IsAssignableFrom(model) ? Capture.CurrentActingPlayer?.Creature : null;
             var call = new DamageCall(dealer, null, model);
-            foreach (var c in creatures) LastCallOnTarget.AddOrUpdate(c, WithDot(call, c));
+            // A creature at 0 HP is dying from the damage just dealt: keep that damage's card and dealer.
+            foreach (var c in creatures.Where(c => c.CurrentHp > 0)) LastCallOnTarget.AddOrUpdate(c, WithDot(call, c));
         });
     }
 
