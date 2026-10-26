@@ -29,6 +29,7 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
 |---|---|---|
 | Debuffs applied | Count and total stacks of each debuff this player put on **enemies** (Vulnerable, Weak, Poison, …). | v1 |
 | Damage from damage-over-time debuffs | Damage from DoT debuffs (Poison…) is credited to the players who applied the stacks, **split in proportion to the stacks each one applied** and still active. Example: A applies 6 Poison, B applies 4 → each tick is credited 60% to A and 40% to B. | v1 |
+| Doom kills | When Doom kills an enemy, the HP it removes counts as damage-over-time for the Doom appliers (split by stacks) and the kill goes to the biggest share. | v1 |
 | Friendly fire | Debuffs and status cards (Wound, Dazed…) a player puts on **an ally or on themselves**, and damage a player deals to allies or themselves. Shown in its own section, never mixed with enemy stats. | v1 |
 
 ## C. Protection & support

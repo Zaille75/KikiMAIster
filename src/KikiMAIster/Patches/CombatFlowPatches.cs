@@ -14,6 +14,17 @@ namespace KikiMAIster.Patches;
 public static class CombatFlowPatches
 {
     private static WeakReference<IRunState>? _currentRun;
+    private static bool _combatOpen;
+
+    /// Ends the combat once, whether it was won (AfterCombatEnd) or lost (LoseCombat).
+    private static void EndCombat(bool victory)
+    {
+        if (!_combatOpen) return;
+        _combatOpen = false;
+        DamagePatches.FlushPending();
+        Capture.Emit(new CombatEnded(victory));
+        Summary.LogCombat(Capture.Engine);
+    }
 
     [HarmonyPatch(typeof(Hook), nameof(Hook.BeforeCombatStart))]
     public static class CombatStart
@@ -28,6 +39,7 @@ public static class CombatFlowPatches
             Capture.CardPlayers.Clear();
             Capture.PotionUser = null;
             DamagePatches.Reset();
+            _combatOpen = true;
             var players = combatState?.Players ?? runState.Players;
             Capture.Emit(new CombatStarted(players.Select(p =>
                 new PlayerInfo(p.NetId, p.Creature.Name, p.Character.Id.Entry)).ToList()));
@@ -60,12 +72,14 @@ public static class CombatFlowPatches
     public static class CombatEnd
     {
         public static void Prefix(ICombatState? combatState) => Capture.Safe("AfterCombatEnd", () =>
-        {
-            DamagePatches.FlushPending();
-            var victory = combatState?.Players.Any(p => p.Creature.CurrentHp > 0) ?? true;
-            Capture.Emit(new CombatEnded(victory));
-            Summary.LogCombat(Capture.Engine);
-        });
+            EndCombat(combatState?.Players.Any(p => p.Creature.CurrentHp > 0) ?? true));
+    }
+
+    /// All players dead: the game never calls AfterCombatEnd.
+    [HarmonyPatch(typeof(CombatManager), nameof(CombatManager.LoseCombat))]
+    public static class CombatLost
+    {
+        public static void Prefix() => Capture.Safe("LoseCombat", () => EndCombat(false));
     }
 
     [HarmonyPatch(typeof(CombatHistory), nameof(CombatHistory.CardPlayStarted))]

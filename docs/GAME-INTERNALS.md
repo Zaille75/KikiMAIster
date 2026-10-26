@@ -56,3 +56,8 @@ affects_gameplay, min_game_version. DLL loaded with `LoadFromAssemblyPath`. Work
 ## Multiplayer lobby
 Peers exchange `PeerVersionInfo`: only mods with `affects_gameplay: true` must match. KikiMAIster
 (`affects_gameplay: false`) goes into `otherMods` and should not block friends without it (confirm in co-op).
+- **v0.1.0, Necrobinder solo, 4 fights + death:** engine numbers consistent (block gained = prevented + wasted in
+  every fight, no unattributed block). Bugs found and fixed in 0.1.1:
+  - Doom kills (`DoomPower.DoomKill` → `CreatureCmd.Kill` → `LoseHpInternal`) were not credited → `Kill` prefix
+    gives the context; Doom = damage-over-time credited by stacks.
+  - Defeat: `AfterCombatEnd` is not called; `CombatManager.LoseCombat` is → combat closed there.

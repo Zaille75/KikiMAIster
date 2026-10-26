@@ -42,6 +42,20 @@ public static class DamagePatches
             });
     }
 
+    /// Kills that are not damage (Doom, executes…) also go through LoseHpInternal: give them a context
+    /// so they are credited to the right power or card instead of the last damage call on that creature.
+    [HarmonyPatch(typeof(CreatureCmd), nameof(CreatureCmd.Kill), typeof(IReadOnlyCollection<Creature>), typeof(bool))]
+    public static class KillCommand
+    {
+        public static void Prefix(IReadOnlyCollection<Creature> creatures) => Capture.Safe("CreatureCmd.Kill", () =>
+        {
+            var model = Capture.CallingModelType();
+            var dealer = model != null && typeof(CardModel).IsAssignableFrom(model) ? Capture.CurrentActingPlayer?.Creature : null;
+            var call = new DamageCall(dealer, null, model);
+            foreach (var c in creatures) LastCallOnTarget.AddOrUpdate(c, call);
+        });
+    }
+
     [HarmonyPatch(typeof(Creature), nameof(Creature.LoseHpInternal))]
     public static class LoseHp
     {
@@ -104,7 +118,12 @@ public static class DamagePatches
             source = Source.Dot(powerId);
             dealer = null;
         }
-        else source = Capture.SourceOf(callingModel);
+        else
+        {
+            source = Capture.SourceOf(callingModel);
+            // A card killing without dealing damage (execute effects): credit the player playing it.
+            if (dealer == null && source.Kind == SourceKind.Card) dealer = Capture.CurrentActingPlayer?.Creature;
+        }
 
         Capture.Emit(new DamageDealt(Capture.ToActor(dealer), Capture.ToActor(target),
             r.BlockedDamage, r.UnblockedDamage, r.OverkillDamage, r.WasTargetKilled, source));
