@@ -1,0 +1,46 @@
+# 03 — Technical design
+
+**Status:** DRAFT
+
+## Platform facts (from community docs, game v0.103 – v0.107+)
+- The game is C# (.NET 9) on Godot 4.5.1. It loads mods natively from `<game>/mods/` and through the
+  Steam Workshop ("Play with Mods").
+- A mod is `<Id>.json` (the manifest) + `<Id>.dll` (the code) + an optional `<Id>.pck` (assets).
+- Code runs from a `[ModInitializer]` entry point and hooks game methods with **Harmony**.
+
+## Choices
+| Topic | Decision | Why |
+|---|---|---|
+| Language | C# / net9.0, SDK-style csproj | Same as the game. |
+| Dependencies | **Harmony only** (shipped with the game). **No BaseLib.** | Fewer breakages; BaseLib has had crash reports on the Workshop. |
+| Assets | Code-only at first (`has_pck: false`). UI built in code with Godot nodes. | No Godot editor needed. A `.pck` is added only if we need icons or fonts. |
+| `affects_gameplay` | `false` | Read-only mod; other players should not need it. |
+| Build machine | Linux dev box (`dotnet build`) | Game DLLs are copied from the Windows PC to `lib/<branch>/`. |
+| Testing | Unit tests on the stats engine (no game needed) + manual in-game tests by Zaille75 on Windows. | |
+
+## Architecture (layers)
+1. **Capture** (`Patches/`): thin Harmony patches that turn game events into neutral `StatEvent`s
+   (DamageEvent, BlockEvent, PowerAppliedEvent, HealEvent, CombatStart/End, TurnStart, RunEnd…).
+   This is the **only** layer that depends on game internals, which keeps the cost of game updates small.
+2. **Stats engine** (`Core/`): pure C#, no Godot or game types. It aggregates events into per-player
+   stats at turn, combat and run scope. Unit tested against the definitions in `01-metrics.md`.
+3. **UI** (`UI/`): Godot nodes that read the engine's state; overlay plus summaries.
+4. **Persistence** (`Core/`): saves the current run's stats so Save & Quit / Continue doesn't lose
+   them, plus the end-of-run JSON export.
+
+## Safety rules
+- Every patch is wrapped in try/catch and logs errors; the mod must **never** crash the game.
+- The mod never modifies game state.
+- If a patch target is missing (after a game update), that stat is disabled and a warning is
+  logged; the rest of the mod keeps working.
+
+## Game versions (beta + default)
+- `lib/beta/` and `lib/default/` hold the game DLLs for each branch.
+- The build produces one DLL per branch if their APIs differ; otherwise one shared DLL.
+- `docs/COMPATIBILITY.md` tracks which game versions were tested.
+
+## Risks to verify in the spike (Phase 1)
+- R1: Does each client see damage events for **all** players (local simulation)?
+- R2: How can we link a damage instance to its **source** (card, power, orb, relic)?
+- R3: Can we read block **owner/giver** when block is absorbed, so we can compute "prevented for allies"?
+- R4: Where do we hook the rewards and end-of-run screens?
