@@ -7,7 +7,8 @@ using MegaCrit.Sts2.Core.Models;
 namespace KikiMAIster.Patches;
 
 /// Decides, at the end of each player turn, whether each block card played that turn had a real alternative:
-/// an attack that was in hand when the block card was played, was never played, and could be paid with the
+/// a useful card (attack, skill or power that gives no block) that was in hand when the block card was played,
+/// was never played, and could be paid with the
 /// block card's energy + the energy left at the end of the turn (spec 01-metrics §F, wasted vs useless).
 /// A block card that also did something else (debuff, damage, draw…) or is Ethereal never counts as wasted.
 public static class BlockAlternatives
@@ -17,7 +18,7 @@ public static class BlockAlternatives
         public required int Id { get; init; }
         public required Player Owner { get; init; }
         public required int EnergySpent { get; init; }
-        public required List<CardModel> AttacksInHand { get; init; }
+        public required List<CardModel> UsefulCardsInHand { get; init; }
         public bool GaveBlock { get; set; }
         public bool HadOtherEffect { get; set; }
         public required bool Ethereal { get; init; }
@@ -46,7 +47,7 @@ public static class BlockAlternatives
         if (InProgress.Count > 0) InProgress.Pop();
     }
 
-    /// Card play starts: remember the attacks in the player's hand. Auto-played cards were not a choice.
+    /// Card play starts: remember the useful cards in the player's hand. Auto-played cards were not a choice.
     public static void OnPlayStarted(CardPlay cardPlay)
     {
         var hand = cardPlay.Player.PlayerCombatState?.Hand.Cards;
@@ -61,7 +62,7 @@ public static class BlockAlternatives
             Owner = cardPlay.Player,
             EnergySpent = cardPlay.Resources.EnergySpent,
             Ethereal = cardPlay.Card.Keywords.Contains(CardKeyword.Ethereal),
-            AttacksInHand = hand.Where(c => c != cardPlay.Card && c.Type == CardType.Attack).ToList()
+            UsefulCardsInHand = hand.Where(c => c != cardPlay.Card && IsUseful(c)).ToList()
         };
         Plays.AddOrUpdate(cardPlay, play);
         ThisTurn.Add(play);
@@ -84,16 +85,21 @@ public static class BlockAlternatives
         {
             var state = play.Owner.PlayerCombatState;
             var budget = play.EnergySpent + (state?.Energy ?? 0);
-            var alternative = state == null || play.HadOtherEffect || play.Ethereal ? null : play.AttacksInHand.FirstOrDefault(c =>
+            var alternative = state == null || play.HadOtherEffect || play.Ethereal ? null : play.UsefulCardsInHand.FirstOrDefault(c =>
                 !used.Contains(c) && state.Hand.Cards.Contains(c) && Cost(c) <= budget && PlayableExceptEnergy(c));
             if (alternative != null) used.Add(alternative);
-            ModLog.Info($"block play {play.Id}: other effect {play.HadOtherEffect}, ethereal {play.Ethereal}, energy budget {budget}, attacks in hand when played: " +
-                        $"[{string.Join(", ", play.AttacksInHand.Select(c => Capture.IdOf(c)))}] → alternative: " +
+            ModLog.Info($"block play {play.Id}: other effect {play.HadOtherEffect}, ethereal {play.Ethereal}, energy budget {budget}, useful cards in hand when played: " +
+                        $"[{string.Join(", ", play.UsefulCardsInHand.Select(c => Capture.IdOf(c)))}] → alternative: " +
                         (alternative != null ? Capture.IdOf(alternative) : "none"));
             Capture.Emit(new BlockPlayResolved(play.Id, alternative != null));
         }
         ThisTurn.Clear();
     }
+
+    /// Attacks, and skills/powers that give no block (debuffs, draw, buffs…). Status, curses and other block
+    /// cards are not an alternative to a block card.
+    private static bool IsUseful(CardModel card) =>
+        card.Type == CardType.Attack || (card.Type is CardType.Skill or CardType.Power && !card.GainsBlock);
 
     private static int Cost(CardModel card) => Math.Max(0, card.EnergyCost.GetWithModifiers(CostModifiers.All));
 
