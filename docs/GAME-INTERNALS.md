@@ -61,3 +61,8 @@ Peers exchange `PeerVersionInfo`: only mods with `affects_gameplay: true` must m
   - Doom kills (`DoomPower.DoomKill` → `CreatureCmd.Kill` → `LoseHpInternal`) were not credited → `Kill` prefix
     gives the context; Doom = damage-over-time credited by stacks.
   - Defeat: `AfterCombatEnd` is not called; `CombatManager.LoseCombat` is → combat closed there.
+
+## Overlay attach (v0.2.1)
+- `Callable.From(...).CallDeferred()` from the mod initializer never ran in v0.2.0, and nothing was logged.
+- The mod initializer runs on the main thread, and `NGame.Instance` is already ready at that point.
+- Working approach: attach on the first `NGame._Input` (any mouse move) or on `Hook.BeforeCombatStart`.
