@@ -46,8 +46,12 @@ public static class Loc
         ["tip.fromSelf"] = ("Self-inflicted", "Auto-infligés"),
         ["tip.other"] = ("Other", "Autres"),
         ["tip.none"] = ("Nothing yet", "Rien pour l'instant"),
+        ["src.pet"] = ("Pet", "Familier"),
+        ["src.unknown"] = ("Other", "Autre"),
+        ["lang.tip"] = ("Language: click to switch English / French", "Langue : cliquer pour passer en anglais / français"),
+        ["row.tip"] = ("Click to show or hide the details", "Cliquer pour afficher ou masquer le détail"),
         ["empty"] = ("No combat yet", "Aucun combat pour l'instant"),
-        ["hint"] = ("F7: show/hide · drag the title to move", "F7 : afficher/masquer · glisser le titre pour déplacer"),
+        ["hint"] = ("F7: show/hide · drag the title to move · click a row for details", "F7 : afficher/masquer · glisser le titre pour déplacer · cliquer sur une ligne pour le détail"),
     };
 
     public static bool French => ModConfig.Current.Language switch

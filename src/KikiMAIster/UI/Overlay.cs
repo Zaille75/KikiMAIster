@@ -22,6 +22,9 @@ public static class Overlay
     private static PanelContainer? _panel;
     private static VBoxContainer? _body;
     private static readonly Dictionary<string, Button> ScopeButtons = new();
+    private static readonly HashSet<string> Expanded = new();
+    private static Button? _langButton;
+    private static Label? _title;
     private static bool _dragging;
     private static string _lastSignature = "";
 
@@ -105,6 +108,7 @@ public static class Overlay
         title.TooltipText = Loc.T("hint");
         title.GuiInput += OnTitleInput;
         header.AddChild(title);
+        _title = title;
 
         foreach (var scope in Enum.GetValues<Scope>())
         {
@@ -119,6 +123,17 @@ public static class Overlay
             ScopeButtons[scope.ToString()] = b;
             header.AddChild(b);
         }
+
+        _langButton = MakeButton("");
+        _langButton.TooltipText = Loc.T("lang.tip");
+        _langButton.Pressed += () => Capture.Safe("Overlay.Language", () =>
+        {
+            Cfg.Language = Loc.French ? "en" : "fr";
+            Cfg.Save();
+            _lastSignature = "";
+            Refresh();
+        });
+        header.AddChild(_langButton);
 
         var close = MakeButton("✕");
         close.Pressed += Toggle;
@@ -153,7 +168,16 @@ public static class Overlay
         if (_panel == null || _body == null || !_panel.Visible) return;
 
         foreach (var (key, b) in ScopeButtons)
+        {
+            b.Text = Loc.T($"scope.{key}");
             b.AddThemeColorOverride("font_color", key == Cfg.Scope ? Accent : Muted);
+        }
+        if (_langButton != null)
+        {
+            _langButton.Text = Loc.French ? "FR" : "EN";
+            _langButton.TooltipText = Loc.T("lang.tip");
+        }
+        if (_title != null) _title.TooltipText = Loc.T("hint");
 
         var engine = Capture.Engine;
         var stats = engine.Get(CurrentScope);
@@ -193,6 +217,9 @@ public static class Overlay
 
     private static Control BuildTable(Section section, StatsEngine engine, IReadOnlyDictionary<ulong, PlayerStats> stats, List<ulong> players)
     {
+        var box = new VBoxContainer();
+        box.AddThemeConstantOverride("separation", 2);
+        var details = new List<Control>();
         var columns = section.Columns.Length == 0 ? 3 : section.Columns.Length + 1;
         var grid = new GridContainer { Columns = columns };
         grid.AddThemeConstantOverride("h_separation", 10);
@@ -210,24 +237,61 @@ public static class Overlay
             var name = MakeLabel(info?.Name ?? id.ToString(), CharacterColor(info?.Character));
             name.CustomMinimumSize = new Vector2(90, 0);
             name.ClipText = true;
+            var cells = section.Row(engine, id, stats[id]);
+            var detail = cells.FirstOrDefault(c => c.Tooltip != "")?.Tooltip ?? "";
+            var rowKey = $"{section.Key}:{id}";
+            MakeClickable(name, rowKey, detail);
             grid.AddChild(name);
-            foreach (var cell in section.Row(engine, id, stats[id]))
+            foreach (var cell in cells)
             {
-                if (cell.Bar is { } share)
-                {
-                    grid.AddChild(MakeBar(share, CharacterColor(info?.Character), cell.Tooltip));
-                    continue;
-                }
-                var l = MakeLabel(cell.Text, Text, HorizontalAlignment.Right);
-                if (cell.Tooltip != "")
-                {
-                    l.TooltipText = cell.Tooltip;
-                    l.MouseFilter = Control.MouseFilterEnum.Pass;
-                }
-                grid.AddChild(l);
+                Control c = cell.Bar is { } share
+                    ? MakeBar(share, CharacterColor(info?.Character), cell.Tooltip)
+                    : MakeLabel(cell.Text, Text, HorizontalAlignment.Right);
+                MakeClickable(c, rowKey, cell.Tooltip);
+                grid.AddChild(c);
             }
+
+            if (detail != "" && Expanded.Contains(rowKey))
+                details.Add(BuildDetail(info?.Name ?? id.ToString(), CharacterColor(info?.Character), detail));
         }
-        return grid;
+        box.AddChild(grid);
+        foreach (var d in details) box.AddChild(d);
+        return box;
+    }
+
+    /// Hovering a row shows its details as a tooltip; clicking it opens them inside the panel.
+    private static void MakeClickable(Control c, string rowKey, string tooltip)
+    {
+        c.MouseFilter = Control.MouseFilterEnum.Stop;
+        c.MouseDefaultCursorShape = Control.CursorShape.PointingHand;
+        c.TooltipText = tooltip == "" ? Loc.T("row.tip") : tooltip + "\n\n" + Loc.T("row.tip");
+        c.GuiInput += e =>
+        {
+            if (e is not InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true }) return;
+            Capture.Safe("Overlay.Expand", () =>
+            {
+                if (!Expanded.Remove(rowKey)) Expanded.Add(rowKey);
+                _lastSignature = "";
+                Refresh();
+            });
+        };
+    }
+
+    private static Control BuildDetail(string player, Color color, string text)
+    {
+        var panel = new PanelContainer();
+        panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+        {
+            BgColor = new Color(1, 1, 1, 0.05f),
+            BorderColor = new Color(color, 0.6f), BorderWidthLeft = 2,
+            ContentMarginLeft = 8, ContentMarginRight = 6, ContentMarginTop = 2, ContentMarginBottom = 2
+        });
+        var v = new VBoxContainer();
+        v.AddThemeConstantOverride("separation", 0);
+        v.AddChild(MakeLabel(player, color));
+        v.AddChild(MakeLabel(text, Text));
+        panel.AddChild(v);
+        return panel;
     }
 
     // ---------- Rows (one per section) ----------
@@ -298,7 +362,7 @@ public static class Overlay
     // ---------- Helpers ----------
 
     private static string Signature(StatsEngine engine, IReadOnlyDictionary<ulong, PlayerStats> stats) =>
-        Cfg.Scope + "|" + string.Join(',', Cfg.OpenSections) + "|" + Loc.French + "|" + string.Join(';', stats.Select(kv =>
+        Cfg.Scope + "|" + string.Join(',', Cfg.OpenSections) + "|" + string.Join(',', Expanded) + "|" + Loc.French + "|" + string.Join(';', stats.Select(kv =>
             $"{kv.Key}:{kv.Value.DamageDealt:F1}:{kv.Value.TotalRawDamage:F1}:{kv.Value.PreventedOwnBlock + kv.Value.PreventedForAllies:F1}:" +
             $"{kv.Value.WastedBlock + kv.Value.UselessHelp + kv.Value.BlockSpent:F1}:{kv.Value.BlockGainedSelf + kv.Value.BlockGivenToAllies:F1}:" +
             $"{kv.Value.HpLost:F1}:{kv.Value.DamageBlocked:F1}:{kv.Value.DebuffsApplied.Values.Sum(t => t.Stacks):F1}:" +
@@ -316,13 +380,7 @@ public static class Overlay
     private static string Powers(Dictionary<string, PowerTally> map) =>
         string.Join('\n', map.OrderByDescending(kv => kv.Value.Stacks).Select(kv => $"{Pretty(kv.Key)}: x{kv.Value.Count} ({N(kv.Value.Stacks)})"));
 
-    /// "Card:STRIKE_IRONCLAD" → "Strike Ironclad", "POISON_POWER" → "Poison".
-    private static string Pretty(string id)
-    {
-        var raw = id.Contains(':') ? id[(id.IndexOf(':') + 1)..] : id;
-        if (raw.EndsWith("_POWER")) raw = raw[..^6];
-        return CultureInfo.InvariantCulture.TextInfo.ToTitleCase(raw.Replace('_', ' ').ToLowerInvariant());
-    }
+    private static string Pretty(string key) => GameNames.Of(key);
 
     private static Color CharacterColor(string? character) => character switch
     {
