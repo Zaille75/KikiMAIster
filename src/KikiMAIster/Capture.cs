@@ -77,7 +77,11 @@ public static class Capture
         return p.Creature.Name;
     }
 
-    public static string IdOf(AbstractModel model) => model.Id.Entry;
+    public static string IdOf(AbstractModel model)
+    {
+        UI.GameNames.Register(model.Id.Entry, model.GetType());
+        return model.Id.Entry;
+    }
 
     /// Finds which game model (power, relic, orb, potion, card) is calling the current game command,
     /// by walking the call stack. Only valid in a prefix of a command, before its first await.
@@ -102,6 +106,7 @@ public static class Capture
     {
         if (modelType == null) return Source.Unknown;
         var id = ModelDb.GetId(modelType).Entry;
+        UI.GameNames.Register(id, modelType);
         if (typeof(PowerModel).IsAssignableFrom(modelType)) return Source.Power(id);
         if (typeof(RelicModel).IsAssignableFrom(modelType)) return new Source(SourceKind.Relic, id);
         if (typeof(OrbModel).IsAssignableFrom(modelType)) return new Source(SourceKind.Orb, id);

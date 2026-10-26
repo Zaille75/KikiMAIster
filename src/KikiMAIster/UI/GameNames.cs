@@ -1,5 +1,6 @@
 using System.Globalization;
 using MegaCrit.Sts2.Core.Localization;
+using MegaCrit.Sts2.Core.Models;
 
 namespace KikiMAIster.UI;
 
@@ -7,6 +8,11 @@ namespace KikiMAIster.UI;
 public static class GameNames
 {
     private static readonly Dictionary<string, string> Cache = new();
+    private static readonly Dictionary<string, Type> Types = new();
+
+    /// Remembers which game model an id comes from, so its real title can be used (some models, like
+    /// Enfeebling Touch's power, take their title from another model instead of the "<ID>.title" entry).
+    public static void Register(string id, Type modelType) => Types.TryAdd(id, modelType);
     private static string _cacheLanguage = "";
 
     public static string Of(string key)
@@ -32,6 +38,7 @@ public static class GameNames
         var sep = key.IndexOf(':');
         var kind = sep < 0 ? "" : key[..sep];
         var id = sep < 0 ? key : key[(sep + 1)..];
+        if (Types.TryGetValue(id, out var type) && ModelTitle(type) is { } title) return title;
         var tables = kind switch
         {
             "Card" => new[] { "cards" },
@@ -54,6 +61,28 @@ public static class GameNames
             }
         }
         return Pretty(id);
+    }
+
+    private static string? ModelTitle(Type type)
+    {
+        try
+        {
+            var model = ModelDb.GetByIdOrNull<AbstractModel>(ModelDb.GetId(type));
+            var title = model switch
+            {
+                CardModel c => c.Title,
+                PowerModel p => p.Title.GetFormattedText(),
+                RelicModel r => r.Title.GetFormattedText(),
+                PotionModel p => p.Title.GetFormattedText(),
+                OrbModel o => o.Title.GetFormattedText(),
+                _ => null
+            };
+            return string.IsNullOrWhiteSpace(title) ? null : title;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     /// "STRIKE_IRONCLAD" → "Strike Ironclad", "POISON_POWER" → "Poison".
