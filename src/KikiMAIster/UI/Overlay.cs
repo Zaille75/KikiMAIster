@@ -8,9 +8,7 @@ namespace KikiMAIster.UI;
 /// a mod cannot register its own Godot script classes.
 public static class Overlay
 {
-    /// Main: the value shown on the closed section header in solo (spec 02-ui).
-    private sealed record Section(string Key, Func<StatsEngine, ulong, PlayerStats, IReadOnlyList<Cell>> Row, string[] Columns,
-        Func<PlayerStats, double> Main, string MainLabel);
+    private sealed record Section(string Key, Func<StatsEngine, ulong, PlayerStats, IReadOnlyList<Cell>> Row, string[] Columns);
 
     /// One table cell: text and optional tooltip.
     private sealed record Cell(string Text, string Tooltip = "");
@@ -33,14 +31,11 @@ public static class Overlay
 
     private static readonly Section[] Sections =
     {
-        new("damage", DamageRow, Array.Empty<string>(), s => s.DamageDealt, "col.total"),
-        new("protection", ProtectionRow, new[] { "col.prevented", "col.forAllies", "col.wastedUseless" },
-            s => s.PreventedOwnBlock + s.PreventedForAllies + s.AbsorbedByPet, "col.prevented"),
-        new("debuffs", DebuffRow, new[] { "col.applied", "col.stacks", "col.dot" },
-            s => s.DebuffsApplied.Values.Sum(t => t.Count), "col.applied"),
-        new("taken", TakenRow, new[] { "col.hpLost", "col.blocked", "col.debuffs" }, s => s.HpLost, "col.hpLost"),
-        new("friendly", FriendlyRow, new[] { "col.toAllies", "col.self", "col.debuffs" },
-            s => s.FriendlyDamage + s.SelfDamage, "col.friendlyTotal"),
+        new("damage", DamageRow, Array.Empty<string>()),
+        new("protection", ProtectionRow, new[] { "col.prevented", "col.forAllies", "col.wastedUseless" }),
+        new("debuffs", DebuffRow, new[] { "col.applied", "col.stacks", "col.dot" }),
+        new("taken", TakenRow, new[] { "col.hpLost", "col.blocked", "col.debuffs" }),
+        new("friendly", FriendlyRow, new[] { "col.toAllies", "col.self", "col.debuffs" }),
     };
 
     private static ModConfig Cfg => ModConfig.Current;
@@ -219,26 +214,48 @@ public static class Overlay
             });
             header.Pressed += Fold;
 
-            // Solo + closed section: the single value is shown on the header, no need to open it.
-            if (!open && players.Count == 1)
+            _body.AddChild(header);
+            if (players.Count == 1)
             {
-                var row = new HBoxContainer();
-                header.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-                row.AddChild(header);
-                var value = MakeLabel(N(section.Main(stats[players[0]])), Text, HorizontalAlignment.Right);
-                value.MouseFilter = Control.MouseFilterEnum.Stop;
-                value.MouseDefaultCursorShape = Control.CursorShape.PointingHand;
-                value.TooltipText = Loc.T(section.MainLabel);
-                value.GuiInput += e =>
-                {
-                    if (e is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true }) Fold();
-                };
-                row.AddChild(value);
-                _body.AddChild(row);
+                // Solo: the table is always shown, without the name column; opening the section adds its details.
+                var id = players[0];
+                var cells = section.Row(engine, id, stats[id]);
+                _body.AddChild(BuildSoloTable(section, cells, Fold));
+                var detail = cells.FirstOrDefault(c => c.Tooltip != "")?.Tooltip ?? "";
+                if (open && detail != "") _body.AddChild(BuildDetail(null, Accent, detail));
+                continue;
             }
-            else _body.AddChild(header);
             if (open) _body.AddChild(BuildTable(section, engine, stats, players));
         }
+    }
+
+    private static string[] Headers(Section section) => section.Key == "damage"
+        ? new[] { Loc.T("col.total") }.Concat(_damageColumns.Select(ColumnName)).ToArray()
+        : section.Columns.Select(Loc.T).ToArray();
+
+    private static Control BuildSoloTable(Section section, IReadOnlyList<Cell> cells, Action fold)
+    {
+        var headers = Headers(section);
+        var grid = new GridContainer { Columns = headers.Length };
+        grid.AddThemeConstantOverride("h_separation", 12);
+        grid.AddThemeConstantOverride("v_separation", 0);
+        foreach (var h in headers) grid.AddChild(MakeLabel(h, Muted, HorizontalAlignment.Right));
+        foreach (var cell in cells)
+        {
+            var c = MakeLabel(cell.Text, Text, HorizontalAlignment.Right);
+            c.MouseFilter = Control.MouseFilterEnum.Stop;
+            c.MouseDefaultCursorShape = Control.CursorShape.PointingHand;
+            c.TooltipText = cell.Tooltip == "" ? Loc.T("row.tip") : cell.Tooltip + "\n\n" + Loc.T("row.tip");
+            c.GuiInput += e =>
+            {
+                if (e is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true }) fold();
+            };
+            grid.AddChild(c);
+        }
+        var margin = new MarginContainer();
+        margin.AddThemeConstantOverride("margin_left", 14);
+        margin.AddChild(grid);
+        return margin;
     }
 
     private static Control BuildTable(Section section, StatsEngine engine, IReadOnlyDictionary<ulong, PlayerStats> stats, List<ulong> players)
@@ -246,9 +263,7 @@ public static class Overlay
         var box = new VBoxContainer();
         box.AddThemeConstantOverride("separation", 2);
         var details = new List<Control>();
-        var headers = section.Key == "damage"
-            ? new[] { Loc.T("col.total") }.Concat(_damageColumns.Select(ColumnName)).ToArray()
-            : section.Columns.Select(Loc.T).ToArray();
+        var headers = Headers(section);
         var grid = new GridContainer { Columns = headers.Length + 1 };
         grid.AddThemeConstantOverride("h_separation", 10);
         grid.AddThemeConstantOverride("v_separation", 1);
@@ -300,7 +315,7 @@ public static class Overlay
         };
     }
 
-    private static Control BuildDetail(string player, Color color, string text)
+    private static Control BuildDetail(string? player, Color color, string text)
     {
         var panel = new PanelContainer();
         panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
@@ -311,7 +326,7 @@ public static class Overlay
         });
         var v = new VBoxContainer();
         v.AddThemeConstantOverride("separation", 0);
-        v.AddChild(MakeLabel(player, color));
+        if (player != null) v.AddChild(MakeLabel(player, color));
         v.AddChild(MakeLabel(text, Text));
         panel.AddChild(v);
         return panel;
