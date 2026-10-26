@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>KikiMAIster</AssemblyName>
+    <Version>0.2.1</Version>
     <RootNamespace>KikiMAIster</RootNamespace>
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <!-- Game branch to build against: beta (default) or default -->

@@ -38,9 +38,21 @@ public static class Overlay
 
     private static Scope CurrentScope => Enum.TryParse<Scope>(Cfg.Scope, out var s) ? s : Scope.Combat;
 
+    private static bool IsAttached => _layer != null && GodotObject.IsInstanceValid(_layer) && _layer.IsInsideTree();
+
+    /// Attaches the overlay if it is not there yet. Safe to call often, from the main thread only.
+    public static void EnsureAttached(string reason)
+    {
+        if (IsAttached) return;
+        var game = MegaCrit.Sts2.Core.Nodes.NGame.Instance;
+        if (game == null || !GodotObject.IsInstanceValid(game) || !game.IsInsideTree()) return;
+        ModLog.Info($"attaching overlay ({reason})");
+        Attach(game);
+    }
+
     public static void Attach(Node root)
     {
-        if (_layer != null && GodotObject.IsInstanceValid(_layer)) return;
+        if (IsAttached) return;
 
         _layer = new CanvasLayer { Layer = 90, Name = "KikiMAIsterOverlay" };
         _panel = new PanelContainer { Position = new Vector2(Cfg.X, Cfg.Y), Scale = Vector2.One * Cfg.Scale };
@@ -69,11 +81,12 @@ public static class Overlay
 
         root.AddChild(_layer);
         Refresh();
-        ModLog.Info("overlay attached");
+        ModLog.Info($"overlay attached (inside tree: {_layer.IsInsideTree()}, visible: {_panel.Visible})");
     }
 
     public static void Toggle()
     {
+        EnsureAttached("F7");
         if (_panel == null || !GodotObject.IsInstanceValid(_panel)) return;
         _panel.Visible = !_panel.Visible;
         Cfg.Visible = _panel.Visible;

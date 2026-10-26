@@ -17,12 +17,9 @@ public static class ModEntry
         {
             new Harmony("kikimaister").PatchAll(typeof(ModEntry).Assembly);
             ModLog.Info($"loaded (v{typeof(ModEntry).Assembly.GetName().Version})");
-            // Mods load during the game's startup, after NGame._Ready: attach the overlay on the next frame.
-            Callable.From(() => Capture.Safe("attach overlay", () =>
-            {
-                if (NGame.Instance != null) Overlay.Attach(NGame.Instance);
-                else ModLog.Error("NGame.Instance is null, overlay not attached");
-            })).CallDeferred();
+            // Mods load during the game's startup, after NGame._Ready. The overlay is attached on the first
+            // input or combat start (see Overlay.EnsureAttached): a deferred call from here never ran in v0.2.0.
+            ModLog.Info($"main thread: {OS.GetThreadCallerId() == OS.GetMainThreadId()}, NGame ready: {NGame.Instance != null}");
         }
         catch (Exception e)
         {

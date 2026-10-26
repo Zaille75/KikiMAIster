@@ -40,6 +40,7 @@ public static class CombatFlowPatches
             Capture.PotionUser = null;
             DamagePatches.Reset();
             _combatOpen = true;
+            KikiMAIster.UI.Overlay.EnsureAttached("combat start");
             var players = combatState?.Players ?? runState.Players;
             Capture.Emit(new CombatStarted(players.Select(p =>
                 new PlayerInfo(p.NetId, p.Creature.Name, p.Character.Id.Entry)).ToList()));

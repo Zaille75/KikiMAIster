@@ -18,6 +18,8 @@ public static class UiPatches
     {
         public static void Postfix(InputEvent inputEvent) => Capture.Safe("NGame._Input", () =>
         {
+            // Any input (even a mouse move) proves the game is running on the main thread: attach if needed.
+            Overlay.EnsureAttached("input");
             if (inputEvent is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F7 }) Overlay.Toggle();
         });
     }
