@@ -36,8 +36,13 @@ public sealed class PlayerStats
     public double BlockGivenToAllies { get; set; }
     public double PreventedOwnBlock { get; set; }
     public double PreventedForAllies { get; set; }
+    /// Block that saved nothing although the giver had a playable attack instead (spec §F).
     public double WastedBlock { get; set; }
-    public double UselessHelp { get; set; }
+    /// Block that saved nothing with no alternative (no playable attack, relic/power block…).
+    public double UselessBlock { get; set; }
+    /// Part of the wasted + useless block that this player had given to allies (co-op detail).
+    public double UnusedGivenToAllies { get; set; }
+    public double UnusedOwn => WastedBlock + UselessBlock - UnusedGivenToAllies;
     public double BlockSpent { get; set; }
     public double AbsorbedByPet { get; set; }
     public double PetDeaths { get; set; }

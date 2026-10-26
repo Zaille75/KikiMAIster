@@ -25,6 +25,8 @@ public static class GameNames
 
     private static string Resolve(string key)
     {
+        // A buff applied with a negative amount (Strength down…): "Force −".
+        if (key.EndsWith("~DOWN")) return Of(key[..^5]) + " −";
         if (key == "Pet") return Loc.T("src.pet");
         if (key == "Unknown") return Loc.T("src.unknown");
         var sep = key.IndexOf(':');

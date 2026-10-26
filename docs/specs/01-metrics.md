@@ -27,7 +27,7 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
 
 | Stat | Definition | Tag |
 |---|---|---|
-| Debuffs applied | Count and total stacks of each debuff this player put on **enemies** (Vulnerable, Weak, Poison, …). | v1 |
+| Debuffs applied | Count and total stacks of each debuff this player put on **enemies** (Vulnerable, Weak, Poison, …). Shown as one column per debuff, "x/y" = times applied / total stacks. A buff applied with a negative amount (Strength down, Dexterity down) counts as a debuff, shown as "Force −". | v1 |
 | Damage from damage-over-time debuffs | Damage from DoT debuffs (Poison…) is credited to the players who applied the stacks, **split in proportion to the stacks each one applied** and still active. Example: A applies 6 Poison, B applies 4 → each tick is credited 60% to A and 40% to B. | v1 |
 | Doom kills | When Doom kills an enemy, the HP it removes counts as damage-over-time for the Doom appliers (split by stacks) and the kill goes to the biggest share. | v1 |
 | Friendly fire | Debuffs and status cards (Wound, Dazed…) a player puts on **an ally or on themselves**, and damage a player deals to allies or themselves. Shown in its own section, never mixed with enemy stats. | v1 |
@@ -40,8 +40,9 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
 | Block given to allies | Block this player gave **to other players**. | v1 |
 | Damage prevented — own block | Damage absorbed by this player's own block layers (see section F). | v1 |
 | Damage prevented — for allies | Damage absorbed by block layers this player gave to an ally (see section F). | v1 |
-| Wasted block | Block this player gave **themselves** that never absorbed anything (see section F). | v1 |
-| Useless help | Block this player gave **an ally** that never absorbed anything (see section F). | v1 |
+| Wasted block ("gâché") | Block this player gave (to themselves or an ally) that never absorbed anything, **while a real alternative existed**: a playable attack stayed in hand (rule in section F). | v1 |
+| Useless block ("inutile") | Block that never absorbed anything **with no alternative**: no playable attack in hand, or block from a relic, power, potion or auto-played card. | v1 |
+| …of which given to allies | Part of the wasted + useless block that was given to allies (co-op detail). | v1 |
 | Damage prevented — Weak & co. | Damage enemies did **not** deal because of this player's Weak (or similar) on them. | v2 |
 | Healing | HP restored, to self and to allies, shown separately. | v1 |
 
@@ -100,8 +101,8 @@ Help counts only if it **actually saved HP**: the damage would have reached HP w
 2. When a hit is absorbed by block, layers are consumed **from the oldest to the newest**.
    The absorbed amount is credited to each layer's giver as "damage prevented".
 3. When block disappears without absorbing damage (block reset at turn start, block removed by
-   an enemy effect…), the remaining layers become **wasted block** (own layers) or
-   **useless help** (layers given by an ally).
+   an enemy effect, end of combat…), the remaining layers are counted for their giver as
+   **wasted** or **useless** (decision F3 below).
 
 **Why FIFO:** block the player **already had** is always used first. Help only counts beyond what
 the player could already absorb, which is exactly your example. It is also easy to explain.
@@ -133,4 +134,13 @@ the player could already absorb, which is exactly your example. It is also easy 
 
 ### Decisions
 - **F1.** FIFO validated (oldest layer absorbs first, whoever gave it).
-- **F2.** Block left at the end of combat is wasted / useless help too.
+- **F2.** Block left at the end of combat is wasted / useless too.
+- **F3 (v0.4.0, replaces "useless help").** Unused block is split by whether something better could have been done:
+  - At the end of the player's turn, each block **card** played that turn is checked. It "had an alternative" if an
+    attack card that was in hand when it was played is still in hand, is playable (only energy aside), and costs no more
+    than the block card's energy + the energy left at the end of the turn. One attack can serve as the alternative of
+    only one block card.
+  - Unused block from a card with an alternative → **wasted** ("gâché"). Everything else → **useless** ("inutile"):
+    no alternative, block from relics/powers/potions/auto-play, or block played on the turn the combat ended.
+  - Same rule for block given to allies; the part given to allies is also shown as "…of which given to allies".
+  - In the examples above, "useless help" now reads "wasted or useless (given to an ally)".

@@ -19,7 +19,7 @@ public static class Summary
             ModLog.Info($"  Debuffs applied: {Powers(s.DebuffsApplied)}");
             ModLog.Info($"  Protection: blockSelf={F(s.BlockGainedSelf)} blockToAllies={F(s.BlockGivenToAllies)} " +
                         $"preventedOwn={F(s.PreventedOwnBlock)} preventedAllies={F(s.PreventedForAllies)} " +
-                        $"wasted={F(s.WastedBlock)} uselessHelp={F(s.UselessHelp)} spent={F(s.BlockSpent)} " +
+                        $"wasted={F(s.WastedBlock)} useless={F(s.UselessBlock)} unusedToAllies={F(s.UnusedGivenToAllies)} spent={F(s.BlockSpent)} " +
                         $"pet={F(s.AbsorbedByPet)} petDeaths={F(s.PetDeaths)} healSelf={F(s.HealingSelf)} healAllies={F(s.HealingAllies)}");
             ModLog.Info($"  Taken: hpLost={F(s.HpLost)} (enemies={F(s.HpLostFromEnemies)} allies={F(s.HpLostFromAllies)} " +
                         $"self={F(s.HpLostFromSelf)} other={F(s.HpLostOther)}) blocked={F(s.DamageBlocked)} debuffs={Powers(s.DebuffsReceived)}");

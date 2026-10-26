@@ -75,6 +75,7 @@ public static class CombatFlowPatches
             Capture.CardPlayers.Clear();
             Capture.PotionUser = null;
             DamagePatches.Reset();
+            BlockAlternatives.Reset();
             _combatOpen = true;
             KikiMAIster.UI.Overlay.EnsureAttached("combat start");
             var players = combatState?.Players ?? runState.Players;
@@ -91,6 +92,15 @@ public static class CombatFlowPatches
             if (side != CombatSide.Player) return;
             DamagePatches.FlushPending();
             Capture.Emit(new RoundStarted(combatState.RoundNumber));
+        });
+    }
+
+    [HarmonyPatch(typeof(Hook), nameof(Hook.BeforeSideTurnEnd))]
+    public static class TurnEnd
+    {
+        public static void Prefix(CombatSide side) => Capture.Safe("BeforeSideTurnEnd", () =>
+        {
+            if (side == CombatSide.Player) BlockAlternatives.ResolveTurn();
         });
     }
 
@@ -123,7 +133,11 @@ public static class CombatFlowPatches
     public static class CardPlayStart
     {
         public static void Prefix(CardPlay cardPlay) =>
-            Capture.Safe("CardPlayStarted", () => Capture.CardPlayers.Push(cardPlay.Card.Owner));
+            Capture.Safe("CardPlayStarted", () =>
+            {
+                Capture.CardPlayers.Push(cardPlay.Card.Owner);
+                BlockAlternatives.OnPlayStarted(cardPlay);
+            });
     }
 
     [HarmonyPatch(typeof(CombatHistory), nameof(CombatHistory.CardPlayFinished))]

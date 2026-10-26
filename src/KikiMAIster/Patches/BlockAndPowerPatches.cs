@@ -15,7 +15,7 @@ namespace KikiMAIster.Patches;
 
 public static class BlockAndPowerPatches
 {
-    private sealed record BlockCall(Player? Giver, Source Source);
+    private sealed record BlockCall(Player? Giver, Source Source, int PlayId = 0);
 
     private static readonly ConditionalWeakTable<Creature, BlockCall> PendingGiver = new();
 
@@ -28,7 +28,8 @@ public static class BlockAndPowerPatches
         {
             if (cardPlay != null)
             {
-                PendingGiver.AddOrUpdate(creature, new BlockCall(cardPlay.Card.Owner, Source.Card(Capture.IdOf(cardPlay.Card))));
+                PendingGiver.AddOrUpdate(creature, new BlockCall(cardPlay.Card.Owner, Source.Card(Capture.IdOf(cardPlay.Card)),
+                    BlockAlternatives.PlayIdFor(cardPlay)));
                 return;
             }
             var model = Capture.CallingModelType();
@@ -52,7 +53,7 @@ public static class BlockAndPowerPatches
             PendingGiver.TryGetValue(receiver, out var call);
             PendingGiver.Remove(receiver);
             var giver = call?.Giver != null ? Capture.ToActor(call.Giver) : Capture.ToActor(receiver);
-            Capture.Emit(new BlockGained(Capture.ToActor(receiver), giver, amount, call?.Source ?? Source.Unknown));
+            Capture.Emit(new BlockGained(Capture.ToActor(receiver), giver, amount, call?.Source ?? Source.Unknown, call?.PlayId ?? 0));
         });
     }
 
@@ -74,8 +75,19 @@ public static class BlockAndPowerPatches
     public static class HistoryPower
     {
         public static void Prefix(PowerModel power, decimal amount, Creature? applier) => Capture.Safe("History.PowerReceived", () =>
-            Capture.Emit(new PowerChanged(Capture.ToActor(applier), Capture.ToActor(power.Owner), Capture.IdOf(power),
-                (double)amount, power.Type == PowerType.Debuff)));
+        {
+            var id = Capture.IdOf(power);
+            var value = (double)amount;
+            var debuff = power.Type == PowerType.Debuff;
+            // A buff given a negative amount (Strength down, Dexterity down…) is a debuff: recorded as "<ID>~DOWN".
+            if (!debuff && power.GetTypeForAmount(amount) == PowerType.Debuff)
+            {
+                id += "~DOWN";
+                value = -value;
+                debuff = true;
+            }
+            Capture.Emit(new PowerChanged(Capture.ToActor(applier), Capture.ToActor(power.Owner), id, value, debuff));
+        });
     }
 
     [HarmonyPatch(typeof(CreatureCmd), nameof(CreatureCmd.Heal))]

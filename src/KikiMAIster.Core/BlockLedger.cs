@@ -3,7 +3,7 @@ namespace KikiMAIster.Core;
 /// Block layers on one player's creature, consumed first-in first-out (spec 01-metrics §F).
 public sealed class BlockLedger
 {
-    public sealed record Layer(ulong GiverId, int Round)
+    public sealed record Layer(ulong GiverId, int Round, int PlayId = 0)
     {
         public double Amount { get; set; }
     }
@@ -12,9 +12,9 @@ public sealed class BlockLedger
 
     public double Total => _layers.Sum(l => l.Amount);
 
-    public void Add(ulong giverId, double amount, int round)
+    public void Add(ulong giverId, double amount, int round, int playId = 0)
     {
-        if (amount > 0) _layers.AddLast(new Layer(giverId, round) { Amount = amount });
+        if (amount > 0) _layers.AddLast(new Layer(giverId, round, playId) { Amount = amount });
     }
 
     /// Takes up to `amount` from the oldest layers. Returns what was taken from each layer.

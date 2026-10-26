@@ -11,6 +11,7 @@ public sealed class StatsEngine
     private readonly Dictionary<ulong, PlayerInfo> _players = new();
     private readonly Dictionary<ulong, BlockLedger> _block = new();
     private readonly Dictionary<(int CreatureId, string PowerId), DotLedger> _dots = new();
+    private readonly Dictionary<int, bool> _hadAlternative = new();
 
     public int Round { get; private set; }
     public bool InCombat { get; private set; }
@@ -39,6 +40,7 @@ public sealed class StatsEngine
             case BlockObserved b: OnBlockObserved(b); break;
             case PowerChanged p: OnPowerChanged(p); break;
             case Healed h: OnHealed(h); break;
+            case BlockPlayResolved r: _hadAlternative[r.PlayId] = r.HadAlternative; break;
         }
     }
 
@@ -84,6 +86,7 @@ public sealed class StatsEngine
         Round = 0;
         _block.Clear();
         _dots.Clear();
+        _hadAlternative.Clear();
     }
 
     // ---------- Damage ----------
@@ -178,7 +181,7 @@ public sealed class StatsEngine
         if (!b.Receiver.IsPlayerSide || b.Amount <= 0) return;
         var owner = b.Receiver.PlayerId;
         var giver = b.Giver.IsPlayerSide ? b.Giver.PlayerId : owner;
-        Ledger(owner).Add(giver, b.Amount, Round);
+        Ledger(owner).Add(giver, b.Amount, Round, b.PlayId);
         Each(giver, s =>
         {
             if (giver == owner) s.BlockGainedSelf += b.Amount;
@@ -225,9 +228,15 @@ public sealed class StatsEngine
     private void CreditUnused(ulong owner, BlockLedger.Layer layer, double amount)
     {
         if (amount <= 0) return;
-        Action<PlayerStats> credit = layer.GiverId == owner
-            ? s => s.WastedBlock += amount
-            : s => s.UselessHelp += amount;
+        // Wasted only when the play was resolved with a real alternative; anything else is useless.
+        var wasted = _hadAlternative.GetValueOrDefault(layer.PlayId);
+        var toAlly = layer.GiverId != owner;
+        Action<PlayerStats> credit = s =>
+        {
+            if (wasted) s.WastedBlock += amount;
+            else s.UselessBlock += amount;
+            if (toAlly) s.UnusedGivenToAllies += amount;
+        };
         credit(Stats(Scope.Combat, layer.GiverId));
         credit(Stats(Scope.Run, layer.GiverId));
         if (layer.Round == Round) credit(Stats(Scope.Turn, layer.GiverId));

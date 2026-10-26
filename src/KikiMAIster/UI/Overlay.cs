@@ -8,10 +8,14 @@ namespace KikiMAIster.UI;
 /// a mod cannot register its own Godot script classes.
 public static class Overlay
 {
-    private sealed record Section(string Key, Func<StatsEngine, ulong, PlayerStats, IReadOnlyList<Cell>> Row, string[] Columns);
+    /// Columns: the column keys to show, computed at each refresh (some depend on the data or on solo/co-op).
+    private sealed record Section(string Key, Func<StatsEngine, ulong, PlayerStats, IReadOnlyList<Cell>> Row, Func<IReadOnlyList<string>> Columns);
 
-    /// One table cell: text and optional tooltip.
-    private sealed record Cell(string Text, string Tooltip = "");
+    /// One table cell: its column key, text and optional tooltip.
+    private sealed record Cell(string Column, string Text, string Tooltip = "");
+
+    /// Columns about allies, hidden in solo.
+    private static readonly HashSet<string> AllyColumns = new() { "col.forAllies", "col.toAllies" };
 
     private const int FontSize = 13;
     private static readonly Color Text = new(0.93f, 0.9f, 0.82f);
@@ -24,6 +28,8 @@ public static class Overlay
     private static readonly Dictionary<string, Button> ScopeButtons = new();
     private static readonly HashSet<string> Expanded = new();
     private static IReadOnlyList<string> _damageColumns = Array.Empty<string>();
+    private static IReadOnlyList<string> _debuffColumns = Array.Empty<string>();
+    private static bool _solo;
     private static Button? _langButton;
     private static Label? _title;
     private static bool _dragging;
@@ -31,11 +37,11 @@ public static class Overlay
 
     private static readonly Section[] Sections =
     {
-        new("damage", DamageRow, Array.Empty<string>()),
-        new("protection", ProtectionRow, new[] { "col.prevented", "col.forAllies", "col.wastedUseless" }),
-        new("debuffs", DebuffRow, new[] { "col.applied", "col.stacks", "col.dot" }),
-        new("taken", TakenRow, new[] { "col.hpLost", "col.blocked", "col.debuffs" }),
-        new("friendly", FriendlyRow, new[] { "col.toAllies", "col.self", "col.debuffs" }),
+        new("damage", DamageRow, () => new[] { "col.total" }.Concat(_damageColumns).ToList()),
+        new("protection", ProtectionRow, () => Fixed("col.prevented", "col.forAllies", "col.wasted", "col.useless")),
+        new("debuffs", DebuffRow, () => _debuffColumns.Count > 0 ? _debuffColumns : new[] { "col.noDebuff" }),
+        new("taken", TakenRow, () => Fixed("col.hpLost", "col.blocked", "col.debuffs")),
+        new("friendly", FriendlyRow, () => Fixed("col.toAllies", "col.self", "col.debuffs")),
     };
 
     private static ModConfig Cfg => ModConfig.Current;
@@ -198,6 +204,9 @@ public static class Overlay
 
         var players = stats.Keys.OrderBy(id => id).ToList();
         _damageColumns = DamageColumns(stats);
+        _debuffColumns = stats.Values.SelectMany(x => x.DebuffsApplied)
+            .GroupBy(kv => kv.Key).OrderByDescending(g => g.Sum(kv => kv.Value.Stacks)).Select(g => g.Key).ToList();
+        _solo = players.Count == 1;
         foreach (var section in Sections)
         {
             var open = Cfg.OpenSections.Contains(section.Key);
@@ -229,23 +238,42 @@ public static class Overlay
         }
     }
 
-    private static string[] Headers(Section section) => section.Key == "damage"
-        ? new[] { Loc.T("col.total") }.Concat(_damageColumns.Select(ColumnName)).ToArray()
-        : section.Columns.Select(Loc.T).ToArray();
+    private static IReadOnlyList<string> Fixed(params string[] columns) =>
+        _solo ? columns.Where(c => !AllyColumns.Contains(c)).ToList() : columns;
+
+    private static Label HeaderLabel(Section section, string column)
+    {
+        var l = MakeLabel(ColumnName(column), Muted, HorizontalAlignment.Right);
+        if (section.Key == "debuffs" && column != "col.noDebuff")
+        {
+            l.TooltipText = Loc.T("tip.debuffXY");
+            l.MouseFilter = Control.MouseFilterEnum.Stop;
+        }
+        else if (Loc.Has($"tip.{column}"))
+        {
+            l.TooltipText = Loc.T($"tip.{column}");
+            l.MouseFilter = Control.MouseFilterEnum.Stop;
+        }
+        return l;
+    }
+
+    private static Cell CellFor(IReadOnlyList<Cell> cells, string column) =>
+        cells.FirstOrDefault(c => c.Column == column) ?? new Cell(column, "-", cells.FirstOrDefault()?.Tooltip ?? "");
 
     /// Solo: the section title sits on the column-name line, the values on the line below.
     private static Control BuildSoloTable(Section section, Button title, IReadOnlyList<Cell> cells, Action fold)
     {
-        var headers = Headers(section);
-        var grid = new GridContainer { Columns = headers.Length + 1 };
+        var columns = section.Columns();
+        var grid = new GridContainer { Columns = columns.Count + 1 };
         grid.AddThemeConstantOverride("h_separation", 12);
         grid.AddThemeConstantOverride("v_separation", 0);
         title.CustomMinimumSize = new Vector2(130, 0);
         grid.AddChild(title);
-        foreach (var h in headers) grid.AddChild(MakeLabel(h, Muted, HorizontalAlignment.Right));
+        foreach (var col in columns) grid.AddChild(HeaderLabel(section, col));
         grid.AddChild(MakeLabel("", Muted));
-        foreach (var cell in cells)
+        foreach (var col in columns)
         {
+            var cell = CellFor(cells, col);
             var c = MakeLabel(cell.Text, Text, HorizontalAlignment.Right);
             c.MouseFilter = Control.MouseFilterEnum.Stop;
             c.MouseDefaultCursorShape = Control.CursorShape.PointingHand;
@@ -264,13 +292,13 @@ public static class Overlay
         var box = new VBoxContainer();
         box.AddThemeConstantOverride("separation", 2);
         var details = new List<Control>();
-        var headers = Headers(section);
-        var grid = new GridContainer { Columns = headers.Length + 1 };
+        var columns = section.Columns();
+        var grid = new GridContainer { Columns = columns.Count + 1 };
         grid.AddThemeConstantOverride("h_separation", 10);
         grid.AddThemeConstantOverride("v_separation", 1);
 
         grid.AddChild(MakeLabel("", Muted));
-        foreach (var h in headers) grid.AddChild(MakeLabel(h, Muted, HorizontalAlignment.Right));
+        foreach (var col in columns) grid.AddChild(HeaderLabel(section, col));
 
         foreach (var id in players)
         {
@@ -283,8 +311,9 @@ public static class Overlay
             var rowKey = $"{section.Key}:{id}";
             MakeClickable(name, rowKey, detail);
             grid.AddChild(name);
-            foreach (var cell in cells)
+            foreach (var col in columns)
             {
+                var cell = CellFor(cells, col);
                 Control c = MakeLabel(cell.Text, Text, HorizontalAlignment.Right);
                 MakeClickable(c, rowKey, cell.Tooltip);
                 grid.AddChild(c);
@@ -340,12 +369,13 @@ public static class Overlay
         var total = e.Get(CurrentScope).Values.Sum(x => x.DamageDealt);
         var share = total > 0 ? s.DamageDealt / total : 0;
         var tip = Tip(
-            (Loc.T("tip.intoBlock"), N(s.DamageIntoBlock)), (Loc.T("tip.overkill"), N(s.Overkill)),
-            (Loc.T("tip.kills"), N(s.Kills)), (Loc.T("tip.biggestHit"), N(s.BiggestHit)))
+            ("tip.intoBlock", N(s.DamageIntoBlock), false), ("tip.overkill", N(s.Overkill), false),
+            ("tip.kills", N(s.Kills), false), ("tip.biggestHit", N(s.BiggestHit), false))
             + "\n\n" + Loc.T("tip.bySource") + ":\n" + Lines(s.DamageBySource);
         var byColumn = s.DamageBySource.GroupBy(kv => DamageColumn(kv.Key)).ToDictionary(g => g.Key, g => g.Sum(kv => kv.Value));
-        return new[] { new Cell($"{N(s.DamageDealt)} ({share:P0})", tip) }
-            .Concat(_damageColumns.Select(c => new Cell(N(byColumn.GetValueOrDefault(c)), tip))).ToArray();
+        var totalText = _solo ? N(s.DamageDealt) : $"{N(s.DamageDealt)} ({share:P0})";
+        return new[] { new Cell("col.total", totalText, tip) }
+            .Concat(_damageColumns.Select(c => new Cell(c, N(byColumn.GetValueOrDefault(c)), tip))).ToArray();
     }
 
     /// Damage columns: cards, then each damage-over-time debuff by name (Poison, Doom…), then the other kinds.
@@ -377,46 +407,47 @@ public static class Overlay
         };
     }
 
-    private static string ColumnName(string column) => column.StartsWith("cat.") ? Loc.T(column) : GameNames.Of(column);
+    private static string ColumnName(string column) =>
+        column.StartsWith("cat.") || column.StartsWith("col.") ? Loc.T(column) : GameNames.Of(column);
 
     private static IReadOnlyList<Cell> ProtectionRow(StatsEngine e, ulong id, PlayerStats s)
     {
         var tip = Tip(
-            (Loc.T("tip.blockSelf"), N(s.BlockGainedSelf)), (Loc.T("tip.blockAllies"), N(s.BlockGivenToAllies)),
-            (Loc.T("tip.preventedOwn"), N(s.PreventedOwnBlock)), (Loc.T("tip.wasted"), N(s.WastedBlock)),
-            (Loc.T("tip.useless"), N(s.UselessHelp)), (Loc.T("tip.spent"), N(s.BlockSpent)),
-            (Loc.T("tip.pet"), N(s.AbsorbedByPet)), (Loc.T("tip.petDeaths"), N(s.PetDeaths)),
-            (Loc.T("tip.healSelf"), N(s.HealingSelf)), (Loc.T("tip.healAllies"), N(s.HealingAllies)));
+            ("tip.blockSelf", N(s.BlockGainedSelf), false), ("tip.blockAllies", N(s.BlockGivenToAllies), true),
+            ("tip.preventedOwn", N(s.PreventedOwnBlock), false), ("tip.preventedAllies", N(s.PreventedForAllies), true),
+            ("tip.col.wasted", N(s.WastedBlock), false), ("tip.col.useless", N(s.UselessBlock), false),
+            ("tip.unusedAllies", N(s.UnusedGivenToAllies), true), ("tip.spent", N(s.BlockSpent), false),
+            ("tip.pet", N(s.AbsorbedByPet), false), ("tip.petDeaths", N(s.PetDeaths), false),
+            ("tip.healSelf", N(s.HealingSelf), false), ("tip.healAllies", N(s.HealingAllies), true));
         return new[]
         {
-            new Cell(N(s.PreventedOwnBlock + s.PreventedForAllies + s.AbsorbedByPet), tip),
-            new Cell(N(s.PreventedForAllies), tip),
-            new Cell($"{N(s.WastedBlock)} / {N(s.UselessHelp)}", tip)
+            new Cell("col.prevented", N(s.PreventedOwnBlock + s.PreventedForAllies + s.AbsorbedByPet), tip),
+            new Cell("col.forAllies", N(s.PreventedForAllies), tip),
+            new Cell("col.wasted", N(s.WastedBlock), tip),
+            new Cell("col.useless", N(s.UselessBlock), tip)
         };
     }
 
+    /// One column per debuff: "x/y" = times applied / total stacks.
     private static IReadOnlyList<Cell> DebuffRow(StatsEngine e, ulong id, PlayerStats s)
     {
-        var tip = s.DebuffsApplied.Count == 0 ? Loc.T("tip.none") : Powers(s.DebuffsApplied);
-        return new[]
-        {
-            new Cell(N(s.DebuffsApplied.Values.Sum(t => t.Count)), tip),
-            new Cell(N(s.DebuffsApplied.Values.Sum(t => t.Stacks)), tip),
-            new Cell(N(s.DotDamage), tip)
-        };
+        var tip = (s.DebuffsApplied.Count == 0 ? Loc.T("tip.none") : Powers(s.DebuffsApplied))
+                  + "\n\n" + Loc.T("tip.debuffXY") + "\n" + Loc.T("tip.dot") + ": " + N(s.DotDamage);
+        return s.DebuffsApplied.Select(kv => new Cell(kv.Key, $"{kv.Value.Count}/{N(kv.Value.Stacks)}", tip))
+            .Append(new Cell("col.noDebuff", "-", tip)).ToArray();
     }
 
     private static IReadOnlyList<Cell> TakenRow(StatsEngine e, ulong id, PlayerStats s)
     {
         var tip = Tip(
-            (Loc.T("tip.fromEnemies"), N(s.HpLostFromEnemies)), (Loc.T("tip.fromAllies"), N(s.HpLostFromAllies)),
-            (Loc.T("tip.fromSelf"), N(s.HpLostFromSelf)), (Loc.T("tip.other"), N(s.HpLostOther)))
+            ("tip.fromEnemies", N(s.HpLostFromEnemies), false), ("tip.fromAllies", N(s.HpLostFromAllies), true),
+            ("tip.fromSelf", N(s.HpLostFromSelf), false), ("tip.other", N(s.HpLostOther), false))
             + (s.DebuffsReceived.Count == 0 ? "" : "\n\n" + Powers(s.DebuffsReceived));
         return new[]
         {
-            new Cell(N(s.HpLost), tip),
-            new Cell(N(s.DamageBlocked), tip),
-            new Cell(N(s.DebuffsReceived.Values.Sum(t => t.Count)), tip)
+            new Cell("col.hpLost", N(s.HpLost), tip),
+            new Cell("col.blocked", N(s.DamageBlocked), tip),
+            new Cell("col.debuffs", N(s.DebuffsReceived.Values.Sum(t => t.Count)), tip)
         };
     }
 
@@ -425,9 +456,9 @@ public static class Overlay
         var tip = s.FriendlyDebuffs.Count == 0 ? Loc.T("tip.none") : Powers(s.FriendlyDebuffs);
         return new[]
         {
-            new Cell(N(s.FriendlyDamage), tip),
-            new Cell(N(s.SelfDamage), tip),
-            new Cell(N(s.FriendlyDebuffs.Values.Sum(t => t.Count)), tip)
+            new Cell("col.toAllies", N(s.FriendlyDamage), tip),
+            new Cell("col.self", N(s.SelfDamage), tip),
+            new Cell("col.debuffs", N(s.FriendlyDebuffs.Values.Sum(t => t.Count)), tip)
         };
     }
 
@@ -436,15 +467,16 @@ public static class Overlay
     private static string Signature(StatsEngine engine, IReadOnlyDictionary<ulong, PlayerStats> stats) =>
         Cfg.Scope + "|" + string.Join(',', Cfg.OpenSections) + "|" + string.Join(',', Expanded) + "|" + Loc.French + "|" + string.Join(';', stats.Select(kv =>
             $"{kv.Key}:{kv.Value.DamageDealt:F1}:{kv.Value.TotalRawDamage:F1}:{kv.Value.PreventedOwnBlock + kv.Value.PreventedForAllies:F1}:" +
-            $"{kv.Value.WastedBlock + kv.Value.UselessHelp + kv.Value.BlockSpent:F1}:{kv.Value.BlockGainedSelf + kv.Value.BlockGivenToAllies:F1}:" +
-            $"{kv.Value.HpLost:F1}:{kv.Value.DamageBlocked:F1}:{kv.Value.DebuffsApplied.Values.Sum(t => t.Stacks):F1}:" +
+            $"{kv.Value.WastedBlock:F1}:{kv.Value.UselessBlock + kv.Value.BlockSpent:F1}:{kv.Value.BlockGainedSelf + kv.Value.BlockGivenToAllies:F1}:" +
+            $"{kv.Value.HpLost:F1}:{kv.Value.DamageBlocked:F1}:{kv.Value.DebuffsApplied.Values.Sum(t => t.Stacks):F1}:{kv.Value.DebuffsApplied.Values.Sum(t => t.Count)}:" +
             $"{kv.Value.DebuffsReceived.Count}:{kv.Value.FriendlyDamage + kv.Value.SelfDamage:F1}:{kv.Value.FriendlyDebuffs.Count}:" +
             $"{kv.Value.HealingSelf + kv.Value.HealingAllies:F1}:{kv.Value.AbsorbedByPet:F1}:{kv.Value.Kills}"));
 
     private static string N(double v) => Math.Round(v).ToString("0", CultureInfo.InvariantCulture);
 
-    private static string Tip(params (string Label, string Value)[] lines) =>
-        string.Join('\n', lines.Select(l => $"{l.Label}: {l.Value}"));
+    /// Tooltip lines "label: value"; lines about allies are left out in solo.
+    private static string Tip(params (string LabelKey, string Value, bool Ally)[] lines) =>
+        string.Join('\n', lines.Where(l => !(_solo && l.Ally)).Select(l => $"{Loc.T(l.LabelKey)}: {l.Value}"));
 
     private static string Lines(Dictionary<string, double> map) =>
         map.Count == 0 ? Loc.T("tip.none") : string.Join('\n', map.OrderByDescending(kv => kv.Value).Select(kv => $"  {Pretty(kv.Key)}: {N(kv.Value)}"));

@@ -17,10 +17,17 @@ public static class Loc
         ["section.friendly"] = ("Friendly fire", "Tirs amis"),
         ["col.prevented"] = ("Prevented", "Évités"),
         ["col.forAllies"] = ("For allies", "Pour alliés"),
-        ["col.wastedUseless"] = ("Wasted/Useless", "Gâché/Inutile"),
-        ["col.applied"] = ("Applied", "Appliqués"),
-        ["col.stacks"] = ("Stacks", "Cumuls"),
-        ["col.dot"] = ("DoT dmg", "Dégâts DoT"),
+        ["col.wasted"] = ("Wasted", "Gâché"),
+        ["col.useless"] = ("Useless", "Inutile"),
+        ["col.noDebuff"] = ("None", "Aucun"),
+        ["tip.col.prevented"] = ("Damage your block (and pet) actually stopped", "Dégâts réellement arrêtés par ton armure (et ton familier)"),
+        ["tip.col.forAllies"] = ("Damage stopped by block you gave to allies", "Dégâts arrêtés par l'armure donnée aux alliés"),
+        ["tip.col.wasted"] = ("Block that stopped nothing, while a playable attack stayed in hand", "Armure qui n'a rien arrêté, alors qu'une attaque jouable est restée en main"),
+        ["tip.col.useless"] = ("Block that stopped nothing, with no attack to play instead", "Armure qui n'a rien arrêté, sans attaque à jouer à la place"),
+        ["tip.debuffXY"] = ("x/y = times applied / total stacks", "x/y = nombre d'applications / cumuls au total"),
+        ["tip.dot"] = ("Damage over time (Poison, Doom…)", "Dégâts sur la durée (Poison, Malédiction…)"),
+        ["tip.preventedAllies"] = ("Prevented for allies", "Évités pour les alliés"),
+        ["tip.unusedAllies"] = ("…of which given to allies", "…dont donnée aux alliés"),
         ["col.hpLost"] = ("HP lost", "PV perdus"),
         ["col.blocked"] = ("Blocked", "Bloqués"),
         ["col.debuffs"] = ("Debuffs", "Affaibl."),
@@ -34,8 +41,6 @@ public static class Loc
         ["tip.blockSelf"] = ("Block gained (self)", "Armure gagnée (soi)"),
         ["tip.blockAllies"] = ("Block given to allies", "Armure donnée aux alliés"),
         ["tip.preventedOwn"] = ("Prevented by own block", "Évités par sa propre armure"),
-        ["tip.wasted"] = ("Wasted block", "Armure gâchée"),
-        ["tip.useless"] = ("Useless help", "Aide inutile"),
         ["tip.spent"] = ("Block spent by cards", "Armure dépensée par des cartes"),
         ["tip.pet"] = ("Absorbed by pet", "Absorbés par le familier"),
         ["tip.petDeaths"] = ("Pet deaths", "Morts du familier"),
@@ -68,6 +73,8 @@ public static class Loc
         "en" => false,
         _ => LocManager.Instance?.Language == "fra"
     };
+
+    public static bool Has(string key) => Strings.ContainsKey(key);
 
     public static string T(string key) =>
         Strings.TryGetValue(key, out var s) ? (French ? s.Fr : s.En) : key;

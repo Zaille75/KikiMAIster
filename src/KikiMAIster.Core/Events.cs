@@ -49,7 +49,11 @@ public sealed record DamageDealt(
     Actor Dealer, Actor Target, int Blocked, int Hp, int Overkill, bool Killed, Source Source) : StatEvent;
 
 /// Block added on Receiver. Giver is the player who created it (card owner, potion user…).
-public sealed record BlockGained(Actor Receiver, Actor Giver, int Amount, Source Source) : StatEvent;
+/// PlayId: the card play that gave the block (0 = not a card the player chose: relic, power, potion, auto-play).
+public sealed record BlockGained(Actor Receiver, Actor Giver, int Amount, Source Source, int PlayId = 0) : StatEvent;
+
+/// End of the player's turn: whether a block card play had a real alternative (spec 01-metrics §F, "wasted" vs "useless").
+public sealed record BlockPlayResolved(int PlayId, bool HadAlternative) : StatEvent;
 
 /// All remaining block on the creature disappeared without absorbing damage (turn start, combat end…).
 public sealed record BlockCleared(Actor Creature) : StatEvent;

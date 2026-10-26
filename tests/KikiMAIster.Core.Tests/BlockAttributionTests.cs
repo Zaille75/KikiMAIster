@@ -15,8 +15,8 @@ public class BlockAttributionTests : TestBase
 
         Assert.Equal(5, Combat(IdB).PreventedOwnBlock);
         Assert.Equal(0, Combat(IdA).PreventedForAllies);
-        Assert.Equal(5, Combat(IdA).UselessHelp);
-        Assert.Equal(0, Combat(IdB).WastedBlock);
+        Assert.Equal(5, Combat(IdA).UnusedGivenToAllies);
+        Assert.Equal(0, Combat(IdB).UnusedOwn);
     }
 
     [Fact]
@@ -29,7 +29,7 @@ public class BlockAttributionTests : TestBase
 
         Assert.Equal(5, Combat(IdB).PreventedOwnBlock);
         Assert.Equal(3, Combat(IdA).PreventedForAllies);
-        Assert.Equal(2, Combat(IdA).UselessHelp);
+        Assert.Equal(2, Combat(IdA).UnusedGivenToAllies);
     }
 
     [Fact]
@@ -52,7 +52,7 @@ public class BlockAttributionTests : TestBase
         Engine.Handle(new BlockCleared(B));
 
         Assert.Equal(5, Combat(IdA).PreventedForAllies);
-        Assert.Equal(5, Combat(IdB).WastedBlock);
+        Assert.Equal(5, Combat(IdB).UnusedOwn);
         Assert.Equal(0, Combat(IdB).PreventedOwnBlock);
     }
 
@@ -65,7 +65,7 @@ public class BlockAttributionTests : TestBase
         Engine.Handle(new BlockCleared(B));
 
         Assert.Equal(5, Combat(IdA).PreventedForAllies);
-        Assert.Equal(5, Combat(IdC).UselessHelp);
+        Assert.Equal(5, Combat(IdC).UnusedGivenToAllies);
     }
 
     [Fact]
@@ -94,8 +94,8 @@ public class BlockAttributionTests : TestBase
         Assert.Equal(4, Combat(IdA).BlockGainedSelf);
         Assert.Equal(8, Combat(IdA).BlockGivenToAllies);
         Assert.Equal(4, Combat(IdA).PreventedForAllies);
-        Assert.Equal(4, Combat(IdA).UselessHelp);   // the 4 given to C
-        Assert.Equal(4, Combat(IdA).WastedBlock);   // its own 4
+        Assert.Equal(4, Combat(IdA).UnusedGivenToAllies);   // the 4 given to C
+        Assert.Equal(4, Combat(IdA).UnusedOwn);   // its own 4
     }
 
     [Fact]
@@ -109,8 +109,8 @@ public class BlockAttributionTests : TestBase
 
         Assert.Equal(5, Combat(IdA).PreventedOwnBlock);
         Assert.Equal(5, Combat(IdB).PreventedForAllies);
-        Assert.Equal(5, Combat(IdA).WastedBlock);
-        Assert.Equal(0, Combat(IdB).UselessHelp);
+        Assert.Equal(5, Combat(IdA).UnusedOwn);
+        Assert.Equal(0, Combat(IdB).UnusedGivenToAllies);
     }
 
     [Fact]
@@ -120,8 +120,8 @@ public class BlockAttributionTests : TestBase
         Block(A, B, 3);
         Engine.Handle(new CombatEnded(true));
 
-        Assert.Equal(7, Combat(IdA).WastedBlock);
-        Assert.Equal(3, Combat(IdB).UselessHelp);
+        Assert.Equal(7, Combat(IdA).UnusedOwn);
+        Assert.Equal(3, Combat(IdB).UnusedGivenToAllies);
     }
 
     [Fact]
@@ -144,7 +144,7 @@ public class BlockAttributionTests : TestBase
         Engine.Handle(new BlockRemoved(A, 3, SpentByCard: true));
         EnemyHits(A, blocked: 3, hp: 0);
 
-        Assert.Equal(4, Combat(IdA).WastedBlock);
+        Assert.Equal(4, Combat(IdA).UnusedOwn);
         Assert.Equal(3, Combat(IdA).BlockSpent);
         Assert.Equal(3, Combat(IdA).PreventedOwnBlock);
     }
@@ -175,8 +175,8 @@ public class BlockAttributionTests : TestBase
         Engine.Handle(new RoundStarted(2));
         Engine.Handle(new BlockCleared(A));
 
-        Assert.Equal(5, Combat(IdA).WastedBlock);
-        Assert.Equal(0, Engine.Get(Scope.Turn, IdA).WastedBlock);
+        Assert.Equal(5, Combat(IdA).UnusedOwn);
+        Assert.Equal(0, Engine.Get(Scope.Turn, IdA).UnusedOwn);
     }
 
     [Fact]
@@ -185,13 +185,43 @@ public class BlockAttributionTests : TestBase
         Block(A, B, 4);
         Block(A, A, 6);
         Engine.Handle(new BlockObserved(A, 0));      // normal clear
-        Assert.Equal(4, Combat(IdB).UselessHelp);
-        Assert.Equal(6, Combat(IdA).WastedBlock);
+        Assert.Equal(4, Combat(IdB).UnusedGivenToAllies);
+        Assert.Equal(6, Combat(IdA).UnusedOwn);
 
         Block(A, A, 10);
         Engine.Handle(new BlockObserved(A, 7));      // an effect kept 7 block
-        Assert.Equal(9, Combat(IdA).WastedBlock);
+        Assert.Equal(9, Combat(IdA).UnusedOwn);
         EnemyHits(A, blocked: 7, hp: 0);
         Assert.Equal(7, Combat(IdA).PreventedOwnBlock);
+    }
+
+    // ---------- Wasted (had an alternative) vs useless (no alternative) ----------
+
+    [Fact]
+    public void UnusedBlock_WithAlternative_IsWasted_WithoutIsUseless()
+    {
+        Engine.Handle(new BlockGained(A, A, 5, Source.Card("DEFEND"), PlayId: 1));
+        Engine.Handle(new BlockGained(A, A, 4, Source.Card("DEFEND"), PlayId: 2));
+        Engine.Handle(new BlockGained(A, A, 3, Source.Power("PLATED_ARMOR_POWER")));
+        Engine.Handle(new BlockPlayResolved(1, true));
+        Engine.Handle(new BlockPlayResolved(2, false));
+        Engine.Handle(new RoundStarted(2));
+        Engine.Handle(new BlockObserved(A, 0));
+
+        Assert.Equal(5, Combat(IdA).WastedBlock);
+        Assert.Equal(7, Combat(IdA).UselessBlock);
+        Assert.Equal(12, Combat(IdA).UnusedOwn);
+    }
+
+    [Fact]
+    public void UnusedBlockGivenToAlly_SplitTheSameWay_AndTrackedAsGivenToAllies()
+    {
+        Engine.Handle(new BlockGained(B, A, 6, Source.Card("SHIELD_ALLY"), PlayId: 7));
+        Engine.Handle(new BlockPlayResolved(7, true));
+        Engine.Handle(new CombatEnded(true));
+
+        Assert.Equal(6, Combat(IdA).WastedBlock);
+        Assert.Equal(6, Combat(IdA).UnusedGivenToAllies);
+        Assert.Equal(0, Combat(IdA).UnusedOwn);
     }
 }
