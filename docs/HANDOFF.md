@@ -1,7 +1,8 @@
-# Handoff — state of the project (2026-10-27, v0.7.3)
+# Handoff — state of the project (2026-10-27, v0.9.0)
 
 Read this first in a new conversation, then `CLAUDE.md`, `docs/specs/01-metrics.md` and `docs/specs/02-ui.md`.
-The next conversation is about **improving the layout and fixing bugs**.
+v0.8.0 and v0.9.0 implement the 27 feedback points of the first co-op games (all 6 batches at once, Zaille75 reviews
+afterwards). **Nothing of v0.8.0 / v0.9.0 has been tested in game yet.**
 
 ## How Zaille75 and Claude work
 - Zaille75 writes in English or French, plays in **French**, and doesn't code. He tests in game and sends feedback, screenshots, and logs.
@@ -28,10 +29,14 @@ The next conversation is about **improving the layout and fixing bugs**.
 | `Patches/CombatFlowPatches.cs` | Run/combat/round boundaries, run restore (RunManager.SetUp*), card play start/finish, "other effect" hooks |
 | `Patches/DamagePatches.cs` | Damage capture, including pending hits for the killing blow, DoT attribution, HP-loss modifiers (Tungsten Rod…) |
 | `Patches/BlockAndPowerPatches.cs` | Block, powers/debuffs (temporary Strength down), heal, pet summon |
-| `Patches/BlockAlternatives.cs` | gâché vs inutile decision at end of each player turn (rules F3–F6) |
+| `Patches/BlockAlternatives.cs` | End of each player turn: gâché vs inutile (rules F3–F7, Thorns), missed lethal (front hand, checked at `AfterPlayerTurnStart`), weak attacks; damage estimates via `Hook.ModifyDamage` |
+| `Patches/DebuffEffectPatches.cs` | Vulnerable / Weak / Strength− effect per real hit (`Hook.ModifyDamage` postfix, confirmed by `AfterModifyingDamageAmount`) |
+| `Core/FifoLedger.cs`, `Core/Lethal.cs`, `Core/Trophies.cs` | Duration-debuff FIFO, lethal solver, trophies + record book |
 | `Patches/UiPatches.cs` | Overlay attach (first input / combat start), F7, hide auto summary on map |
-| `UI/Overlay.cs` (~580 lines) | Live panel: scope tabs (Tour préc. / Combat / Partie), sections Dégâts / Protection / Affaiblissements / Subis / Tirs amis, tooltips, solo vs co-op tables, keep-on-screen, Summary + language buttons |
-| `UI/CombatSummary.cs` | Draggable chart window (cumulative per round), combat picker, metric buttons, auto-show checkbox |
+| `UI/Overlay.cs` | Live panel: scope tabs, ◂ ▸ previous combats, sections Dégâts / Protection / Affaiblissements / Occasions manquées / Subis / Coop / Autres, players sorted best first, details under the player's line, hidden columns from settings |
+| `UI/SettingsMenu.cs` | ⚙ window: language, auto summary, shown sections/columns (`ModConfig.Hidden`) |
+| `UI/CombatSummary.cs` | Draggable chart window (cumulative or per round), combat picker, co-op summary, keeps out of the panel's way, Trophées button |
+| `UI/RunSummary.cs` | End-of-run trophies window + `RecordStore` (`KikiMAIster.records.cfg`) |
 | `UI/Loc.cs` | All EN/FR strings |
 | `UI/GameNames.cs` | Localized card/power/relic names from the game's own models |
 | `ModConfig.cs` | Saved settings (position, scope, language, auto summary, summary position) |
@@ -43,7 +48,14 @@ The next conversation is about **improving the layout and fixing bugs**.
 - Charts use `Line2D` inside a `Control`.
 - The overlay is attached lazily (`Overlay.EnsureAttached`), because a deferred call from the mod initializer never ran.
 
-## Status of the latest tests
+## To check in game (v0.8.0 / v0.9.0)
+- Layout: detail box under a player's line (Godot trick: zero-width grid cell, see `Overlay.DetailCell`), tighter buttons,
+  settings window, ◂ ▸ combat browsing, summary window moving away from the panel, co-op summary, trophies window.
+- Data: Haunt (Max) damage, potion Thorns/Demise under Potions, Waterfall Giant last phase ignored, Armaments / Gather
+  Light never gâché, Thorns rule, Vulnerable/Weak/Strength− effects (`Debuff effects:` line in the COMBAT SUMMARY log),
+  missed lethal (`missed lethal:` log lines), weak attacks, card counts, deaths, records at run end.
+
+## Status of the earlier tests
 - **Solo (v0.7.1) and co-op (v0.7.2, 2 runs, 2 or 3 players):** no errors. Each player is tracked separately, including friends who don't have the mod.
 - **Fixed in v0.7.3, not yet checked in game:**
   - A killing blow now keeps its card. Before, it showed as "Unknown": the game's internal `CreatureCmd.Kill` overwrote the damage call. It is now ignored when the creature is already at 0 HP.
@@ -59,7 +71,10 @@ The next conversation is about **improving the layout and fixing bugs**.
   - The last fight of the co-op log (Crabe César) ended as a defeat. Zaille75 hasn't confirmed this.
 
 ## Open topics for the next conversation
-- Zaille75 has **several layout points and bugs to discuss** after the first co-op game. Ask him for them; he hasn't listed them yet.
+- Zaille75 reviews v0.9.0 and tests it in co-op.
+- **Trophy list** is a proposal (spec 02-ui, v0.9.0): to discuss with Zaille75.
+- Chart: "remove the blocked stats" was read as removing the "Évités" chart; confirm with Zaille75.
+- Previous fights are kept for the current run only (not across Save & Quit, not older runs).
 - Roadmap leftovers:
   - MVP line in the summary;
   - end-of-run summary (Totals / Per act / Records);
