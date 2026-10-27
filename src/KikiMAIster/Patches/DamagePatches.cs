@@ -10,6 +10,7 @@ using MegaCrit.Sts2.Core.Entities.Powers;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.ValueProps;
 
 namespace KikiMAIster.Patches;
@@ -20,7 +21,8 @@ public static class DamagePatches
 {
     /// DotPowerId: set when the calling model is a debuff on the target (Poison, Doom…). Decided when the command
     /// starts, because a creature that dies loses its powers before a late (pending) report is made.
-    private sealed record DamageCall(Creature? Dealer, CardModel? Card, Type? CallingModel, string? DotPowerId = null);
+    /// DotApplier: for a debuff kept per applier (Strangle), the player whose instance deals this damage.
+    private sealed record DamageCall(Creature? Dealer, CardModel? Card, Type? CallingModel, string? DotPowerId = null, Creature? DotApplier = null);
 
     private sealed record PendingHit(DamageResult Result, DamageCall? Call);
 
@@ -152,7 +154,7 @@ public static class DamagePatches
         {
             // Damage-over-time debuff (Poison, Constrict, Doom…): credited to whoever applied the stacks.
             source = Source.Dot(powerId);
-            dealer = null;
+            dealer = call.DotApplier;
         }
         else
         {
@@ -163,12 +165,52 @@ public static class DamagePatches
 
         Capture.Emit(new DamageDealt(Capture.ToActor(dealer), Capture.ToActor(target),
             r.BlockedDamage, r.UnblockedDamage, r.OverkillDamage, r.WasTargetKilled, source));
+        if (card != null && target.IsEnemy && r.UnblockedDamage > 0) CreditHelpers(card, dealer, target, r.UnblockedDamage);
+    }
+
+    /// Damage of a card an ally created for the dealer (Blade Symphony, Largesse, Outrage…), or of the extra plays an
+    /// ally's Tag Team gave: enabled for that ally (spec 01-metrics §B2).
+    private static void CreditHelpers(CardModel card, Creature? dealer, Creature target, int damage)
+    {
+        var dealerActor = Capture.ToActor(dealer);
+        if (!dealerActor.IsPlayerSide) return;
+        if (GiftedCards.TryGetValue(card, out var giver) && giver.NetId != dealerActor.PlayerId)
+            Capture.Emit(new DebuffEffect(Capture.ToActor(target), $"Card:{Capture.IdOf(card)}", dealerActor, damage, Offense: true,
+                Credit: DebuffCredit.Direct, Applier: Capture.ToActor(giver)));
+        if (ExtraPlays.TryGetValue(card, out var extra) && Capture.CardPlays.TryPeek(out var play) && play.Card == card &&
+            play.PlayIndex >= extra.From)
+            Capture.Emit(new DebuffEffect(Capture.ToActor(target), "TAG_TEAM_POWER", dealerActor, damage, Offense: true,
+                Credit: DebuffCredit.Direct, Applier: Capture.ToActor(extra.Applier)));
+    }
+
+    /// Cards created by a player for another player (the creator).
+    public static readonly ConditionalWeakTable<CardModel, MegaCrit.Sts2.Core.Entities.Players.Player> GiftedCards = new();
+
+    /// Cards played extra times by an ally's Tag Team: plays from index From on are the extra ones.
+    private sealed record Extra(Creature Applier, int From);
+    private static readonly ConditionalWeakTable<CardModel, Extra> ExtraPlays = new();
+
+    [HarmonyPatch(typeof(TagTeamPower), nameof(TagTeamPower.ModifyCardPlayCount))]
+    public static class TagTeamPlays
+    {
+        public static void Postfix(TagTeamPower __instance, CardModel card, int playCount, int __result) =>
+            Capture.Safe("TagTeam.ModifyCardPlayCount", () =>
+            {
+                if (__result > playCount && __instance.Applier is { IsPlayer: true } applier)
+                    ExtraPlays.AddOrUpdate(card, new Extra(applier, playCount));
+            });
     }
 
     private static DamageCall WithDot(DamageCall call, Creature target)
     {
         if (call.CallingModel == null) return call;
-        var power = target.Powers.FirstOrDefault(p => p.GetType() == call.CallingModel);
-        return power?.Type == PowerType.Debuff ? call with { DotPowerId = Capture.IdOf(power) } : call;
+        var powers = target.Powers.Where(p => p.GetType() == call.CallingModel).ToList();
+        var power = powers.FirstOrDefault();
+        if (power?.Type != PowerType.Debuff) return call;
+        // One instance per applier (Strangle triggers on its applier's card plays): that applier's instance.
+        Creature? applier = null;
+        if (power.InstanceType == PowerInstanceType.InstancedPerApplier && Capture.CurrentActingPlayer?.Creature is { } acting)
+            applier = powers.FirstOrDefault(p => p.Applier == acting)?.Applier;
+        return call with { DotPowerId = Capture.IdOf(power), DotApplier = applier };
     }
 }

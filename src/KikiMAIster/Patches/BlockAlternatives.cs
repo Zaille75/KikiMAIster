@@ -165,8 +165,8 @@ public static class BlockAlternatives
             Ethereal = cardPlay.Card.Keywords.Contains(CardKeyword.Ethereal),
             // Genetic Algorithm / The Scythe grow each time they are played: a side effect no hook reports.
             // Sacrifice kills the player's own pet (validated by Zaille75: never wasted).
-            HadOtherEffect = cardPlay.Card is GeneticAlgorithm or TheScythe or Sacrifice,
-            HadNonDamageEffect = cardPlay.Card is GeneticAlgorithm or TheScythe,
+            HadOtherEffect = IsGrowing(cardPlay.Card) || cardPlay.Card is Sacrifice,
+            HadNonDamageEffect = IsGrowing(cardPlay.Card),
             UsefulCardsInHand = hand.Where(c => c != cardPlay.Card && IsUseful(c)).ToList()
         };
         var energyBefore = (cardPlay.Player.PlayerCombatState?.Energy ?? 0) + cardPlay.Resources.EnergySpent;
@@ -286,7 +286,7 @@ public static class BlockAlternatives
                 Capture.Emit(new MissedChance(actor, "paelsTears", new[] { $"Relic:{Capture.IdOf(tears)}", Key(useless.Card) }));
         }
 
-        foreach (var growing in hand.Where(c => c is GeneticAlgorithm or TheScythe && Affordable(c)))
+        foreach (var growing in hand.Where(c => IsGrowing(c) && Affordable(c)))
             Capture.Emit(new MissedChance(actor, "growth", new[] { Key(growing) }));
 
         var kept = hand.Where(c => c.GainsBlock && Affordable(c)).Select(c => (Card: c, Block: EstimateBlock(c)))
@@ -361,6 +361,11 @@ public static class BlockAlternatives
         if (!card.DynamicVars.TryGetValue("Damage", out _) && !card.DynamicVars.TryGetValue("OstyDamage", out _)) return true;
         return combat.HittableEnemies.Any(e => EstimateDamage(card, e) > 0);
     }
+
+    /// Cards that grow each time they are played (card audit, spec §E0): playing them is never a waste, and not playing
+    /// them when affordable is a missed opportunity.
+    internal static bool IsGrowing(CardModel c) =>
+        c is GeneticAlgorithm or TheScythe or TheBall or Claw or Maul or Rampage;
 
     private static bool IsStatusOrCurse(CardModel c) => c.Type is CardType.Status or CardType.Curse;
 

@@ -156,3 +156,33 @@ public class MissedChanceTests : TestBase
         Assert.Equal(2, Combat(IdA).MissedByKind["energy"]);
     }
 }
+
+public class CoopCreditTests : TestBase
+{
+    [Fact]
+    public void Direct_CreditsTheApplier()
+    {
+        Engine.Handle(new DebuffEffect(Enemy, "FLANKING_POWER", B, 5, Offense: true, Credit: DebuffCredit.Direct, Applier: A));
+        Assert.Equal(5, Combat(IdA).DamageEnabledAllies);
+    }
+
+    [Fact]
+    public void GivenAndTemporaryStrength_SharedWithOwnStrength()
+    {
+        Engine.Handle(new StrengthGiven(B, A, 2));                                     // Blaze from A
+        Engine.Handle(new StrengthUsed(B, Strength: 5, Damage: 5, Temporary: new[] { (C, 1.0) })); // Coordinate from C, 2 own
+
+        Assert.Equal(2, Combat(IdA).DamageEnabledAllies, 6);
+        Assert.Equal(1, Combat(IdC).DamageEnabledAllies, 6);
+    }
+
+    [Fact]
+    public void DotWithDealer_CreditedToThatPlayerOnly()
+    {
+        Power(A, Enemy, "STRANGLE_POWER", 2);
+        Power(B, Enemy, "STRANGLE_POWER", 2);
+        Engine.Handle(new DamageDealt(A, Enemy, 0, 2, 0, false, Source.Dot("STRANGLE_POWER")));
+        Assert.Equal(2, Combat(IdA).DamageDealt);
+        Assert.Equal(0, Combat(IdB).DamageDealt);
+    }
+}

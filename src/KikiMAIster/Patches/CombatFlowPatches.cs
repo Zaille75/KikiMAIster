@@ -246,7 +246,13 @@ public static class CombatFlowPatches
     [HarmonyPatch(typeof(Hook), nameof(Hook.AfterCardGeneratedForCombat))]
     public static class CardGenerated
     {
-        public static void Prefix() => Capture.Safe("AfterCardGeneratedForCombat", () => BlockAlternatives.OnEffect());
+        public static void Prefix(CardModel card, Player? creator) => Capture.Safe("AfterCardGeneratedForCombat", () =>
+        {
+            BlockAlternatives.OnEffect();
+            // A card created in another player's piles (Blade Symphony passes no creator: the player acting made it).
+            var giver = creator ?? Capture.CurrentActingPlayer;
+            if (giver != null && card.Owner != giver) DamagePatches.GiftedCards.AddOrUpdate(card, giver);
+        });
     }
 
     // Side effects that make a block card more than block (Armaments upgrades, Gather Light gives stars).

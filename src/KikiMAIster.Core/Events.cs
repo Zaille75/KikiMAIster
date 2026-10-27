@@ -99,12 +99,18 @@ public sealed record Healed(Actor Healer, Actor Target, int Amount) : StatEvent;
 /// A debuff changed a damage instance (spec 01-metrics §B2). Holder: the creature carrying the debuff.
 /// Beneficiary: the player (or pet) who dealt more damage (Offense: Vulnerable on an enemy, Bully's bonus) or took
 /// less (Weak / Strength down on the attacking enemy). Credit: who is responsible (see DebuffCredit).
-public sealed record DebuffEffect(Actor Holder, string PowerId, Actor Beneficiary, double Amount, bool Offense, DebuffCredit Credit) : StatEvent;
+/// Applier: for Credit = Direct, the player responsible (the power remembers who applied it: Flanking, One for All…).
+public sealed record DebuffEffect(Actor Holder, string PowerId, Actor Beneficiary, double Amount, bool Offense, DebuffCredit Credit,
+    Actor Applier = default) : StatEvent;
 
 /// CurrentTurn: the applier of the current turn of a duration debuff (Vulnerable, Weak: first in, first out).
 /// RemainingTurns: every applier, by the turns each still has in the queue (effects that use all the stacks at once:
 /// Bully, Dominate). Stacks: every applier by stacks, over all "<PowerId>…" keys (Strength down).
-public enum DebuffCredit { CurrentTurn, RemainingTurns, Stacks }
+/// Direct: the Applier given with the effect.
+public enum DebuffCredit { CurrentTurn, RemainingTurns, Stacks, Direct }
+
+/// A player gave Strength to another player (Blaze…): those points count for the giver for the rest of the combat.
+public sealed record StrengthGiven(Actor Player, Actor Giver, double Amount) : StatEvent;
 
 /// A player gained Strength from a debuff on an enemy (Dominate: Strength = the target's Vulnerable). Those Strength
 /// points remember who applied the debuff (by remaining turns) for the rest of the combat.
@@ -112,7 +118,8 @@ public sealed record StrengthBorrowed(Actor Player, Actor Holder, string PowerId
 
 /// A real attack hit of this player (or pet) got Damage extra from their Strength (Strength points in total): the
 /// share of borrowed Strength is damage enabled for whoever it was borrowed from.
-public sealed record StrengthUsed(Actor Player, double Strength, double Damage) : StatEvent;
+/// Temporary: Strength points from temporary powers given by another player (Coordinate), by giver.
+public sealed record StrengthUsed(Actor Player, double Strength, double Damage, IReadOnlyList<(Actor From, double Points)>? Temporary = null) : StatEvent;
 
 /// A player could have killed every enemy with the attacks in hand at the start of the turn (front hand),
 /// but the enemies were still alive at the end of it. Cards: "Card:ID" keys of the lethal combination.

@@ -70,6 +70,12 @@ public sealed class StatsEngine
             case DebuffEffect x: OnDebuffEffect(x); break;
             case StrengthBorrowed b: OnStrengthBorrowed(b); break;
             case StrengthUsed u: OnStrengthUsed(u); break;
+            case StrengthGiven g when g.Amount > 0 && g.Player.Kind == ActorKind.Player && g.Giver.IsPlayerSide:
+            {
+                if (!_borrowed.TryGetValue(g.Player.PlayerId, out var from)) _borrowed[g.Player.PlayerId] = from = new();
+                from[g.Giver.PlayerId] = from.GetValueOrDefault(g.Giver.PlayerId) + g.Amount;
+                break;
+            }
             case MissedLethal m when m.Player.IsPlayerSide:
                 Each(m.Player.PlayerId, s =>
                 {
@@ -206,6 +212,13 @@ public sealed class StatsEngine
 
     private void OnDamageToEnemy(DamageDealt d)
     {
+        if (d.Source.Kind == SourceKind.DamageOverTime && d.Dealer.IsPlayerSide)
+        {
+            // A damage-over-time debuff kept per applier (Strangle): the capture already knows whose it is.
+            CreditEnemyDamage(d.Dealer.PlayerId, d, 1, d.Source.ToString(), isDot: true);
+            if (d.Killed) Each(d.Dealer.PlayerId, s => s.Kills++);
+            return;
+        }
         if (d.Source.Kind == SourceKind.DamageOverTime)
         {
             if (!_dots.TryGetValue((d.Target.CreatureId, d.Source.Id), out var dot)) return;
@@ -406,6 +419,9 @@ public sealed class StatsEngine
             case DebuffCredit.RemainingTurns:
                 if (fifo != null) shares.AddRange(fifo.Remaining().Where(r => r.ApplierId != 0));
                 break;
+            case DebuffCredit.Direct:
+                if (x.Applier.IsPlayerSide && x.Applier.PlayerId != 0) shares.Add((x.Applier.PlayerId, 1));
+                break;
             default:
             {
                 var stacks = _dots.Where(kv => kv.Key.CreatureId == x.Holder.CreatureId && kv.Key.PowerId.StartsWith(x.PowerId))
@@ -444,7 +460,12 @@ public sealed class StatsEngine
     /// Strength the player has now: Strength lost later reduces it).
     private void OnStrengthUsed(StrengthUsed u)
     {
-        if (u.Strength <= 0 || u.Damage <= 0 || !u.Player.IsPlayerSide || !_borrowed.TryGetValue(u.Player.PlayerId, out var from)) return;
+        if (u.Strength <= 0 || u.Damage <= 0 || !u.Player.IsPlayerSide) return;
+        var from = new Dictionary<ulong, double>();
+        if (_borrowed.TryGetValue(u.Player.PlayerId, out var lasting))
+            foreach (var (id, points) in lasting) from[id] = points;
+        foreach (var (giver, points) in u.Temporary ?? Array.Empty<(Actor, double)>())
+            if (giver.IsPlayerSide && giver.PlayerId != 0) from[giver.PlayerId] = from.GetValueOrDefault(giver.PlayerId) + points;
         var borrowed = from.Values.Sum();
         if (borrowed <= 0) return;
         var scale = Math.Min(1, u.Strength / borrowed);

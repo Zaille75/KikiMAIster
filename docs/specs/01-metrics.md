@@ -50,6 +50,23 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
     including the player's own new stack). For the rest of the combat, on each of that player's attacks, the damage
     added by those Strength points (Strength × Vulnerable multiplier) is enabled by them. If the player has other
     Strength, only the borrowed share counts; Strength lost later reduces it.
+- **Co-op card audit (v0.12.0): help from an ally counts for that ally** (all 597 cards checked; same principle):
+  - **Powers that remember their applier** and change a hit: debuffs on the enemy that boost allies' attacks
+    (**Flanking**, **Knockdown**), buffs an ally gave the attacker (**One for All**), and any future power of that kind.
+    The extra damage (or damage avoided, for a debuff on an attacking enemy) is credited to the applier directly.
+  - **Strength given by an ally:** permanent (**Blaze**) — those points count for the giver for the rest of the combat,
+    like Dominate; temporary (**Coordinate**) — read at each hit from the temporary power, which keeps its applier.
+  - **Concoct:** the Poison the ally applies when they hit counts for the Concoct player (an effect triggered by a buff an
+    ally gave you counts for that ally).
+  - **Cards created for an ally** (Blade Symphony's Shivs, Largesse, Glimpse Beyond, Outrage's copies…): their damage is
+    enabled for the creator.
+  - **Tag Team:** the damage of the extra plays it gives an ally's attack is enabled for the Tag Team player.
+  - **Strangle** (one instance per player): each player's instance damage counts only for that player, not shared by
+    stacks.
+  - **Growing cards** (never wasted, "not played" is a missed choice): Genetic Algorithm, The Scythe, The Ball, Claw,
+    Maul, Rampage. (Kingly Punch grows when drawn, not played: not in the list.)
+  - Already right, no change: Oblivion (Doom credited to its applier), Magic Bomb and Constrict (by stacks), Sic 'Em,
+    Legion of Bone (pet HP), Rally / Lift / Demonic Shield (block given), Intercept / Covered (block).
 - **The damage itself always counts in full for the attacker** (Dégâts). "Damage enabled" is an extra credit shown in
   the co-op section ("Permis") for allies, and in the debuff details for self; nothing is taken from the attacker.
 - Stacks an enemy put on itself credit nobody.

@@ -80,7 +80,13 @@ public static class BlockAndPowerPatches
     {
         public static void Prefix(PowerModel power, decimal amount, Creature? applier) => Capture.Safe("History.PowerReceived", () =>
         {
+            applier = GivenBy(applier);
             BlockAlternatives.OnPowerApplied(power, amount, Stacking.Remove(power));
+            // Strength given by another player (Blaze…): counts for the giver. Temporary Strength (Coordinate) is read from
+            // its own power at each hit instead.
+            if (power is StrengthPower && amount > 0 && power.Owner.IsPlayer && applier is { IsPlayer: true } giver &&
+                giver != power.Owner && !FromTemporaryStrength())
+                Capture.Emit(new StrengthGiven(Capture.ToActor(power.Owner), Capture.ToActor(giver), (double)amount));
             // Dominate: the Strength it gives equals the target's Vulnerable, borrowed from whoever applied it.
             if (power is StrengthPower && amount > 0 && power.Owner.IsPlayer && Capture.CardPlays.TryPeek(out var play) &&
                 play.Card is Dominate && play.Target is { IsEnemy: true } target)
@@ -114,6 +120,20 @@ public static class BlockAndPowerPatches
             if (id.EndsWith("~DOWN") && TakeSuppressed(power.Owner)) return;
             Capture.Emit(new PowerChanged(Capture.ToActor(applier), Capture.ToActor(power.Owner), id, value, debuff, Capture.CurrentOrigin));
         });
+    }
+
+    private static bool FromTemporaryStrength() =>
+        Capture.CallingModelType() is { } caller && typeof(TemporaryStrengthPower).IsAssignableFrom(caller);
+
+    /// A power applied by a player because of a buff an ally gave them (Concoct: Poison when they hit) counts for that
+    /// ally: the buff on the applier remembers who gave it.
+    private static Creature? GivenBy(Creature? applier)
+    {
+        if (applier is not { IsPlayer: true }) return applier;
+        var model = Capture.CallingModelType();
+        if (model == null || !typeof(PowerModel).IsAssignableFrom(model)) return applier;
+        var buff = applier.Powers.FirstOrDefault(p => p.GetType() == model);
+        return buff?.Applier is { IsPlayer: true } giver && giver != applier ? giver : applier;
     }
 
     // Temporary "down" powers (Enfeebling Touch…) apply a real Strength/Dexterity/Focus loss to their holder.

@@ -76,19 +76,50 @@ public static class DebuffEffectPatches
                             break;
                         }
                         // A player's Strength: the part borrowed from others' Vulnerable (Dominate) is damage they enabled.
+                        // Temporary Strength from another player (Coordinate) is read from its power, which keeps its applier.
                         case StrengthPower s when s.Owner == dealer && dealer.IsPlayer && s.Amount > 0 && target.IsEnemy &&
                                                   target.HpDisplay == HpDisplay.Normal:
-                            effects.Add(new StrengthUsed(Capture.ToActor(dealer), s.Amount, Math.Min(damage, s.Amount * vulnFactor)));
+                        {
+                            var temporary = dealer.Powers.OfType<TemporaryStrengthPower>()
+                                .Where(t => t.Amount > 0 && t.Applier is { IsPlayer: true } a && a != dealer)
+                                .Select(t => (Capture.ToActor(t.Applier), (double)t.Amount)).ToList();
+                            effects.Add(new StrengthUsed(Capture.ToActor(dealer), s.Amount, Math.Min(damage, s.Amount * vulnFactor), temporary));
                             break;
+                        }
                         // Strength down on an attacking enemy: the lost Strength, shared by everyone who removed it.
                         case StrengthPower s when s.Owner == dealer && dealer.IsEnemy && s.Amount < 0:
                             effects.Add(new DebuffEffect(Capture.ToActor(dealer), $"{Capture.IdOf(s)}~DOWN", Capture.ToActor(target),
                                 (double)-s.Amount, Offense: false, Credit: DebuffCredit.Stacks));
                             break;
+                        // Any other power that remembers which player applied it: a debuff on the enemy hit (Flanking,
+                        // Knockdown), a buff an ally gave the attacker (One for All), or a debuff on the attacking enemy.
+                        case PowerModel p when p is not (VulnerablePower or WeakPower or StrengthPower or TemporaryStrengthPower) &&
+                                               p.Applier is { IsPlayer: true } applier:
+                            AddApplied(effects, p, applier, target, dealer, props, cardSource, cardPlay, __result, vulnFactor);
+                            break;
                     }
                 }
                 _last = effects.Count > 0 ? new Pending(mods, effects, vulnerable) : null;
             });
+        }
+
+        private static void AddApplied(List<StatEvent> effects, PowerModel p, Creature applier, Creature target, Creature dealer,
+            ValueProp props, CardModel? cardSource, CardPlay? cardPlay, decimal result, double vulnFactor)
+        {
+            var factor = (double)p.ModifyDamageMultiplicative(target, result, props, dealer, cardSource, cardPlay);
+            var additive = (double)p.ModifyDamageAdditive(target, result, props, dealer, cardSource, cardPlay);
+            var damage = (double)result;
+            var dealerSide = Capture.ToActor(dealer);
+            var offense = (p.Owner == target && target.IsEnemy && target.HpDisplay == HpDisplay.Normal && dealerSide.IsPlayerSide) ||
+                          (p.Owner == dealer && dealerSide.IsPlayerSide && applier != dealer && target.IsEnemy);
+            var defense = p.Owner == dealer && dealer.IsEnemy && Capture.ToActor(target).IsPlayerSide;
+            double amount;
+            if (offense) amount = (factor > 1 ? damage - damage / factor : 0) + (additive > 0 ? additive * vulnFactor : 0);
+            else if (defense) amount = (factor is > 0 and < 1 ? damage / factor - damage : 0) + (additive < 0 ? -additive : 0);
+            else return;
+            if (amount <= 0) return;
+            effects.Add(new DebuffEffect(Capture.ToActor(p.Owner), Capture.IdOf(p), Capture.ToActor(offense ? dealer : target), amount,
+                offense, DebuffCredit.Direct, Capture.ToActor(applier)));
         }
 
         private static void Add(List<StatEvent> effects, Creature holder, PowerModel power, Creature beneficiary, double amount,
