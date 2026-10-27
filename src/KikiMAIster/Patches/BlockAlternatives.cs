@@ -232,19 +232,34 @@ public static class BlockAlternatives
                 Capture.Emit(new MissedChance(actor, "orichalcum", new[] { $"Relic:{Capture.IdOf(orichalcum)}", N(block), N(given) }));
         }
 
+        // Relic triggers: the extra card must have been worth playing (spec §E0): energy that would be lost anyway, not an
+        // attack into Thorns the block could not afford, and not taking the energy a needed block card would use.
+        var energyLost = Hook.ShouldPlayerResetEnergy(combat, player) && player.GetRelic<PaelsTears>() == null;
+        var creature = player.Creature;
+        var surplus = creature.Block - IncomingDamage(creature);
+        var blockCards = hand.Where(c => c.GainsBlock && Affordable(c)).ToList();
+        var blockNeeded = surplus < 0 && blockCards.Count > 0;
+        bool WorthPlaying(CardModel c, bool free)
+        {
+            if (IsStatusOrCurse(c) || !PlayableExceptEnergy(c)) return false;
+            if (!free && (!energyLost || !Affordable(c))) return false;
+            if (c.Type == CardType.Attack && (ThornsDamage(c, creature) > Math.Max(0, surplus) || !DealsDamage(c, combat))) return false;
+            if (blockNeeded && !c.GainsBlock && !free && Cost(c) + blockCards.Min(Cost) > energy) return false;
+            return true;
+        }
         foreach (var relic in player.Relics)
         {
-            if (MissedRelicTrigger(relic, plays, hand, energy, Affordable))
+            if (MissedRelicTrigger(relic, plays, hand, energy, WorthPlaying))
                 Capture.Emit(new MissedChance(actor, "relic", new[] { $"Relic:{Capture.IdOf(relic)}" }));
         }
     }
 
     /// One more card would have triggered the relic this turn, and a playable one was in hand.
     private static bool MissedRelicTrigger(RelicModel relic, Dictionary<CardType, int> plays, List<CardModel> hand, int energy,
-        Func<CardModel, bool> affordable)
+        Func<CardModel, bool, bool> worthPlaying)
     {
         int Played(CardType t) => plays.GetValueOrDefault(t);
-        bool InHand(CardType t) => hand.Any(c => c.Type == t && affordable(c));
+        bool InHand(CardType t) => hand.Any(c => c.Type == t && worthPlaying(c, false));
         int Every() => relic.DynamicVars.TryGetValue("Cards", out var v) ? v.IntValue : 3;
         switch (relic)
         {
@@ -260,14 +275,20 @@ public static class BlockAlternatives
             }
             case BrilliantScarf:
                 // The Nth card of the turn is free: energy does not matter.
-                return plays.Values.Sum() == Every() - 1 && hand.Any(c => !IsStatusOrCurse(c) && PlayableExceptEnergy(c));
+                return plays.Values.Sum() == Every() - 1 && hand.Any(c => worthPlaying(c, true));
             case ScreamingFlagon:
-                // Damage to all enemies when the hand is empty at the end of the turn.
-                return hand.Count > 0 && hand.All(c => !IsStatusOrCurse(c) && PlayableExceptEnergy(c) && !c.EnergyCost.CostsX) &&
-                       hand.Sum(Cost) <= energy;
+                // Damage to all enemies when the hand is empty at the end of the turn: every card must be worth playing.
+                return hand.Count > 0 && hand.All(c => !c.EnergyCost.CostsX && worthPlaying(c, false)) && hand.Sum(Cost) <= energy;
             default:
                 return false;
         }
+    }
+
+    /// The attack would deal damage to at least one enemy (cards whose damage the mod cannot compute count as useful).
+    private static bool DealsDamage(CardModel card, ICombatState combat)
+    {
+        if (!card.DynamicVars.TryGetValue("Damage", out _) && !card.DynamicVars.TryGetValue("OstyDamage", out _)) return true;
+        return combat.HittableEnemies.Any(e => EstimateDamage(card, e) > 0);
     }
 
     private static bool IsStatusOrCurse(CardModel c) => c.Type is CardType.Status or CardType.Curse;
