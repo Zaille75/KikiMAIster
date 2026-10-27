@@ -38,8 +38,8 @@ public static class RunStore
             ModLog.Info($"run file ignored (saved floor {snap?.Floor}, current floor {floor})");
             return;
         }
-        engine.RestoreRun(snap.Players, snap.Stats);
-        ModLog.Info($"run totals restored from floor {snap.Floor} ({snap.Stats.Count} players)");
+        engine.RestoreRun(snap.Players, snap.Stats, snap.Combats);
+        ModLog.Info($"run totals restored from floor {snap.Floor} ({snap.Stats.Count} players, {snap.Combats.Count} fights)");
     });
 
     public static void Save(string key, int floor, StatsEngine engine) => Capture.Safe("RunStore.Save", () =>

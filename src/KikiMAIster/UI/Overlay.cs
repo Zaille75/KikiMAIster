@@ -18,6 +18,8 @@ public static class Overlay
 
     /// Columns about allies, hidden in solo.
     private static readonly HashSet<string> AllyColumns = new() { "col.fromAllies" };
+    /// The Run tab's "Erreurs" column: Gâché + Choix.
+    private const string MisplaysKey = "col.misplays";
 
     internal const int FontSize = 13;
     internal static readonly Color Text = new(0.93f, 0.9f, 0.82f);
@@ -47,19 +49,20 @@ public static class Overlay
     private static readonly string[] MissedColumns =
         { "col.lethal", "col.wastedBlock", "col.choices", "col.unusedEnergy", "col.hpAvoidable", "col.relicTrigger", "col.potionsLeft" };
 
+    /// Damage taken, shown after the damage dealt in the same section (v0.14.0).
+    private static readonly string[] TakenColumns = { "col.hpLost", "col.fromAllies" };
+
     private static readonly Section[] Sections =
     {
-        new("damage", DamageRow, () => Visible("damage", new[] { "col.total" }.Concat(_damageColumns)), s => s.DamageDealt),
+        new("damage", DamageRow, () => Visible("damage", new[] { "col.total" }.Concat(_damageColumns).Concat(Fixed(TakenColumns))), s => s.DamageDealt),
         new("protection", ProtectionRow, () => Visible("protection", Fixed("col.prevented", "col.byBlock", "col.byPet", "col.useless")
             .Concat(_anyPetHp ? new[] { "col.petHp" } : Array.Empty<string>())), s => s.PreventedTotal),
         new("debuffs", DebuffRow, () =>
         {
-            var cols = Visible("debuffs", _debuffColumns.Append("col.debuffEffect"));
+            var cols = Visible("debuffs", _debuffColumns.Append("col.extraDamage").Append("col.avoided"));
             return cols.Count > 0 ? cols : new[] { "col.noDebuff" };
         }, s => s.DebuffsApplied.Values.Sum(t => t.Stacks)),
-        new("missed", MissedRow, () => Visible("missed", MissedColumns),
-            s => -(s.MissedTotal * 100 + s.MissedByKind.GetValueOrDefault("energy"))),
-        new("taken", TakenRow, () => Visible("taken", Fixed("col.hpLost", "col.fromAllies", "col.blocked", "col.debuffs")), s => -s.HpLost),
+        new("missed", MissedRow, MissedColumnsShown, s => -(s.MissedTotal * 100 + s.MissedByKind.GetValueOrDefault("energy"))),
         new("coop", CoopRow, () => Visible("coop", new[] { "col.blockGiven", "col.saved", "col.takenForAllies", "col.enabled", "col.energyGiven", "col.cardsGiven", "col.friendly", "col.deaths" }),
             s => s.SavedForAllies + s.DamageEnabledAllies + s.BlockGivenToAllies * 0.01, CoopOnly: true),
         new("other", OtherRow, () => Visible("other", new[] { "col.drawn", "col.played", "col.exhausted", "col.discarded", "col.potions" }),
@@ -69,11 +72,10 @@ public static class Overlay
     /// What the settings menu can hide: every section, and its fixed columns (damage kinds and debuff effect included).
     internal static readonly (string Section, string[] Columns)[] Hideable =
     {
-        ("damage", new[] { "cat.cards", "cat.dot", "cat.powers", "cat.pet", "cat.orbs", "cat.relics", "cat.potions", "cat.other" }),
+        ("damage", new[] { "cat.cards", "cat.dot", "cat.powers", "cat.pet", "cat.orbs", "cat.relics", "cat.potions", "cat.other", "col.hpLost", "col.fromAllies" }),
         ("protection", new[] { "col.byBlock", "col.byPet", "col.useless", "col.petHp" }),
-        ("debuffs", new[] { "col.debuffEffect" }),
+        ("debuffs", new[] { "col.extraDamage", "col.avoided" }),
         ("missed", MissedColumns),
-        ("taken", new[] { "col.fromAllies", "col.blocked", "col.debuffs" }),
         ("coop", new[] { "col.blockGiven", "col.saved", "col.takenForAllies", "col.enabled", "col.energyGiven", "col.cardsGiven", "col.friendly", "col.deaths" }),
         ("other", new[] { "col.drawn", "col.played", "col.exhausted", "col.discarded", "col.potions" }),
     };
@@ -395,6 +397,15 @@ public static class Overlay
         return row;
     }
 
+    /// Missed chances: in the Run tab, Gâché and Choix are one "Erreurs" column (shown unless both are hidden).
+    private static IReadOnlyList<string> MissedColumnsShown()
+    {
+        if (CurrentScope != Scope.Run) return Visible("missed", MissedColumns);
+        var bothHidden = Cfg.Hidden.Contains("col:missed:col.wastedBlock") && Cfg.Hidden.Contains("col:missed:col.choices");
+        return MissedColumns.Where(c => c != "col.choices").Select(c => c == "col.wastedBlock" ? MisplaysKey : c)
+            .Where(c => c == MisplaysKey ? !bothHidden : !Cfg.Hidden.Contains($"col:missed:{c}")).ToList();
+    }
+
     private static IReadOnlyList<string> Fixed(params string[] columns) =>
         _solo ? columns.Where(c => !AllyColumns.Contains(c)).ToList() : columns;
 
@@ -542,13 +553,19 @@ public static class Overlay
     {
         var total = _shown.Values.Sum(x => x.DamageDealt);
         var share = total > 0 ? s.DamageDealt / total : 0;
+        var taken = Line(("tip.fromEnemies", s.HpLostFromEnemies, false), ("tip.fromAllies", s.HpLostFromAllies, true),
+                        ("tip.fromSelf", s.HpLostFromSelf, false), ("tip.other", s.HpLostOther, false), ("col.blocked", s.DamageBlocked, false));
         var tip = Line(("tip.intoBlock", s.DamageIntoBlock, false), ("tip.overkill", s.Overkill, false),
-                      ("tip.kills", s.Kills, false), ("tip.biggestHit", s.BiggestHit, false))
-                  + Block(Lines(s.DamageBySource));
+                      ("tip.kills", s.Kills, false), ("tip.biggestHit", s.BiggestHit, false), ("tip.bestCard", s.BestCardPlay, false))
+                  + Block(Lines(s.DamageBySource))
+                  + Block(taken == "" ? "" : $"{Loc.T("col.hpLost")} {N(s.HpLost)}: {taken}")
+                  + (s.DebuffsReceived.Count == 0 ? "" : Block($"{Loc.T("tip.debuffsReceived")}:\n{Powers(s.DebuffsReceived)}"));
         var byColumn = s.DamageBySource.GroupBy(kv => DamageColumn(kv.Key)).ToDictionary(g => g.Key, g => g.Sum(kv => kv.Value));
         var totalText = _solo ? N(s.DamageDealt) : $"{N(s.DamageDealt)} ({share:P0})";
         return new[] { new Cell("col.total", totalText, tip) }
-            .Concat(_damageColumns.Select(c => new Cell(c, N(byColumn.GetValueOrDefault(c)), tip))).ToArray();
+            .Concat(_damageColumns.Select(c => new Cell(c, N(byColumn.GetValueOrDefault(c)), tip)))
+            .Append(new Cell("col.hpLost", N(s.HpLost), tip))
+            .Append(new Cell("col.fromAllies", N(s.HpLostFromAllies), tip)).ToArray();
     }
 
     /// Damage columns: direct (cards), then each damage-over-time debuff by name (Poison, Doom…), then the other kinds.
@@ -612,18 +629,20 @@ public static class Overlay
         };
     }
 
-    /// One column per debuff: "x/y" = times applied / total stacks; then what the debuffs changed.
+    /// One column per debuff: "x/y" = times applied / total stacks; then what the debuffs changed: extra damage dealt
+    /// (Vulnerable…) and damage avoided (Weak, Strength down…), each debuff's share in the details.
     private static IReadOnlyList<Cell> DebuffRow(ulong id, PlayerStats s)
     {
-        var effect = s.DamageEnabledSelf + s.DamageEnabledAllies + s.PreventedByDebuffsSelf + s.PreventedByDebuffsAllies;
+        var extra = s.DamageEnabledSelf + s.DamageEnabledAllies;
+        var avoided = s.PreventedByDebuffsSelf + s.PreventedByDebuffsAllies;
         var tip = (s.DebuffsApplied.Count == 0 ? Loc.T("tip.none") : Powers(s.DebuffsApplied));
         if (s.DotDamage > 0) tip += $"\n{Loc.T("tip.dot")}: {N(s.DotDamage)}";
-        if (effect > 0)
-            tip += "\n" + Line(("tip.enabled", s.DamageEnabledSelf + s.DamageEnabledAllies, false),
-                ("tip.byDebuffs", s.PreventedByDebuffsSelf + s.PreventedByDebuffsAllies, false));
+        if (extra + avoided > 0)
+            tip += "\n" + Line(("tip.enabled", extra, false), ("tip.byDebuffs", avoided, false)) + Block(Lines(s.DebuffEffectBySource));
         return s.DebuffsApplied.GroupBy(kv => DebuffColumn(kv.Key))
             .Select(g => new Cell(g.Key, $"{g.Sum(kv => kv.Value.Count)}/{N(g.Sum(kv => kv.Value.Stacks))}", tip))
-            .Append(new Cell("col.debuffEffect", N(effect), tip))
+            .Append(new Cell("col.extraDamage", N(extra), tip))
+            .Append(new Cell("col.avoided", N(avoided), tip))
             .Append(new Cell("col.noDebuff", "-", tip)).ToArray();
     }
 
@@ -640,15 +659,15 @@ public static class Overlay
     {
         var lines = new List<string>();
         foreach (var m in s.MissedLethalTurns.AsEnumerable().Reverse().Take(3))
-            lines.Add(string.Format(Loc.T("why.lethal"), m.Round, string.Join(" + ", m.Cards.Select(GameNames.Of)), m.EnemiesHp));
+            lines.Add(string.Format(Loc.T("why.lethal"), At(m.Combat, m.Round), string.Join(" + ", m.Cards.Select(GameNames.Of)), m.EnemiesHp));
         foreach (var w in s.WastedPlays.OrderByDescending(w => w.PlayId).Take(3))
-            lines.Add(string.Format(Loc.T("why.wasted"), w.Round, w.Choice.IncomingDamage, w.Choice.BlockAtTurnEnd,
+            lines.Add(string.Format(Loc.T("why.wasted"), At(w.Combat, w.Round), w.Choice.IncomingDamage, w.Choice.BlockAtTurnEnd,
                 GameNames.Of(w.Choice.BlockCard), N(w.Amount), GameNames.Of(w.Choice.Alternative)));
         foreach (var w in s.WeakAttackPlays.AsEnumerable().Reverse().Take(3))
-            lines.Add(string.Format(Loc.T("why.weak"), w.Round, GameNames.Of(w.Played), w.PlayedDamage, GameNames.Of(w.Better), w.BetterDamage));
+            lines.Add(string.Format(Loc.T("why.weak"), At(w.Combat, w.Round), GameNames.Of(w.Played), w.PlayedDamage, GameNames.Of(w.Better), w.BetterDamage));
         // Other kinds: the 6 most recent ("T3 · 2 energy left unused"…).
         foreach (var m in s.MissedEntries.AsEnumerable().Reverse().Take(6))
-            lines.Add($"T{m.Round} · " + string.Format(Loc.T($"why.{m.Kind}"), m.Args.Select(a => (object)(a.Contains(':') ? GameNames.Of(a) : a)).ToArray()));
+            lines.Add($"{At(m.Combat, m.Round)} · " + string.Format(Loc.T($"why.{m.Kind}"), m.Args.Select(a => (object)(a.Contains(':') ? GameNames.Of(a) : a)).ToArray()));
         var tip = lines.Count == 0 ? (s.MissedTotal > 0 ? "" : Loc.T("tip.none")) : string.Join('\n', lines);
         double K(string kind) => s.MissedByKind.GetValueOrDefault(kind);
         return new[]
@@ -656,6 +675,7 @@ public static class Overlay
             new Cell("col.lethal", N(s.MissedLethals), tip),
             new Cell("col.wastedBlock", N(s.MissedWasted), tip),
             new Cell("col.choices", N(s.MissedChoices), tip),
+            new Cell(MisplaysKey, N(s.MissedWasted + s.MissedChoices), tip),
             new Cell("col.unusedEnergy", N(K("energy")), tip),
             new Cell("col.hpAvoidable", N(K("blockKept")), tip),
             new Cell("col.relicTrigger", N(K("relic") + K("paelsTears")), tip),
@@ -663,19 +683,9 @@ public static class Overlay
         };
     }
 
-    private static IReadOnlyList<Cell> TakenRow(ulong id, PlayerStats s)
-    {
-        var tip = Line(("tip.fromEnemies", s.HpLostFromEnemies, false), ("tip.fromAllies", s.HpLostFromAllies, true),
-                      ("tip.fromSelf", s.HpLostFromSelf, false), ("tip.other", s.HpLostOther, false))
-                  + (s.DebuffsReceived.Count == 0 ? "" : Block(Powers(s.DebuffsReceived)));
-        return new[]
-        {
-            new Cell("col.hpLost", N(s.HpLost), tip),
-            new Cell("col.fromAllies", N(s.HpLostFromAllies), tip),
-            new Cell("col.blocked", N(s.DamageBlocked), tip),
-            new Cell("col.debuffs", N(s.DebuffsReceived.Values.Sum(t => t.Count)), tip)
-        };
-    }
+    /// "T9" in a fight's tab, "C3 T9" (fight 3, round 9) in the Run tab.
+    private static string At(int combat, int round) =>
+        CurrentScope == Scope.Run && combat > 0 ? string.Format(Loc.T("why.atRun"), combat, round) : string.Format(Loc.T("why.at"), round);
 
     private static IReadOnlyList<Cell> CoopRow(ulong id, PlayerStats s)
     {

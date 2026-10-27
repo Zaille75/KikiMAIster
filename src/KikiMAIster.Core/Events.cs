@@ -72,10 +72,12 @@ public sealed record BlockChoice(string BlockCard, string Alternative, IReadOnly
     int BlockAtTurnEnd, int IncomingDamage);
 
 /// Wasted block of one block card play, with the reason (spec 01-metrics §F).
-public sealed class WastedPlay(int playId, int round, BlockChoice choice)
+public sealed class WastedPlay(int playId, int round, BlockChoice choice, int combat = 0)
 {
     public int PlayId { get; } = playId;
     public int Round { get; } = round;
+    /// The fight's number in the run (shown in the run scope).
+    public int Combat { get; } = combat;
     public BlockChoice Choice { get; } = choice;
     public double Amount { get; set; }
 }
@@ -135,6 +137,9 @@ public enum CardAction { Drawn, Played, Exhausted, Discarded }
 
 public sealed record CardEvent(Actor Player, CardAction Action) : StatEvent;
 
+/// A card play is over (its hits and the cards it played itself included): closes the "best card play" count.
+public sealed record CardPlayFinished(Actor Player) : StatEvent;
+
 public sealed record PotionUsed(Actor Player) : StatEvent;
 
 /// A player died (in co-op the others keep playing).
@@ -143,14 +148,14 @@ public sealed record PlayerDied(Actor Player) : StatEvent;
 /// The run ended (victory or defeat): the end-of-run summary can be shown.
 public sealed record RunEnded(bool Victory) : StatEvent;
 
-/// A missed lethal turn, kept for its explanation (not saved with the run).
-public sealed record MissedLethalTurn(int Round, IReadOnlyList<string> Cards, int EnemiesHp);
+/// A missed lethal turn, kept for its explanation (not saved with the run). Combat: the fight's number in the run.
+public sealed record MissedLethalTurn(int Round, IReadOnlyList<string> Cards, int EnemiesHp, int Combat = 0);
 
 /// A weaker attack played while a stronger one stayed in hand (not saved with the run).
-public sealed record WeakAttackPlay(int Round, string Played, int PlayedDamage, string Better, int BetterDamage);
+public sealed record WeakAttackPlay(int Round, string Played, int PlayedDamage, string Better, int BetterDamage, int Combat = 0);
 
 /// Another missed opportunity (spec 01-metrics §E0). Kind: "smallBlock", "penNib", "orichalcum", "growth", "energy",
-/// "relic", "potion". Args: values for its explanation ("Card:ID"/"Relic:ID" keys are shown with their game names).
+/// "relic", "potion", "order" (damage lost by playing in the wrong order), "orderBlock" (block lost). Args: values for its explanation ("Card:ID"/"Relic:ID" keys are shown with their game names).
 /// Amount: what is counted (1 per occurrence, energy points for "energy", potions for "potion").
 public sealed record MissedChance(Actor Player, string Kind, IReadOnlyList<string> Args, double Amount = 1) : StatEvent;
 
@@ -159,7 +164,7 @@ public sealed record MissedChance(Actor Player, string Kind, IReadOnlyList<strin
 public sealed record BlockCardKept(Actor Player, string Card, int Block) : StatEvent;
 
 /// A missed opportunity kept for its explanation (not saved with the run).
-public sealed record MissedEntry(int Round, string Kind, IReadOnlyList<string> Args, double Amount);
+public sealed record MissedEntry(int Round, string Kind, IReadOnlyList<string> Args, double Amount, int Combat = 0);
 
 /// Help that is not damage or block (spec 01-metrics §C2): Kind "energy" (energy given), "cards" (cards drawn, created
 /// or brought to an ally's hand), "orbs" (orbs channeled for an ally), "taken" (damage taken instead of allies: Intercept).

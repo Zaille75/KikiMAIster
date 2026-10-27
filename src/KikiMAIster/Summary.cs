@@ -14,7 +14,7 @@ public static class Summary
             var name = engine.Players.TryGetValue(id, out var p) ? $"{p.Name} ({p.Character})" : id.ToString();
             ModLog.Info($"--- {name}");
             ModLog.Info($"  Damage: dealt={F(s.DamageDealt)} intoBlock={F(s.DamageIntoBlock)} overkill={F(s.Overkill)} " +
-                        $"kills={F(s.Kills)} biggestHit={F(s.BiggestHit)} dot={F(s.DotDamage)}");
+                        $"kills={F(s.Kills)} biggestHit={F(s.BiggestHit)} bestCard={F(s.BestCardPlay)} dot={F(s.DotDamage)}");
             ModLog.Info($"  By source: {Map(s.DamageBySource)}");
             ModLog.Info($"  Debuffs applied: {Powers(s.DebuffsApplied)}");
             ModLog.Info($"  Protection: blockSelf={F(s.BlockGainedSelf)} blockToAllies={F(s.BlockGivenToAllies)} " +

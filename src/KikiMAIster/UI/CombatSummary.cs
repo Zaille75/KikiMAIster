@@ -78,6 +78,12 @@ public static class CombatSummary
         }
     }
 
+    /// Rebuilds the open window on the next tick (language changed).
+    public static void Refresh() => _rebuildPending = true;
+
+    /// The window's rectangle on screen when it is open (the trophies window keeps out of it).
+    internal static Rect2? PanelRect => _panel is { Visible: true } p && GodotObject.IsInstanceValid(p) ? new Rect2(p.Position, p.Size) : null;
+
     public static void Hide()
     {
         if (_panel != null && _panel.Visible) _panel.Visible = false;
@@ -263,15 +269,16 @@ public static class CombatSummary
         var plotH = ChartHeight - AxisBottom - 8;
         var lastRound = Math.Max(1, combat.LastRound);
         var points = Points(combat, metric);
-        var max = NiceMax(points.SelectMany(p => p.Values.Values).DefaultIfEmpty(0).Max());
+        var (max, yStep) = Axis(points.SelectMany(p => p.Values.Values).DefaultIfEmpty(0).Max());
 
         float X(int round) => AxisLeft + plotW * round / lastRound;
         float Y(double v) => 8 + plotH * (float)(1 - v / max);
 
-        // Horizontal grid lines with their values.
-        for (var i = 0; i <= 4; i++)
+        // Horizontal grid lines with their values: whole, distinct steps.
+        var lines = (int)Math.Round(max / yStep);
+        for (var i = 0; i <= lines; i++)
         {
-            var v = max * i / 4;
+            var v = yStep * i;
             chart.AddChild(new ColorRect
             {
                 Color = new Color(1, 1, 1, i == 0 ? 0.35f : 0.08f),
@@ -401,13 +408,13 @@ public static class CombatSummary
     private static List<(ulong Id, Color Color)> PlayerColors(CombatRecord combat) =>
         Players(combat).Select(id => (id, Overlay.PlayerColor(id))).ToList();
 
-    /// Rounds the axis maximum up to 1, 2 or 5 × 10^k (never 0).
-    private static double NiceMax(double v)
+    /// The axis: a step of 1, 2 or 5 × 10^k (never below 1, so labels are whole and distinct) giving at most 4
+    /// intervals, and the maximum = the value rounded up to a step (never 0).
+    private static (double Max, double Step) Axis(double v)
     {
-        if (v <= 0) return 10;
-        var magnitude = Math.Pow(10, Math.Floor(Math.Log10(v)));
-        foreach (var f in new[] { 1, 2, 5, 10 })
-            if (f * magnitude >= v) return f * magnitude;
-        return 10 * magnitude;
+        var target = Math.Max(1, v / 4);
+        var magnitude = Math.Pow(10, Math.Floor(Math.Log10(target)));
+        var step = new[] { 1, 2, 5, 10 }.Select(f => f * magnitude).First(x => x >= target - 1e-9);
+        return (Math.Max(step, Math.Ceiling(v / step - 1e-9) * step), step);
     }
 }

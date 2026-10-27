@@ -1,10 +1,14 @@
-# Handoff — state of the project (2026-10-27, v0.13.4)
+# Handoff — state of the project (2026-10-27, v0.14.0)
 
 Read this first in a new conversation, then `CLAUDE.md`, `docs/specs/01-metrics.md` and `docs/specs/02-ui.md`.
 The conversation of 2026-10-27 turned the 27 feedback points of the first co-op games into v0.8.0 → v0.13.4, then
 refined the rules with Zaille75 (card and relic audits). **Only one short solo run (v0.13.3, 3 fights, Soldat de fer)
 was played since v0.8.0: no errors; it revealed the En miettes hit-count bug fixed in v0.13.4. The co-op parts are
 not tested in game yet.**
+**Then a 13-fight solo run (v0.13.4, Ironclad, death on fight 13 against Dix-Mille-Pattes), no errors: its 16 feedback
+points became v0.14.0** (merged Dégâts/Subis, split debuff effect, Erreurs column + fight numbers in the Run tab,
+wrong-order misses, Waterfall Giant invulnerable phase, fights kept across Save & Quit, per-character records, trophy
+"Carte maîtresse", integer chart axis, trophies window keeps clear, settings grid, language applies to every window).
 
 ## How Zaille75 and Claude work
 - Zaille75 writes in English or French, plays in **French**, and doesn't code. He tests in game and sends feedback, screenshots, and logs.
@@ -55,6 +59,7 @@ not tested in game yet.**
 | `Patches/DebuffEffectPatches.cs` | Vulnerable / Weak / Strength− effect per real hit (`Hook.ModifyDamage` postfix, confirmed by `AfterModifyingDamageAmount`) |
 | `Core/FifoLedger.cs`, `Core/Lethal.cs`, `Core/Trophies.cs` | Duration-debuff FIFO, lethal solver, trophies + record book |
 | `BlockAlternatives.HitCount` | Hit count of every attack (CalculatedHits, Repeat, fixed two-hit list, unknown list) — keep in sync after game updates |
+| `BlockAlternatives.CheckOrder/ResolveOrder` | Wrong-order misses (Vulnerable / Strength / Dexterity applied after plays they would have boosted) |
 | `Patches/UiPatches.cs` | Overlay attach (first input / combat start), F7, hide auto summary on map |
 | `UI/Overlay.cs` | Live panel: scope tabs, ◂ ▸ previous combats, sections Dégâts / Protection / Affaiblissements / Occasions manquées / Subis / Coop / Autres, players sorted best first, details under the player's line, hidden columns from settings |
 | `UI/SettingsMenu.cs` | ⚙ window: language, auto summary, shown sections/columns (`ModConfig.Hidden`) |
@@ -100,7 +105,10 @@ not tested in game yet.**
 - **Trophy list** is a proposal (spec 02-ui, v0.9.0): to discuss with Zaille75.
 - Chart: "remove the blocked stats" was read as removing the "Évités" chart; Zaille75 said he would check.
 - Growing cards were moved from "Choix" to "Gâché" (v0.13.1); Zaille75 may prefer "Choix".
-- Previous fights are kept for the current run only (not across Save & Quit, not older runs).
+- Previous fights are kept across Save & Quit since v0.14.0 (run file `combat.N.*` lines); not the explanations of misses.
+- **Asked Zaille75 (v0.14.0):** the "Agression" feedback. The log showed the only flagged play (Mante Chapardeuse T4: Frappe
+  instead of Incendie) with Incendie in hand since the start of the turn (Agression adds it before the draw). Waiting
+  for the exact line he saw. Also: Intouchable only counts victories (his run was a defeat) — keep or change?
 - Roadmap leftovers: MVP line in the summary; end-of-run Totals / Per act tabs; JSON export; settings for opacity,
   scale, hotkey; support for the default (non-beta) branch (`lib/default`); publishing (GitHub, Steam Workshop, Nexus).
 - Offered but not requested: keeping the chart history (per-combat timeline) across Save & Quit.

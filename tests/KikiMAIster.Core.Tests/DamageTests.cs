@@ -202,4 +202,35 @@ public class DamageTests : TestBase
         Assert.Equal(3, Combat(IdA).DamageBySource["Potion:LIQUID_BRONZE"], 6);
         Assert.Equal(1, Combat(IdA).DamageBySource["Power:THORNS_POWER"], 6);
     }
+
+    [Fact]
+    public void BestCardPlay_CountsEveryHitAndTheCardsItPlays()
+    {
+        // Knife Trap plays two Shivs: one card play for the record.
+        Engine.Handle(new CardEvent(A, CardAction.Played));
+        Engine.Handle(new CardEvent(A, CardAction.Played));
+        Hit(A, Enemy, 2, 4, card: "SHIV");
+        Engine.Handle(new CardPlayFinished(A));
+        Engine.Handle(new CardEvent(A, CardAction.Played));
+        Hit(A, Enemy, 0, 6, 1, killed: true, card: "SHIV");
+        Engine.Handle(new CardPlayFinished(A));
+        Engine.Handle(new CardPlayFinished(A));
+        Assert.Equal(13, Combat(IdA).BestCardPlay);
+        Assert.Equal(7, Combat(IdA).BiggestHit);
+
+        // A new card starts a new count; poison is not a card play.
+        Engine.Handle(new CardEvent(A, CardAction.Played));
+        Hit(A, Enemy2, 0, 5);
+        Engine.Handle(new DamageDealt(Actor.None, Enemy2, 0, 20, 0, false, Source.Dot("POISON_POWER")));
+        Engine.Handle(new CardPlayFinished(A));
+        Assert.Equal(13, Engine.Get(Scope.Run, IdA).BestCardPlay);
+    }
+
+    [Fact]
+    public void MissedEntries_KnowTheirFight()
+    {
+        Engine.Handle(new MissedChance(A, "order", new[] { "Card:STRIKE", "Card:BASH", "4" }));
+        Assert.Equal(1, Combat(IdA).MissedEntries[0].Combat);
+        Assert.Equal(1, Combat(IdA).MissedChoices);
+    }
 }

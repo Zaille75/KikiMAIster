@@ -38,4 +38,23 @@ public class TrophyTests
         Assert.Equal(120, book.Personal("trophy.damage", 1)!.Value);
         Assert.Equal(10, book.Best("trophy.untouched")!.Value);
     }
+
+    [Fact]
+    public void Records_PerCharacter()
+    {
+        var book = new RecordBook();
+        var chars = new Dictionary<ulong, string> { [1] = "IRONCLAD", [2] = "SILENT" };
+        var first = book.Add(Run(100, 150), Names, victory: true, "2026-10-27", chars);
+        Assert.Contains(("trophy.damage", "IRONCLAD"), first.NewCharacter);
+        Assert.Equal(150, book.OfCharacter("trophy.damage", "SILENT")!.Value);
+
+        book = RecordBook.Read(book.Write());
+        // Another player with the Ironclad beats Kiki's Ironclad record, not the all-time one.
+        var second = book.Add(new Dictionary<ulong, PlayerStats> { [3] = new() { DamageDealt = 120 } },
+            new Dictionary<ulong, string> { [3] = "Zed" }, victory: true, "2026-10-28", new Dictionary<ulong, string> { [3] = "IRONCLAD" });
+        Assert.Contains(("trophy.damage", "IRONCLAD"), second.NewCharacter);
+        Assert.DoesNotContain("trophy.damage", second.NewRecords);
+        Assert.Equal("Zed", book.OfCharacter("trophy.damage", "IRONCLAD")!.Name);
+        Assert.Equal(new[] { "IRONCLAD", "SILENT" }, book.Characters("trophy.damage").Select(x => x.Character));
+    }
 }

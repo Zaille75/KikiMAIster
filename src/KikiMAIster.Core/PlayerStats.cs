@@ -84,7 +84,7 @@ public sealed class PlayerStats
     public Dictionary<string, double> MissedByKind { get; } = new();
     public List<MissedEntry> MissedEntries { get; } = new();
     /// Worse choices: weak attacks + smaller block, Pen Nib on a weak attack, block below Orichalcum, growing card not played.
-    public double MissedChoices => WeakAttacks + new[] { "smallBlock", "penNib", "orichalcum" }.Sum(k => MissedByKind.GetValueOrDefault(k));
+    public double MissedChoices => WeakAttacks + new[] { "smallBlock", "penNib", "orichalcum", "order", "orderBlock" }.Sum(k => MissedByKind.GetValueOrDefault(k));
     /// Block card plays whose block was wasted (gâché, rule F3), counted once per play (saved with the run).
     public double WastedPlayCount { get; set; }
     /// "Gâché" misplays (v0.13.1): wasted block card plays + growing cards never played in a fight.
@@ -105,6 +105,8 @@ public sealed class PlayerStats
     public double TakenForAllies { get; set; }
     /// Most cards played in one turn (record of the scope).
     public double MostCardsInTurn { get; set; }
+    /// Most damage dealt by one card play: all its hits and the cards it played, block and overkill included.
+    public double BestCardPlay { get; set; }
 
     // Other
     public double CardsDrawn { get; set; }
@@ -123,11 +125,11 @@ public sealed class PlayerStats
     public Dictionary<string, PowerTally> DebuffsReceived { get; } = new();
 
     /// Returns true when this block card play was not wasted before (a new misplay).
-    internal static bool AddWasted(List<WastedPlay> list, int playId, int round, BlockChoice choice, double amount)
+    internal static bool AddWasted(List<WastedPlay> list, int playId, int round, BlockChoice choice, double amount, int combat)
     {
         var entry = list.FirstOrDefault(w => w.PlayId == playId);
         var added = entry == null;
-        if (entry == null) list.Add(entry = new WastedPlay(playId, round, choice));
+        if (entry == null) list.Add(entry = new WastedPlay(playId, round, choice, combat));
         entry.Amount += amount;
         return added;
     }

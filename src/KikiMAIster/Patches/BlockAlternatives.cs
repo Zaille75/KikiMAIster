@@ -48,7 +48,17 @@ public static class BlockAlternatives
         public (CardModel Card, int Damage, int Played)? PenNibBetter { get; set; }
         /// Block card played: a block card in hand giving more block (same cost or cheaper), with both amounts.
         public (CardModel Card, int Block, int Played)? BiggerBlock { get; set; }
+        /// The whole hand when the card was played (the card itself left out).
+        public required List<CardModel> HandAtPlay { get; init; }
+        /// Raw damage (HP + block) of each hit this card dealt to an enemy.
+        public List<(Creature Target, int Raw)> Hits { get; } = new();
+        /// Number of times this play gave block (Dexterity counts once per gain).
+        public int BlockGains { get; set; }
     }
+
+    /// Damage or block a later card or potion would have added to an earlier play of the turn (wrong order, spec §E0).
+    /// Kind "order": Extra damage on Enemy. Kind "orderBlock": Extra block.
+    private sealed record OrderLoss(Play Early, string Boost, string Kind, Creature? Enemy, double Extra);
 
     private static readonly ConditionalWeakTable<CardPlay, Play> Plays = new();
     private static readonly List<Play> ThisTurn = new();
@@ -63,9 +73,11 @@ public static class BlockAlternatives
     /// Growing cards that could be played at the end of some turn of this fight, and those that were played.
     private static readonly HashSet<CardModel> GrowingAffordable = new(ReferenceEqualityComparer.Instance);
     private static readonly HashSet<CardModel> GrowingPlayed = new(ReferenceEqualityComparer.Instance);
+    private static readonly List<OrderLoss> OrderLosses = new();
 
     public static void Reset()
     {
+        OrderLosses.Clear();
         ThisTurn.Clear();
         InProgress.Clear();
         FrontHand.Clear();
@@ -89,6 +101,7 @@ public static class BlockAlternatives
     /// Stacked: the power was already on its owner (adding turns to it is always an effect).
     public static void OnPowerApplied(PowerModel power, decimal amount, bool stacked)
     {
+        Capture.Safe("wrong order", () => CheckOrder(power, amount, stacked));
         if (InProgress.TryPeek(out var play) && play != null && !stacked && amount == 1 && power.Owner.IsEnemy)
         {
             if (power is WeakPower && !Attacks(power.Owner))
@@ -105,6 +118,85 @@ public static class BlockAlternatives
             }
         }
         OnEffect();
+    }
+
+    /// Wrong order (spec §E0): Vulnerable put on an enemy that had none, Strength or Dexterity gained, by a card the
+    /// player chose or a potion, after plays of the same turn it would have boosted (and while it was already in hand).
+    private static void CheckOrder(PowerModel power, decimal amount, bool stacked)
+    {
+        if (amount <= 0 || power is not (VulnerablePower or StrengthPower or DexterityPower)) return;
+        InProgress.TryPeek(out var play);
+        Player? player;
+        string boost;
+        if (play != null)
+        {
+            player = play.Owner;
+            boost = Key(play.Card);
+        }
+        else if (Capture.PotionUser != null && Capture.CardPlayers.Count == 0 && Capture.PotionId != "")
+        {
+            player = Capture.PotionUser;
+            boost = Capture.PotionId;
+        }
+        else return;
+        // Only the card or potion's own effect: a relic or power reacting to the play (Shuriken…) does not depend on the order.
+        var caller = Capture.CallingModelType();
+        if (caller == null || !(typeof(CardModel).IsAssignableFrom(caller) || typeof(PotionModel).IsAssignableFrom(caller) ||
+                                typeof(TemporaryStrengthPower).IsAssignableFrom(caller) || typeof(TemporaryDexterityPower).IsAssignableFrom(caller)))
+            return;
+        var earlier = ThisTurn.TakeWhile(p => p != play)
+            .Where(p => p.Owner == player && (play == null || p.HandAtPlay.Contains(play.Card))).ToList();
+        switch (power)
+        {
+            case VulnerablePower when power.Owner.IsEnemy && !stacked:
+                foreach (var e in earlier.Where(p => p.Card.Type == CardType.Attack && !p.HadNonDamageEffect))
+                {
+                    var raw = e.Hits.Where(h => h.Target == power.Owner).Sum(h => h.Raw);
+                    if (raw > 0) OrderLosses.Add(new OrderLoss(e, boost, "order", power.Owner, raw * 0.5));
+                }
+                break;
+            case StrengthPower when power.Owner == player.Creature:
+                foreach (var e in earlier.Where(p => p.Card.Type == CardType.Attack && !p.HadNonDamageEffect))
+                    foreach (var g in e.Hits.GroupBy(h => h.Target))
+                        OrderLosses.Add(new OrderLoss(e, boost, "order", g.Key, (double)amount * g.Count()));
+                break;
+            case DexterityPower when power.Owner == player.Creature:
+                foreach (var e in earlier.Where(p => p.GaveBlock && p.BlockGains > 0 && !p.HadOtherEffect))
+                    OrderLosses.Add(new OrderLoss(e, boost, "orderBlock", null, (double)amount * e.BlockGains));
+                break;
+        }
+    }
+
+    /// A hit of the card play in progress on an enemy (for the wrong-order check).
+    public static void OnHit(CardModel card, Creature target, int raw)
+    {
+        if (raw > 0 && target.IsEnemy && InProgress.TryPeek(out var play) && play != null && play.Card == card) play.Hits.Add((target, raw));
+    }
+
+    /// End of the turn: damage is only lost on enemies still alive (up to their HP + block), block only when it was
+    /// below the incoming attack (up to the difference). One miss per (earlier play, boosting card or potion).
+    private static void ResolveOrder()
+    {
+        var deficit = new Dictionary<Player, int>();
+        foreach (var g in OrderLosses.GroupBy(o => (o.Early, o.Boost, o.Kind)))
+        {
+            var (early, boost, kind) = g.Key;
+            double lost;
+            if (kind == "order")
+                lost = g.GroupBy(o => o.Enemy!).Sum(e => e.Key.IsAlive ? Math.Min(e.Sum(o => o.Extra), e.Key.CurrentHp + e.Key.Block) : 0);
+            else
+            {
+                var creature = early.Owner.Creature;
+                if (!deficit.TryGetValue(early.Owner, out var left)) left = Math.Max(0, IncomingDamage(creature) - creature.Block);
+                lost = Math.Min(g.Sum(o => o.Extra), left);
+                deficit[early.Owner] = left - (int)lost;
+            }
+            var amount = (int)Math.Round(lost);
+            if (amount < 1) continue;
+            ModLog.Info($"wrong order: {Capture.IdOf(early.Card)} before {boost}, {kind} {amount}");
+            Capture.Emit(new MissedChance(Capture.ToActor(early.Owner), kind, new[] { Key(early.Card), boost, N(amount) }));
+        }
+        OrderLosses.Clear();
     }
 
     /// A real attack hit was increased by Vulnerable on this enemy: the play that applied it did something.
@@ -131,7 +223,9 @@ public static class BlockAlternatives
     {
         if (playId == 0) return;
         var play = ThisTurn.FirstOrDefault(p => p.Id == playId);
-        if (play != null) play.BlockAmount += amount;
+        if (play == null) return;
+        play.BlockAmount += amount;
+        play.BlockGains++;
     }
 
     /// Another card discarded or exhausted by the play in progress (Survivor…). The played card itself going to
@@ -173,7 +267,8 @@ public static class BlockAlternatives
             // Sacrifice kills the player's own pet (validated by Zaille75: never wasted).
             HadOtherEffect = IsGrowing(cardPlay.Card) || cardPlay.Card is Sacrifice,
             HadNonDamageEffect = IsGrowing(cardPlay.Card),
-            UsefulCardsInHand = hand.Where(c => c != cardPlay.Card && IsUseful(c)).ToList()
+            UsefulCardsInHand = hand.Where(c => c != cardPlay.Card && IsUseful(c)).ToList(),
+            HandAtPlay = hand.Where(c => c != cardPlay.Card).ToList()
         };
         var energyBefore = (cardPlay.Player.PlayerCombatState?.Energy ?? 0) + cardPlay.Resources.EnergySpent;
         if (cardPlay.Card.Type == CardType.Attack && cardPlay.Target is { IsEnemy: true } target)
@@ -240,7 +335,8 @@ public static class BlockAlternatives
     /// (the stronger attack is still in hand at the end of the turn, and the weak one did nothing else).
     private static void ResolveMissedChances(ICombatState combat)
     {
-        var enemies = combat.HittableEnemies;
+        Capture.Safe("wrong order", ResolveOrder);
+        var enemies = RealEnemies(combat);
         if (enemies.Count > 0)
             foreach (var (player, lethal) in FrontHand)
                 if (lethal != null)
@@ -275,6 +371,11 @@ public static class BlockAlternatives
         GrowingPlayed.Clear();
     }
 
+    /// Enemies that can really be hurt: an enemy shown with infinite HP (Waterfall Giant about to explode) is not one
+    /// left to kill (spec §E0, invulnerable phase).
+    private static List<Creature> RealEnemies(ICombatState? combat) =>
+        (combat?.HittableEnemies ?? Array.Empty<Creature>()).Where(e => e.HpDisplay == HpDisplay.Normal).ToList();
+
     private static string Key(CardModel card) => $"Card:{Capture.IdOf(card)}";
     private static string N(int v) => v.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
@@ -288,9 +389,11 @@ public static class BlockAlternatives
         var hand = st.Hand.Cards.ToList();
         bool Affordable(CardModel c) => !IsStatusOrCurse(c) && PlayableExceptEnergy(c) && (c.EnergyCost.CostsX || Cost(c) <= energy);
         var plays = TurnPlays.GetValueOrDefault(player) ?? new Dictionary<CardType, int>();
+        // Only an invulnerable enemy left (Waterfall Giant about to explode): nothing to spend energy on.
+        var nothingToKill = RealEnemies(combat).Count == 0;
 
         // Unused energy: lost at the end of the turn (not kept by Ice Cream & co., not wanted by Pael's Tears).
-        if (energy > 0 && hand.Any(Affordable) && Hook.ShouldPlayerResetEnergy(combat, player) && player.GetRelic<PaelsTears>() == null)
+        if (energy > 0 && !nothingToKill && hand.Any(Affordable) && Hook.ShouldPlayerResetEnergy(combat, player) && player.GetRelic<PaelsTears>() == null)
             Capture.Emit(new MissedChance(actor, "energy", new[] { N(energy) }, energy));
 
         // Pael's Tears gives energy next turn for energy left: energy spent on a useless card (at any time in the turn)
@@ -335,7 +438,7 @@ public static class BlockAlternatives
             if (blockNeeded && !c.GainsBlock && !free && Cost(c) + blockCards.Min(Cost) > energy) return false;
             return true;
         }
-        foreach (var relic in player.Relics)
+        foreach (var relic in nothingToKill ? Enumerable.Empty<RelicModel>() : player.Relics)
         {
             if (MissedRelicTrigger(relic, plays, hand, energy, WorthPlaying))
                 Capture.Emit(new MissedChance(actor, "relic", new[] { $"Relic:{Capture.IdOf(relic)}" }));
@@ -428,7 +531,7 @@ public static class BlockAlternatives
     {
         try
         {
-            var all = player.Creature.CombatState?.HittableEnemies ?? Array.Empty<Creature>();
+            var all = RealEnemies(player.Creature.CombatState);
             var enemies = all.Where(e => !e.IsSecondaryEnemy).ToList();
             if (enemies.Count == 0) enemies = all.ToList();
             if (enemies.Count == 0) return null;

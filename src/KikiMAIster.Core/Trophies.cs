@@ -15,6 +15,7 @@ public static class Trophies
     {
         new("trophy.damage", s => s.DamageDealt),
         new("trophy.biggestHit", s => s.BiggestHit),
+        new("trophy.bestCard", s => s.BestCardPlay),
         new("trophy.combo", s => s.MostCardsInTurn),
         new("trophy.kills", s => s.Kills),
         new("trophy.debuffs", s => s.DebuffsApplied.Values.Sum(t => t.Stacks)),
@@ -39,9 +40,9 @@ public static class Trophies
     }
 }
 
-/// All-time records and personal bests per category, one run = one value per player.
+/// All-time records, personal bests and records per character, per category; one run = one value per player.
 /// Saved as "key=value|name|date" lines: "<category>.all" for the all-time record, "<category>.<playerId>" for
-/// each player's personal best.
+/// each player's personal best, "<category>.char.<CHARACTER>" for the best of each character (any player).
 public sealed class RecordBook
 {
     public sealed record Entry(double Value, string Name, string Date);
@@ -51,14 +52,26 @@ public sealed class RecordBook
 
     public Entry? Best(string category) => _entries.GetValueOrDefault($"{category}.all");
     public Entry? Personal(string category, ulong playerId) => _entries.GetValueOrDefault($"{category}.{playerId}");
+    public Entry? OfCharacter(string category, string character) => _entries.GetValueOrDefault($"{category}.char.{character}");
 
-    /// What a finished run changed: new all-time records and new personal bests (category keys).
-    public sealed record Update(HashSet<string> NewRecords, HashSet<(string Category, ulong Player)> NewPersonal);
+    /// Every character's record in a category ("IRONCLAD" → entry).
+    public IEnumerable<(string Character, Entry Entry)> Characters(string category)
+    {
+        var prefix = $"{category}.char.";
+        return _entries.Where(kv => kv.Key.StartsWith(prefix, StringComparison.Ordinal))
+            .Select(kv => (kv.Key[prefix.Length..], kv.Value)).OrderBy(x => x.Item1, StringComparer.Ordinal);
+    }
+
+    /// What a finished run changed: new all-time records, new personal bests and new character records.
+    public sealed record Update(HashSet<string> NewRecords, HashSet<(string Category, ulong Player)> NewPersonal,
+        HashSet<(string Category, string Character)> NewCharacter);
 
     /// Adds a finished run. Lower-is-better categories only count a victory. Zero values never make a record.
-    public Update Add(IReadOnlyDictionary<ulong, PlayerStats> run, IReadOnlyDictionary<ulong, string> names, bool victory, string date)
+    /// Characters: each player's character ("IRONCLAD"…); players without one get no character record.
+    public Update Add(IReadOnlyDictionary<ulong, PlayerStats> run, IReadOnlyDictionary<ulong, string> names, bool victory, string date,
+        IReadOnlyDictionary<ulong, string>? characters = null)
     {
-        var update = new Update(new(), new());
+        var update = new Update(new(), new(), new());
         foreach (var c in Trophies.All)
         {
             if (c.LowerIsBetter && !victory) continue;
@@ -72,6 +85,12 @@ public sealed class RecordBook
                 {
                     _entries[$"{c.Key}.{id}"] = entry;
                     update.NewPersonal.Add((c.Key, id));
+                }
+                var character = characters?.GetValueOrDefault(id) ?? "";
+                if (character != "" && Beats(c, v, OfCharacter(c.Key, character)))
+                {
+                    _entries[$"{c.Key}.char.{character}"] = entry;
+                    update.NewCharacter.Add((c.Key, character));
                 }
                 if (Beats(c, v, Best(c.Key)))
                 {

@@ -202,7 +202,7 @@ public static class CombatFlowPatches
     {
         public static void Prefix() => Capture.Safe("CardPlayFinished", () =>
         {
-            if (Capture.CardPlayers.Count > 0) Capture.CardPlayers.Pop();
+            if (Capture.CardPlayers.Count > 0) Capture.Emit(new CardPlayFinished(Capture.ToActor(Capture.CardPlayers.Pop())));
             if (Capture.CardPlays.Count > 0) Capture.CardPlays.Pop();
             BlockAlternatives.OnPlayFinished();
         });

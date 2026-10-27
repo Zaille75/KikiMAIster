@@ -18,6 +18,9 @@ public sealed class StatsEngine
     /// Block cards kept in hand at the end of the player turn, and the HP lost to enemies since.
     private readonly Dictionary<ulong, (string Card, int Block, double Lost)> _blockKept = new();
     private readonly Dictionary<int, (int Round, BlockChoice Choice)> _choices = new();
+    /// Card plays in progress per player (a card can play other cards), and the damage of the outermost play so far.
+    private readonly Dictionary<ulong, int> _playDepth = new();
+    private readonly Dictionary<ulong, double> _playDamage = new();
 
     public int Round { get; private set; }
 
@@ -80,14 +83,14 @@ public sealed class StatsEngine
                 Each(m.Player.PlayerId, s =>
                 {
                     s.MissedLethals++;
-                    s.MissedLethalTurns.Add(new MissedLethalTurn(Round, m.Cards, m.EnemiesHp));
+                    s.MissedLethalTurns.Add(new MissedLethalTurn(Round, m.Cards, m.EnemiesHp, _combatNumber));
                 });
                 break;
             case WeakAttack w when w.Player.IsPlayerSide:
                 Each(w.Player.PlayerId, s =>
                 {
                     s.WeakAttacks++;
-                    s.WeakAttackPlays.Add(new WeakAttackPlay(Round, w.Played, w.PlayedDamage, w.Better, w.BetterDamage));
+                    s.WeakAttackPlays.Add(new WeakAttackPlay(Round, w.Played, w.PlayedDamage, w.Better, w.BetterDamage, _combatNumber));
                 });
                 break;
             case MissedChance m when m.Player.IsPlayerSide && m.Amount > 0: AddMissed(m.Player.PlayerId, m.Kind, m.Args, m.Amount); break;
@@ -105,10 +108,17 @@ public sealed class StatsEngine
                 });
                 if (c.Action == CardAction.Played)
                 {
+                    // Best card play: a new count starts with each card the player chose (not with the cards it plays).
+                    var depth = _playDepth.GetValueOrDefault(c.Player.PlayerId);
+                    if (depth == 0) _playDamage[c.Player.PlayerId] = 0;
+                    _playDepth[c.Player.PlayerId] = depth + 1;
                     // Most cards in one turn: the turn scope counts this turn's plays.
                     var thisTurn = Stats(Scope.Turn, c.Player.PlayerId).CardsPlayed;
                     Each(c.Player.PlayerId, s => s.MostCardsInTurn = Math.Max(s.MostCardsInTurn, thisTurn));
                 }
+                break;
+            case CardPlayFinished f when f.Player.IsPlayerSide:
+                _playDepth[f.Player.PlayerId] = Math.Max(0, _playDepth.GetValueOrDefault(f.Player.PlayerId) - 1);
                 break;
             case HelpGiven h when h.Giver.IsPlayerSide && h.Giver.PlayerId != 0 && h.Amount > 0:
                 Each(h.Giver.PlayerId, s =>
@@ -140,11 +150,15 @@ public sealed class StatsEngine
         ResetCombatState();
     }
 
-    /// Puts back the run totals saved before a Save & Quit (see RunSnapshot). Call right after RunStarted.
-    public void RestoreRun(IEnumerable<PlayerInfo> players, IReadOnlyDictionary<ulong, PlayerStats> runStats)
+    /// Puts back the run totals and finished combats saved before a Save & Quit (see RunSnapshot). Call right after RunStarted.
+    public void RestoreRun(IEnumerable<PlayerInfo> players, IReadOnlyDictionary<ulong, PlayerStats> runStats,
+        IEnumerable<CombatRecord>? combats = null)
     {
         foreach (var p in players) _players[p.PlayerId] = p;
         foreach (var (id, s) in runStats) _stats[Scope.Run][id] = s;
+        _combats.Clear();
+        _combats.AddRange((combats ?? Array.Empty<CombatRecord>()).OrderBy(c => c.Number));
+        _combatNumber = _combats.Count > 0 ? _combats[^1].Number : 0;
     }
 
     private void OnCombatStarted(CombatStarted c)
@@ -170,6 +184,8 @@ public sealed class StatsEngine
     private void OnRoundStarted(RoundStarted r)
     {
         ResolveBlockKept();
+        _playDepth.Clear();
+        _playDamage.Clear();
         // A new round closes the previous one on the chart.
         if (InCombat && r.Round > 1 && _timeline[^1].Round < r.Round - 1) AddRoundPoint(r.Round - 1);
         Round = r.Round;
@@ -218,6 +234,8 @@ public sealed class StatsEngine
         _hadAlternative.Clear();
         _choices.Clear();
         _blockKept.Clear();
+        _playDepth.Clear();
+        _playDamage.Clear();
     }
 
     // ---------- Damage ----------
@@ -267,6 +285,13 @@ public sealed class StatsEngine
         }
         else CreditEnemyDamage(d.Dealer.PlayerId, d, 1, d.Source.ToString(), isDot: false);
         if (d.Killed) Each(d.Dealer.PlayerId, s => s.Kills++);
+        // Best card play: the card's hits (its pet's too), until the player chooses another card (late reports included).
+        if (d.Source.Kind == SourceKind.Card && _playDamage.TryGetValue(d.Dealer.PlayerId, out var sum))
+        {
+            sum += d.Hp + d.Blocked + d.Overkill;
+            _playDamage[d.Dealer.PlayerId] = sum;
+            Each(d.Dealer.PlayerId, s => s.BestCardPlay = Math.Max(s.BestCardPlay, sum));
+        }
     }
 
     private void CreditEnemyDamage(ulong playerId, DamageDealt d, double share, string sourceKey, bool isDot)
@@ -392,7 +417,7 @@ public sealed class StatsEngine
             if (wasted) s.WastedBlock += amount;
             else s.UselessBlock += amount;
             if (toAlly) s.UnusedGivenToAllies += amount;
-            if (wasted && hasChoice && PlayerStats.AddWasted(s.WastedPlays, layer.PlayId, layer.Round, choice.Choice, amount))
+            if (wasted && hasChoice && PlayerStats.AddWasted(s.WastedPlays, layer.PlayId, layer.Round, choice.Choice, amount, _combatNumber))
                 s.WastedPlayCount++;
         };
         credit(Stats(Scope.Combat, layer.GiverId));
@@ -526,7 +551,7 @@ public sealed class StatsEngine
         Each(playerId, s =>
         {
             PlayerStats.Add(s.MissedByKind, kind, amount);
-            s.MissedEntries.Add(new MissedEntry(Round, kind, args, amount));
+            s.MissedEntries.Add(new MissedEntry(Round, kind, args, amount, _combatNumber));
         });
 
     /// A block card kept in hand while HP was then lost to enemies: the HP it could have saved (spec §E0).

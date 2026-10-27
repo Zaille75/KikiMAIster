@@ -101,15 +101,19 @@ public static class SettingsMenu
             var visible = !Cfg.Hidden.Contains(sectionKey);
             _content.AddChild(Check(Loc.T($"section.{section}"), visible, on => Set(sectionKey, on)));
             if (!visible) continue;
-            var flow = new HFlowContainer { CustomMinimumSize = new Vector2(340, 0) };
-            flow.AddThemeConstantOverride("h_separation", 2);
-            flow.AddChild(new Control { CustomMinimumSize = new Vector2(16, 0) });
+            // A grid, not a flow container: its size is known at once, so the window's background fits the text.
+            var row = new HBoxContainer();
+            row.AddChild(new Control { CustomMinimumSize = new Vector2(16, 0) });
+            var grid = new GridContainer { Columns = 3 };
+            grid.AddThemeConstantOverride("h_separation", 6);
+            grid.AddThemeConstantOverride("v_separation", 0);
             foreach (var col in columns)
             {
                 var key = $"col:{section}:{col}";
-                flow.AddChild(Check(Loc.T(col), !Cfg.Hidden.Contains(key), on => Set(key, on), small: true));
+                grid.AddChild(Check(Loc.T(col), !Cfg.Hidden.Contains(key), on => Set(key, on), small: true));
             }
-            _content.AddChild(flow);
+            row.AddChild(grid);
+            _content.AddChild(row);
         }
     }
 
@@ -125,6 +129,8 @@ public static class SettingsMenu
     {
         Cfg.Save();
         Overlay.Invalidate();
+        CombatSummary.Refresh();
+        RunSummary.Refresh();
         _rebuildPending = true;
     }
 

@@ -49,6 +49,7 @@ public static class GameNames
             "Potion" => new[] { "potions" },
             "Relic" => new[] { "relics" },
             "Orb" => new[] { "orbs" },
+            "Character" => new[] { "characters" },
             _ => new[] { "powers", "cards" }
         };
         foreach (var table in tables)
