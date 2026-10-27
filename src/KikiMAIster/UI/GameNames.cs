@@ -42,6 +42,20 @@ public static class GameNames
         var kind = sep < 0 ? "" : key[..sep];
         var id = sep < 0 ? key : key[(sep + 1)..];
         if (Types.TryGetValue(id, out var type) && ModelTitle(type) is { } title) return title;
+        // Characters: the game's own title, in the game language ("La Silencieuse").
+        if (kind == "Character")
+        {
+            try
+            {
+                var character = ModelDb.AllCharacters.FirstOrDefault(c => c.Id.Entry == id);
+                var text = character?.Title.GetFormattedText();
+                if (!string.IsNullOrWhiteSpace(text)) return text;
+            }
+            catch (Exception e)
+            {
+                ModLog.Error("character name", e);
+            }
+        }
         var tables = kind switch
         {
             "Card" => new[] { "cards" },
