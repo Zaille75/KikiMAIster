@@ -22,7 +22,7 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
 | Biggest hit | Largest single damage instance (combat and run records). | v1 |
 | Damage by source | Breakdown by source: direct (the card played), powers (e.g. Thorns), damage over time (Poison…), orbs, relics, pets, potions. **The origin wins over the mechanism (v0.8.0):** a power or debuff applied by a potion (Thorns from Liquid Bronze, Demise from Powdered Demise) counts as potion damage, split by stacks with the same power from cards. A player's power that deals damage with no dealer (Haunt: damage when a Soul is played) counts for the player holding it. | v1 |
 | Invulnerable phase | Damage to an enemy the game shows with infinite HP (Waterfall Giant about to explode) is not counted. Debuffs on it still are. | v1 |
-| Damage enabled for allies | Extra damage allies dealt **because** of this player's Vulnerable (or similar debuffs) on the target. | v2 |
+| Damage enabled | Extra damage dealt **because** of this player's Vulnerable on the target (rule §B2), split into "for allies" (co-op section) and "for self". | v1 (v0.9.0) |
 
 ## B. Debuffs ("negative effects")
 
@@ -31,7 +31,20 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
 | Debuffs applied | Count and total stacks of each debuff this player put on **enemies** (Vulnerable, Weak, Poison, …). Shown as one column per debuff, "x/y" = times applied / total stacks. A buff applied with a negative amount (Strength down, Dexterity down) counts as a debuff, shown as "Force −". The overview has one column per effect: a temporary loss (Enfeebling Touch…) is counted in "Force −", whatever card caused it; the details list each origin. | v1 |
 | Damage from damage-over-time debuffs | Damage from DoT debuffs (Poison…) is credited to the players who applied the stacks, **split in proportion to the stacks each one applied** and still active. Example: A applies 6 Poison, B applies 4 → each tick is credited 60% to A and 40% to B. | v1 |
 | Doom kills | When Doom kills an enemy, the HP it removes counts as damage-over-time for the Doom appliers (split by stacks) and the kill goes to the biggest share. | v1 |
-| Friendly fire | Debuffs and status cards (Wound, Dazed…) a player puts on **an ally or on themselves**, and damage a player deals to allies or themselves. Shown in its own section, never mixed with enemy stats. | v1 |
+| Friendly fire | Debuffs and status cards (Wound, Dazed…) a player puts on **an ally or on themselves**, and damage a player deals to allies or themselves. v0.9.0: no own section any more: shown in the co-op section (dealt to allies) and in "Taken" (received from allies). | v1 |
+
+### B2. Who gets credit for a debuff's effect (v0.9.0, validated by Zaille75)
+- The game reports, for every real hit, which powers changed its damage. The mod measures what each debuff changed:
+  - **Vulnerable** on an enemy: extra damage = damage − damage ÷ multiplier (×1.5, or more with relics).
+  - **Weak** on an attacking enemy: damage avoided = damage ÷ multiplier − damage.
+  - **Strength down** on an attacking enemy: the Strength it lost (per hit).
+- **Duration debuffs (Vulnerable, Weak): first in, first out, turn by turn.** Each application is queued; each turn lost
+  removes the oldest turn. Example: turn 1, A applies 2 Vulnerable; turn 2, B applies 2 → the turns 1–2 of Vulnerable
+  count for A, the turns 3–4 for B.
+- **Strength down** does not decay by turns: the loss is shared by the stacks each player removed.
+- Stacks an enemy put on itself credit nobody.
+- Extra damage from a player's Vulnerable is "damage enabled" (for self or for allies). Damage avoided thanks to a
+  player's Weak / Strength down is "prevented" (for self or for allies) and is part of "Évités".
 
 ## C. Protection & support
 
@@ -45,7 +58,7 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
 | Useless block ("inutile") | Block that never absorbed anything **with no alternative**: no playable attack in hand, or block from a relic, power, potion or auto-played card. | v1 |
 | …of which given to allies | Part of the wasted + useless block that was given to allies (co-op detail). | v1 |
 | Damage prevented — relics & powers | HP loss reduced by a relic or power on the player or their pet (Tungsten Rod, Intangible, Buffer…), per source. Included in the "Prevented" total. If several reduce the same hit, the saving is shared equally. | v1 |
-| Damage prevented — Weak & co. | Damage enemies did **not** deal because of this player's Weak (or similar) on them. | v2 |
+| Damage prevented — Weak & co. | Damage enemies did **not** deal because of this player's Weak or Strength down on them (rule §B2), for self or allies. | v1 (v0.9.0) |
 | Healing | HP restored, to self and to allies, shown separately. | v1 |
 
 ## D. Damage taken
@@ -53,6 +66,7 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
 | Stat | Definition | Tag |
 |---|---|---|
 | HP lost | HP this player lost, split by source: enemies / friendly fire / self / other. | v1 |
+| Damage absorbed by block vs pet | "Protection" shows the damage stopped by block and the damage absorbed by the pet in separate columns (v0.9.0). | v1 |
 | Damage blocked | Incoming damage absorbed by this player's block, whoever gave it. | v1 |
 | Debuffs received | Debuffs and status cards this player received from enemies. | v1 |
 
@@ -65,6 +79,25 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
 | Pet HP given | HP given to the pet: summon, revive, max HP gain, heal (a heal that is part of a summon counts once). Credited to the player who gave it. Separate from block: **never wasted or useless**. A block card that also summons has "another effect" (F4), so its unused block is never wasted either. Not part of "Prevented" (the damage the pet then absorbs already is). | v1 |
 
 **Q5 — validated:** damage absorbed by the pet counts as protection for its owner, not as damage taken.
+
+## C2. Co-op (v0.9.0)
+| Stat | Definition |
+|---|---|
+| Block given | Block this player gave to other players. |
+| HP saved for allies | Damage stopped by block given to allies + damage avoided by allies thanks to this player's Weak / Strength down + healing given to allies. |
+| Damage enabled for allies | Extra damage allies dealt thanks to this player's Vulnerable (§B2). |
+| Friendly fire | Damage dealt to allies (details: debuffs and status cards put on allies or self). |
+| Deaths | Times this player died. |
+
+## C3. Other stats (v0.9.0)
+Cards drawn, played, exhausted, discarded; potions used.
+
+## E0. Missed opportunities (v0.9.0)
+| Stat | Definition |
+|---|---|
+| Missed lethal | Turns where the player's **front hand** (the hand and energy at the start of their turn) could have killed every enemy that must die, yet enemies were still alive at the end of the turn. Only attacks on one enemy or on all enemies, with the game's own damage computation (Strength, Vulnerable…) × hits; X-cost cards and cards whose damage is computed differently are left out. It is a **minimum**: draw, random effects and combos are ignored. |
+| Wasted block | The "gâché" block of rule F3 (block that saved nothing while a useful card stayed in hand), with its explanation: incoming attack → block already there → card played → what could have been played. In "Protection", gâché and inutile are now one "Inutile" column. |
+| Weak attack | An attack played on an enemy while a stronger attack (game's damage on the same enemy, same cost or cheaper) stayed in hand until the end of the turn. Not counted when the played attack could kill its target or did something besides damage (debuff, draw…). |
 
 ## E. Later extensions (not in v1)
 Records (best combat, fastest kill…), combat duration (turns and real time), potion use,

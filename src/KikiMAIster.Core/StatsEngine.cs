@@ -11,6 +11,7 @@ public sealed class StatsEngine
     private readonly Dictionary<ulong, PlayerInfo> _players = new();
     private readonly Dictionary<ulong, BlockLedger> _block = new();
     private readonly Dictionary<(int CreatureId, string PowerId), DotLedger> _dots = new();
+    private readonly Dictionary<(int CreatureId, string PowerId), FifoLedger> _fifo = new();
     private readonly Dictionary<int, bool> _hadAlternative = new();
     private readonly Dictionary<int, (int Round, BlockChoice Choice)> _choices = new();
 
@@ -30,7 +31,7 @@ public sealed class StatsEngine
     /// The combat being played, with a live point for the current round (null outside combat).
     public CombatRecord? CurrentCombat => InCombat
         ? new CombatRecord(_combatNumber, _combatName, null,
-            _timeline.Where(p => p.Round < Round).Append(Point(Round)).ToList())
+            _timeline.Where(p => p.Round < Round).Append(Point(Round)).ToList(), _stats[Scope.Combat])
         : null;
     public bool InCombat { get; private set; }
 
@@ -62,6 +63,35 @@ public sealed class StatsEngine
             case PetHpGiven p when p.Giver.IsPlayerSide && p.Giver.PlayerId != 0 && p.Amount > 0:
                 Each(p.Giver.PlayerId, s => s.PetHpGiven += p.Amount);
                 break;
+            case DebuffEffect x: OnDebuffEffect(x); break;
+            case MissedLethal m when m.Player.IsPlayerSide:
+                Each(m.Player.PlayerId, s =>
+                {
+                    s.MissedLethals++;
+                    s.MissedLethalTurns.Add(new MissedLethalTurn(Round, m.Cards, m.EnemiesHp));
+                });
+                break;
+            case WeakAttack w when w.Player.IsPlayerSide:
+                Each(w.Player.PlayerId, s =>
+                {
+                    s.WeakAttacks++;
+                    s.WeakAttackPlays.Add(new WeakAttackPlay(Round, w.Played, w.PlayedDamage, w.Better, w.BetterDamage));
+                });
+                break;
+            case CardEvent c when c.Player.IsPlayerSide:
+                Each(c.Player.PlayerId, s =>
+                {
+                    switch (c.Action)
+                    {
+                        case CardAction.Drawn: s.CardsDrawn++; break;
+                        case CardAction.Played: s.CardsPlayed++; break;
+                        case CardAction.Exhausted: s.CardsExhausted++; break;
+                        case CardAction.Discarded: s.CardsDiscarded++; break;
+                    }
+                });
+                break;
+            case PotionUsed p when p.Player.IsPlayerSide: Each(p.Player.PlayerId, s => s.PotionsUsed++); break;
+            case PlayerDied p when p.Player.Kind == ActorKind.Player: Each(p.Player.PlayerId, s => s.Deaths++); break;
             case BlockPlayResolved r:
                 _hadAlternative[r.PlayId] = r.HadAlternative;
                 if (r.Choice != null) _choices[r.PlayId] = (Round, r.Choice);
@@ -71,7 +101,7 @@ public sealed class StatsEngine
 
     private void OnRunStarted()
     {
-        foreach (var s in _stats.Values) s.Clear();
+        foreach (var scope in _stats.Keys.ToList()) _stats[scope] = new();
         _players.Clear();
         _combats.Clear();
         _combatNumber = 0;
@@ -87,9 +117,10 @@ public sealed class StatsEngine
 
     private void OnCombatStarted(CombatStarted c)
     {
-        _stats[Scope.Turn].Clear();
-        _stats[Scope.PreviousTurn].Clear();
-        _stats[Scope.Combat].Clear();
+        // New dictionaries: the finished combat keeps its stats in its CombatRecord.
+        _stats[Scope.Turn] = new();
+        _stats[Scope.PreviousTurn] = new();
+        _stats[Scope.Combat] = new();
         ResetCombatState();
         InCombat = true;
         foreach (var p in c.Players)
@@ -138,7 +169,7 @@ public sealed class StatsEngine
             FreezeTurn();
             if (_timeline.Count == 0 || _timeline[^1].Round < Round) AddRoundPoint(Round);
             else _timeline[^1] = Point(_timeline[^1].Round);
-            _combats.Add(new CombatRecord(_combatNumber, _combatName, c.Victory, _timeline.ToList()));
+            _combats.Add(new CombatRecord(_combatNumber, _combatName, c.Victory, _timeline.ToList(), _stats[Scope.Combat]));
         }
         InCombat = false;
     }
@@ -148,6 +179,7 @@ public sealed class StatsEngine
         Round = 0;
         _block.Clear();
         _dots.Clear();
+        _fifo.Clear();
         _hadAlternative.Clear();
         _choices.Clear();
     }
@@ -335,6 +367,7 @@ public sealed class StatsEngine
         // Who applied each power's stacks, and from what origin: damage-over-time split, potion powers (Thorns…).
         var applierId = p.Applier.IsPlayerSide ? p.Applier.PlayerId : 0;
         Dot(p.Target.CreatureId, p.PowerId).Apply(applierId, p.Amount, p.Origin);
+        if (p.IsDebuff) Fifo(p.Target.CreatureId, p.PowerId).Apply(applierId, p.Amount);
         if (p.Amount <= 0 || !p.IsDebuff) return;
 
         if (p.Applier.IsPlayerSide && p.Target.IsEnemy)
@@ -343,6 +376,40 @@ public sealed class StatsEngine
             Each(p.Applier.PlayerId, s => PlayerStats.AddPower(s.FriendlyDebuffs, p.PowerId, p.Amount));
         else if (p.Target.IsPlayerSide && p.Target.Kind == ActorKind.Player)
             Each(p.Target.PlayerId, s => PlayerStats.AddPower(s.DebuffsReceived, p.PowerId, p.Amount));
+    }
+
+    /// Extra damage (Vulnerable) or damage avoided (Weak, Strength down) credited to whoever is responsible for
+    /// the debuff: the applier of the current turn (FIFO) or every applier by stacks (spec §B2).
+    private void OnDebuffEffect(DebuffEffect x)
+    {
+        if (x.Amount <= 0 || !x.Beneficiary.IsPlayerSide || x.Beneficiary.PlayerId == 0) return;
+        var shares = new List<(ulong Id, double Share)>();
+        if (x.Fifo)
+        {
+            if (_fifo.TryGetValue((x.Holder.CreatureId, x.PowerId), out var fifo) && fifo.Current != 0)
+                shares.Add((fifo.Current, 1));
+        }
+        else
+        {
+            var stacks = _dots.Where(kv => kv.Key.CreatureId == x.Holder.CreatureId && kv.Key.PowerId.StartsWith(x.PowerId))
+                .SelectMany(kv => kv.Value.Shares().Select(s => (s.ApplierId, Stacks: s.Share * kv.Value.Total)))
+                .GroupBy(s => s.ApplierId).Select(g => (Id: g.Key, Stacks: g.Sum(s => s.Stacks))).ToList();
+            var total = stacks.Sum(s => s.Stacks);
+            if (total > 0) shares.AddRange(stacks.Where(s => s.Id != 0).Select(s => (s.Id, s.Stacks / total)));
+        }
+        var beneficiary = x.Beneficiary.PlayerId;
+        foreach (var (id, share) in shares)
+        {
+            var amount = x.Amount * share;
+            Each(id, s =>
+            {
+                if (x.Offense && id == beneficiary) s.DamageEnabledSelf += amount;
+                else if (x.Offense) s.DamageEnabledAllies += amount;
+                else if (id == beneficiary) s.PreventedByDebuffsSelf += amount;
+                else s.PreventedByDebuffsAllies += amount;
+                PlayerStats.Add(s.DebuffEffectBySource, x.PowerId, amount);
+            });
+        }
     }
 
     private void OnHealed(Healed h)
@@ -376,6 +443,12 @@ public sealed class StatsEngine
     private BlockLedger Ledger(ulong owner)
     {
         if (!_block.TryGetValue(owner, out var l)) _block[owner] = l = new BlockLedger();
+        return l;
+    }
+
+    private FifoLedger Fifo(int creatureId, string powerId)
+    {
+        if (!_fifo.TryGetValue((creatureId, powerId), out var l)) _fifo[(creatureId, powerId)] = l = new FifoLedger();
         return l;
     }
 

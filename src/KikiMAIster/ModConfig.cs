@@ -20,6 +20,10 @@ public sealed class ModConfig
     /// Summary window position; negative = default (top center).
     public float SummaryX { get; set; } = -1;
     public float SummaryY { get; set; } = -1;
+    /// Sections and columns hidden in the settings: "section:<key>" and "col:<section>:<column>".
+    public HashSet<string> Hidden { get; set; } = new();
+    /// Summary chart: per-round values instead of cumulative totals.
+    public bool ChartPerRound { get; set; }
     /// Not saved: every section starts folded when the game starts.
     public List<string> OpenSections { get; set; } = new();
 
@@ -57,6 +61,8 @@ public sealed class ModConfig
                     case "autoSummary": c.AutoSummary = v == "true"; break;
                     case "summaryX": c.SummaryX = float.Parse(v, CultureInfo.InvariantCulture); break;
                     case "summaryY": c.SummaryY = float.Parse(v, CultureInfo.InvariantCulture); break;
+                    case "hidden": c.Hidden = v.Split(',', StringSplitOptions.RemoveEmptyEntries).ToHashSet(); break;
+                    case "chartPerRound": c.ChartPerRound = v == "true"; break;
                 }
             }
         }
@@ -81,7 +87,8 @@ public sealed class ModConfig
                 $"x={X.ToString(ci)}", $"y={Y.ToString(ci)}", $"visible={(Visible ? "true" : "false")}",
                 $"scope={Scope}", $"opacity={Opacity.ToString(ci)}", $"scale={Scale.ToString(ci)}",
                 $"language={Language}", $"autoSummary={(AutoSummary ? "true" : "false")}",
-                $"summaryX={SummaryX.ToString(CultureInfo.InvariantCulture)}", $"summaryY={SummaryY.ToString(CultureInfo.InvariantCulture)}"
+                $"summaryX={SummaryX.ToString(CultureInfo.InvariantCulture)}", $"summaryY={SummaryY.ToString(CultureInfo.InvariantCulture)}",
+                $"hidden={string.Join(',', Hidden)}", $"chartPerRound={(ChartPerRound ? "true" : "false")}"
             });
         }
         catch (Exception e)

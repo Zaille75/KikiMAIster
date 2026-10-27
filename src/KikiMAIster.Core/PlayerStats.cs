@@ -28,6 +28,16 @@ public sealed class PlayerStats
     public Dictionary<string, PowerTally> DebuffsApplied { get; } = new();
     public double DotDamage { get; set; }
 
+    // B2. Debuff effects (Vulnerable, Weak, Strength down…)
+    /// Extra damage this player's debuffs on enemies let the player themself / their allies deal (Vulnerable).
+    public double DamageEnabledSelf { get; set; }
+    public double DamageEnabledAllies { get; set; }
+    /// Damage enemies did not deal to this player / their allies because of this player's debuffs (Weak, Strength down).
+    public double PreventedByDebuffsSelf { get; set; }
+    public double PreventedByDebuffsAllies { get; set; }
+    /// Per debuff ("VULNERABLE_POWER"…): extra damage enabled + damage prevented.
+    public Dictionary<string, double> DebuffEffectBySource { get; } = new();
+
     // B. Friendly fire
     public Dictionary<string, PowerTally> FriendlyDebuffs { get; } = new();
     public double FriendlyDamage { get; set; }
@@ -52,13 +62,36 @@ public sealed class PlayerStats
     /// HP loss avoided thanks to relics/powers that reduce it (Tungsten Rod, Intangible…), per source.
     public double PreventedByEffects { get; set; }
     public Dictionary<string, double> PreventedByEffectSource { get; } = new();
-    /// Everything that really stopped damage: own block, block given to allies, pet, relics/powers.
-    public double PreventedTotal => PreventedOwnBlock + PreventedForAllies + AbsorbedByPet + PreventedByEffects;
+    /// Everything that really stopped damage: own block, block given to allies, pet, relics/powers, debuffs.
+    public double PreventedTotal => PreventedOwnBlock + PreventedForAllies + AbsorbedByPet + PreventedByEffects +
+                                    PreventedByDebuffsSelf + PreventedByDebuffsAllies;
+    /// Damage stopped by block (own block + block given to allies).
+    public double PreventedByBlock => PreventedOwnBlock + PreventedForAllies;
+    /// Block that stopped nothing, wasted or useless (v0.9.0: one "useless" column; wasted is a missed opportunity).
+    public double UnusedBlock => WastedBlock + UselessBlock;
     public double PetDeaths { get; set; }
     /// HP given to pets (summon, max HP gain, heal): what the pet could then absorb.
     public double PetHpGiven { get; set; }
     public double HealingSelf { get; set; }
     public double HealingAllies { get; set; }
+
+    // E. Missed opportunities
+    public double MissedLethals { get; set; }
+    public List<MissedLethalTurn> MissedLethalTurns { get; } = new();
+    public double WeakAttacks { get; set; }
+    public List<WeakAttackPlay> WeakAttackPlays { get; } = new();
+
+    // Co-op
+    /// HP this player saved for allies: block given that absorbed damage + their debuffs' prevented damage + healing.
+    public double SavedForAllies => PreventedForAllies + PreventedByDebuffsAllies + HealingAllies;
+    public double Deaths { get; set; }
+
+    // Other
+    public double CardsDrawn { get; set; }
+    public double CardsPlayed { get; set; }
+    public double CardsExhausted { get; set; }
+    public double CardsDiscarded { get; set; }
+    public double PotionsUsed { get; set; }
 
     // D. Damage taken
     public double HpLostFromEnemies { get; set; }

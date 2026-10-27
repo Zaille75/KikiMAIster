@@ -1,10 +1,14 @@
 using System.Runtime.CompilerServices;
 using KikiMAIster.Core;
+using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Powers;
+using MegaCrit.Sts2.Core.Hooks;
+using MegaCrit.Sts2.Core.Localization.DynamicVars;
+using MegaCrit.Sts2.Core.ValueProps;
 using MegaCrit.Sts2.Core.MonsterMoves.Intents;
 
 namespace KikiMAIster.Patches;
@@ -14,6 +18,8 @@ namespace KikiMAIster.Patches;
 /// was never played, and could be paid with the
 /// block card's energy + the energy left at the end of the turn (spec 01-metrics §F, wasted vs useless).
 /// A block card that also did something else (debuff, damage, draw…) or is Ethereal never counts as wasted.
+/// Also finds the other missed opportunities of the turn (spec 01-metrics §E): a lethal front hand that was not
+/// played, and a weak attack played while a stronger one stayed in hand.
 public static class BlockAlternatives
 {
     private sealed class Play
@@ -28,17 +34,22 @@ public static class BlockAlternatives
         /// An effect other than block or damage (debuff, draw, upgrade…): an attack played for it was a real choice.
         public bool HadNonDamageEffect { get; set; }
         public required bool Ethereal { get; init; }
+        /// Attack played: a stronger attack in hand on the same target (same cost or cheaper), with both damages.
+        public (CardModel Card, int Damage, int Played)? Stronger { get; set; }
     }
 
     private static readonly ConditionalWeakTable<CardPlay, Play> Plays = new();
     private static readonly List<Play> ThisTurn = new();
     private static readonly Stack<Play?> InProgress = new();
     private static int _nextId;
+    /// Players whose front hand was already checked this turn, and the lethal combination found (if any).
+    private static readonly Dictionary<Player, Lethal.Attack[]?> FrontHand = new();
 
     public static void Reset()
     {
         ThisTurn.Clear();
         InProgress.Clear();
+        FrontHand.Clear();
     }
 
     /// Something other than block happened (power applied, damage, heal, draw, orb, card created…):
@@ -71,6 +82,10 @@ public static class BlockAlternatives
             InProgress.Push(null);
             return;
         }
+        // Not checked at turn start: the hand before this first card is still the front hand.
+        if (!FrontHand.ContainsKey(cardPlay.Player))
+            FrontHand[cardPlay.Player] = FindLethal(cardPlay.Player, hand.Append(cardPlay.Card).Distinct().ToList(),
+                (cardPlay.Player.PlayerCombatState?.Energy ?? 0) + cardPlay.Resources.EnergySpent);
         var play = new Play
         {
             Id = ++_nextId,
@@ -80,6 +95,8 @@ public static class BlockAlternatives
             Ethereal = cardPlay.Card.Keywords.Contains(CardKeyword.Ethereal),
             UsefulCardsInHand = hand.Where(c => c != cardPlay.Card && IsUseful(c)).ToList()
         };
+        if (cardPlay.Card.Type == CardType.Attack && cardPlay.Target is { IsEnemy: true } target)
+            play.Stronger = StrongerAttack(cardPlay.Card, target, hand);
         Plays.AddOrUpdate(cardPlay, play);
         ThisTurn.Add(play);
         InProgress.Push(play);
@@ -93,9 +110,16 @@ public static class BlockAlternatives
         return play.Id;
     }
 
-    /// End of the players' turn: each attack can be the alternative of only one block card.
-    public static void ResolveTurn()
+    /// The player's hand is drawn: check the front hand for a lethal combination.
+    public static void OnTurnStarted(Player player)
     {
+        if (player.PlayerCombatState is { } st) FrontHand[player] = FindLethal(player, st.Hand.Cards.ToList(), st.Energy);
+    }
+
+    /// End of the players' turn: each attack can be the alternative of only one block card.
+    public static void ResolveTurn(ICombatState combat)
+    {
+        ResolveMissedChances(combat);
         var used = new HashSet<CardModel>();
         foreach (var play in ThisTurn.Where(p => p.GaveBlock))
         {
@@ -115,6 +139,103 @@ public static class BlockAlternatives
                 alternative == null || state == null ? null : Explain(play, alternative, state)));
         }
         ThisTurn.Clear();
+    }
+
+    /// Missed lethal (front hand could kill every enemy, yet they are alive at the end of the turn) and weak attacks
+    /// (the stronger attack is still in hand at the end of the turn, and the weak one did nothing else).
+    private static void ResolveMissedChances(ICombatState combat)
+    {
+        var enemies = combat.HittableEnemies;
+        if (enemies.Count > 0)
+            foreach (var (player, lethal) in FrontHand)
+                if (lethal != null)
+                {
+                    ModLog.Info($"missed lethal: {player.NetId} [{string.Join(", ", lethal.Select(a => a.Id))}]");
+                    Capture.Emit(new MissedLethal(Capture.ToActor(player), lethal.Select(a => a.Id).ToList(),
+                        enemies.Sum(e => e.CurrentHp + e.Block)));
+                }
+        FrontHand.Clear();
+
+        foreach (var play in ThisTurn)
+        {
+            if (play.Stronger is not { } better || play.HadNonDamageEffect) continue;
+            if (play.Owner.PlayerCombatState?.Hand.Cards.Contains(better.Card) != true) continue;
+            Capture.Emit(new WeakAttack(Capture.ToActor(play.Owner), $"Card:{Capture.IdOf(play.Card)}", better.Played,
+                $"Card:{Capture.IdOf(better.Card)}", better.Damage));
+        }
+    }
+
+    /// The front hand's lethal combination, if the attacks in hand could kill every enemy that must die.
+    private static Lethal.Attack[]? FindLethal(Player player, List<CardModel> hand, int energy)
+    {
+        try
+        {
+            var all = player.Creature.CombatState?.HittableEnemies ?? Array.Empty<Creature>();
+            var enemies = all.Where(e => !e.IsSecondaryEnemy).ToList();
+            if (enemies.Count == 0) enemies = all.ToList();
+            if (enemies.Count == 0) return null;
+            var attacks = hand.Where(c => c.Type == CardType.Attack && !c.EnergyCost.CostsX && PlayableExceptEnergy(c) &&
+                                          c.TargetType is TargetType.AnyEnemy or TargetType.AllEnemies)
+                .Select(c => new Lethal.Attack($"Card:{Capture.IdOf(c)}", Cost(c), c.TargetType == TargetType.AllEnemies,
+                    enemies.Select(e => EstimateDamage(c, e)).ToList()))
+                .ToList();
+            var found = Lethal.Find(attacks, energy, enemies.Select(e => e.CurrentHp + e.Block).ToList());
+            return found?.ToArray();
+        }
+        catch (Exception e)
+        {
+            ModLog.Error("lethal check", e);
+            return null;
+        }
+    }
+
+    /// The strongest attack in hand on the same target, if it beats the attack played, costs no more, and the
+    /// played attack could not kill the target anyway.
+    private static (CardModel, int, int)? StrongerAttack(CardModel played, Creature target, IEnumerable<CardModel> hand)
+    {
+        try
+        {
+            var damage = EstimateDamage(played, target);
+            if (damage <= 0 || damage >= target.CurrentHp + target.Block) return null;
+            var cost = Cost(played);
+            var best = hand.Where(c => c != played && c.Type == CardType.Attack && !c.EnergyCost.CostsX && Cost(c) <= cost &&
+                                       c.TargetType is TargetType.AnyEnemy or TargetType.AllEnemies && PlayableExceptEnergy(c))
+                .Select(c => (Card: c, Damage: EstimateDamage(c, target)))
+                .Where(x => x.Damage > damage).OrderByDescending(x => x.Damage).FirstOrDefault();
+            return best.Card == null ? null : (best.Card, best.Damage, damage);
+        }
+        catch (Exception e)
+        {
+            ModLog.Error("stronger attack", e);
+            return null;
+        }
+    }
+
+    /// The game's own damage computation for a card against one enemy (Strength, Vulnerable, Weak…) × its hits.
+    /// 0 for cards whose damage is computed in another way (they are left out: the result stays a minimum).
+    private static int EstimateDamage(CardModel card, Creature target)
+    {
+        var owner = card.Owner;
+        Creature? dealer;
+        DynamicVar? v;
+        if (card.DynamicVars.TryGetValue("Damage", out v)) dealer = owner.Creature;
+        else if (card.DynamicVars.TryGetValue("OstyDamage", out v)) dealer = owner.IsOstyAlive ? owner.Osty : null;
+        else return 0;
+        if (dealer == null) return 0;
+        var props = v switch { DamageVar dv => dv.Props, OstyDamageVar ov => ov.Props, _ => ValueProp.Move };
+        decimal damage;
+        DebuffEffectPatches.Computing = true;
+        try
+        {
+            damage = Hook.ModifyDamage(owner.RunState, card.CombatState, target, dealer, v.BaseValue, props, card, null,
+                ModifyDamageHookType.All, CardPreviewMode.None, out _);
+        }
+        finally
+        {
+            DebuffEffectPatches.Computing = false;
+        }
+        var hits = card.DynamicVars.TryGetValue("Repeat", out var repeat) ? Math.Max(1, repeat.IntValue) : 1;
+        return Math.Max(0, (int)damage) * hits;
     }
 
     /// Attacks, and skills/powers that give no block (debuffs, draw, buffs…). Status, curses and other block

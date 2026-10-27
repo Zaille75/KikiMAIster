@@ -9,14 +9,14 @@ namespace KikiMAIster.UI;
 /// Opens by itself when a combat ends; the overlay's "Summary" button opens it at any time.
 public static class CombatSummary
 {
-    private sealed record Metric(string Key, Func<RoundTotals, double> Value);
+    private sealed record Metric(string Key, Func<RoundTotals, double> Value, bool CoopOnly = false);
 
     private static readonly Metric[] Metrics =
     {
         new("summary.damage", t => t.Damage),
-        new("summary.prevented", t => t.Prevented),
         new("summary.hpLost", t => t.HpLost),
         new("summary.debuffs", t => t.DebuffStacks),
+        new("summary.saved", t => t.Saved, CoopOnly: true),
     };
 
     private const float ChartWidth = 420, ChartHeight = 200, AxisLeft = 40, AxisBottom = 20;
@@ -69,6 +69,7 @@ public static class CombatSummary
             _autoShown = true;
             return;
         }
+        KeepClear();
         if (_panel is not { Visible: true } || Selected() is not { } selected) return;
         if (_rebuildPending || (selected.InProgress && Signature(selected) != _liveSignature))
         {
@@ -109,7 +110,7 @@ public static class CombatSummary
 
     private static string Signature(CombatRecord c) =>
         $"{c.Number}:{c.LastRound}:" + string.Join(',', c.Rounds[^1].Players.Select(kv =>
-            $"{kv.Value.Damage:F0}/{kv.Value.Prevented:F0}/{kv.Value.HpLost:F0}/{kv.Value.DebuffStacks:F0}"));
+            $"{kv.Value.Damage:F0}/{kv.Value.Prevented:F0}/{kv.Value.HpLost:F0}/{kv.Value.DebuffStacks:F0}/{kv.Value.Saved:F0}"));
 
     private static void Show()
     {
@@ -122,6 +123,7 @@ public static class CombatSummary
         var x = Cfg.SummaryX >= 0 ? Cfg.SummaryX : (screen.X - ChartWidth - 40) / 2;
         var y = Cfg.SummaryY >= 0 ? Cfg.SummaryY : 70;
         _panel.Position = new Vector2(Math.Clamp(x, 0, Math.Max(0, screen.X - ChartWidth - 40)), Math.Clamp(y, 0, Math.Max(0, screen.Y - 120)));
+        _panel.CallDeferred(Control.MethodName.ResetSize);
     }
 
     private static bool _dragging;
@@ -177,14 +179,19 @@ public static class CombatSummary
             _rebuildPending = true;
         });
         header.AddChild(picker);
+        var trophies = Overlay.MakeButton(Loc.T("run.button"));
+        trophies.TooltipText = Loc.T("run.buttonTip");
+        trophies.Pressed += () => Capture.Safe("CombatSummary.Trophies", RunSummary.Toggle);
+        header.AddChild(trophies);
         var close = Overlay.MakeButton("✕");
         close.Pressed += () => Capture.Safe("CombatSummary.Close", () => _panel!.Visible = false);
         header.AddChild(close);
         _content.AddChild(header);
 
-        // Stat selector.
+        // Stat selector, then cumulative / per round.
+        var coop = Players(combat).Count > 1;
         var tabs = new HBoxContainer();
-        foreach (var m in Metrics)
+        foreach (var m in Metrics.Where(m => coop || !m.CoopOnly))
         {
             var b = Overlay.MakeButton(Loc.T(m.Key));
             b.AddThemeColorOverride("font_color", m.Key == _metric ? Overlay.Accent : Overlay.Muted);
@@ -196,11 +203,28 @@ public static class CombatSummary
             });
             tabs.AddChild(b);
         }
+        tabs.AddChild(new Control { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill });
+        var mode = Overlay.MakeButton(Loc.T(Cfg.ChartPerRound ? "summary.perRound" : "summary.cumulative"));
+        mode.AddThemeColorOverride("font_color", Overlay.Accent);
+        mode.TooltipText = Loc.T("summary.modeTip");
+        mode.Pressed += () => Capture.Safe("CombatSummary.Mode", () =>
+        {
+            Cfg.ChartPerRound = !Cfg.ChartPerRound;
+            Cfg.Save();
+            Rebuild(combat);
+        });
+        tabs.AddChild(mode);
         _content.AddChild(tabs);
 
-        var metric = Metrics.First(m => m.Key == _metric);
-        _content.AddChild(BuildChart(combat, metric));
-        _content.AddChild(BuildLegend(combat, metric));
+        var metric = Metrics.FirstOrDefault(m => m.Key == _metric && (coop || !m.CoopOnly)) ?? Metrics[0];
+        var body = new HBoxContainer();
+        body.AddThemeConstantOverride("separation", 14);
+        var left = new VBoxContainer { MouseFilter = Control.MouseFilterEnum.Pass };
+        left.AddChild(BuildChart(combat, metric));
+        left.AddChild(BuildLegend(combat, metric));
+        body.AddChild(left);
+        if (coop) body.AddChild(BuildCoopSummary(combat));
+        _content.AddChild(body);
 
         var auto = new CheckBox { Text = Loc.T("summary.auto"), ButtonPressed = Cfg.AutoSummary, FocusMode = Control.FocusModeEnum.None };
         auto.AddThemeFontSizeOverride("font_size", Overlay.FontSize);
@@ -215,7 +239,7 @@ public static class CombatSummary
     }
 
     /// "Combat 4 · Jaw Worm · Victory · 5 rounds" or "▶ Combat 5 · Cultist · in progress (round 2)".
-    private static string Label(CombatRecord c)
+    internal static string Label(CombatRecord c)
     {
         var name = c.Name == "" ? "" : $" · {c.Name}";
         return c.InProgress
@@ -233,7 +257,8 @@ public static class CombatSummary
         var plotW = ChartWidth - AxisLeft - 10;
         var plotH = ChartHeight - AxisBottom - 8;
         var lastRound = Math.Max(1, combat.LastRound);
-        var max = NiceMax(combat.Rounds.SelectMany(r => r.Players.Values).Select(metric.Value).DefaultIfEmpty(0).Max());
+        var points = Points(combat, metric);
+        var max = NiceMax(points.SelectMany(p => p.Values.Values).DefaultIfEmpty(0).Max());
 
         float X(int round) => AxisLeft + plotW * round / lastRound;
         float Y(double v) => 8 + plotH * (float)(1 - v / max);
@@ -267,20 +292,89 @@ public static class CombatSummary
         foreach (var (id, color) in PlayerColors(combat))
         {
             var line = new Line2D { Width = 2, DefaultColor = color, Antialiased = true };
-            foreach (var point in combat.Rounds)
+            foreach (var (round, values) in points)
             {
-                if (!point.Players.TryGetValue(id, out var totals)) continue;
-                var p = new Vector2(X(point.Round), Y(metric.Value(totals)));
+                if (!values.TryGetValue(id, out var value)) continue;
+                var p = new Vector2(X(round), Y(value));
                 line.AddPoint(p);
                 chart.AddChild(new ColorRect
                 {
                     Color = color, Position = p - new Vector2(2.5f, 2.5f), Size = new Vector2(5, 5),
-                    TooltipText = $"{Loc.T("summary.round")} {point.Round}: {Overlay.N(metric.Value(totals))}"
+                    TooltipText = $"{Loc.T("summary.round")} {round}: {Overlay.N(value)}"
                 });
             }
             chart.AddChild(line);
         }
         return chart;
+    }
+
+    /// Each round's value per player: the cumulative total, or (per round) what was added during that round.
+    private static List<(int Round, Dictionary<ulong, double> Values)> Points(CombatRecord combat, Metric metric)
+    {
+        var result = new List<(int, Dictionary<ulong, double>)>();
+        RoundPoint? previous = null;
+        foreach (var point in combat.Rounds)
+        {
+            var values = point.Players.ToDictionary(kv => kv.Key, kv =>
+            {
+                var v = metric.Value(kv.Value);
+                if (!Cfg.ChartPerRound) return v;
+                return previous != null && previous.Players.TryGetValue(kv.Key, out var before) ? v - metric.Value(before) : v;
+            });
+            if (!Cfg.ChartPerRound || point.Round > 0) result.Add((point.Round, values));
+            previous = point;
+        }
+        return result;
+    }
+
+    /// Co-op summary of the combat, next to the chart: what each player did for the others (best first).
+    private static Control BuildCoopSummary(CombatRecord combat)
+    {
+        var box = new VBoxContainer { MouseFilter = Control.MouseFilterEnum.Pass };
+        box.AddChild(Overlay.MakeLabel(Loc.T("section.coop"), Overlay.Accent));
+        var columns = new (string Key, Func<PlayerStats, double> Value)[]
+        {
+            ("col.blockGiven", s => s.BlockGivenToAllies), ("col.saved", s => s.SavedForAllies),
+            ("col.enabled", s => s.DamageEnabledAllies), ("col.friendly", s => s.FriendlyDamage), ("col.deaths", s => s.Deaths),
+        };
+        var grid = new GridContainer { Columns = columns.Length + 1, MouseFilter = Control.MouseFilterEnum.Pass };
+        grid.AddThemeConstantOverride("h_separation", 10);
+        grid.AddChild(Overlay.MakeLabel("", Overlay.Muted));
+        foreach (var (key, _) in columns)
+        {
+            var l = Overlay.MakeLabel(Loc.T(key), Overlay.Muted, HorizontalAlignment.Right);
+            if (Loc.Has($"tip.{key}"))
+            {
+                l.TooltipText = Loc.T($"tip.{key}");
+                l.MouseFilter = Control.MouseFilterEnum.Stop;
+            }
+            grid.AddChild(l);
+        }
+        foreach (var (id, s) in combat.Stats.OrderByDescending(kv => kv.Value.SavedForAllies + kv.Value.DamageEnabledAllies).ThenBy(kv => kv.Key))
+        {
+            var name = Capture.Engine.Players.GetValueOrDefault(id)?.Name ?? id.ToString(CultureInfo.InvariantCulture);
+            var n = Overlay.MakeLabel(name, Overlay.PlayerColor(id));
+            n.ClipText = true;
+            n.CustomMinimumSize = new Vector2(80, 0);
+            grid.AddChild(n);
+            foreach (var (_, value) in columns) grid.AddChild(Overlay.MakeLabel(Overlay.N(value(s)), Overlay.Text, HorizontalAlignment.Right));
+        }
+        box.AddChild(grid);
+        return box;
+    }
+
+    /// Moves the window out of the overlay panel's way (the panel grows when sections open). Not saved.
+    private static void KeepClear()
+    {
+        if (_panel is not { Visible: true } || _dragging || Overlay.PanelRect is not { } overlay) return;
+        var size = _panel.Size;
+        var rect = new Rect2(_panel.Position, size);
+        if (!rect.Intersects(overlay)) return;
+        var screen = _panel.GetViewportRect().Size;
+        var y = Math.Clamp(_panel.Position.Y, 0, Math.Max(0, screen.Y - size.Y));
+        if (overlay.End.X + 10 + size.X <= screen.X) _panel.Position = new Vector2(overlay.End.X + 10, y);
+        else if (overlay.Position.X - 10 - size.X >= 0) _panel.Position = new Vector2(overlay.Position.X - 10 - size.X, y);
+        else _panel.Position = new Vector2(_panel.Position.X, Math.Min(screen.Y - size.Y, overlay.End.Y + 10));
     }
 
     private static Control BuildLegend(CombatRecord combat, Metric metric)
@@ -293,24 +387,14 @@ public static class CombatSummary
             var name = Capture.Engine.Players.GetValueOrDefault(id)?.Name ?? id.ToString(CultureInfo.InvariantCulture);
             var total = last != null && last.Players.TryGetValue(id, out var t) ? metric.Value(t) : 0;
             legend.AddChild(Overlay.MakeLabel($"■ {name}: {Overlay.N(total)}", color));
+            legend.MouseFilter = Control.MouseFilterEnum.Pass;
         }
         return legend;
     }
 
-    /// Character colors; a second player with the same character gets a lighter shade.
-    private static List<(ulong Id, Color Color)> PlayerColors(CombatRecord combat)
-    {
-        var used = new Dictionary<string, int>();
-        var result = new List<(ulong, Color)>();
-        foreach (var id in Players(combat))
-        {
-            var character = Capture.Engine.Players.GetValueOrDefault(id)?.Character ?? "";
-            var n = used.GetValueOrDefault(character);
-            used[character] = n + 1;
-            result.Add((id, Overlay.CharacterColor(character).Lightened(0.3f * n)));
-        }
-        return result;
-    }
+    /// Character colors; a second player with the same character gets a lighter shade (as in the panel).
+    private static List<(ulong Id, Color Color)> PlayerColors(CombatRecord combat) =>
+        Players(combat).Select(id => (id, Overlay.PlayerColor(id))).ToList();
 
     /// Rounds the axis maximum up to 1, 2 or 5 × 10^k (never 0).
     private static double NiceMax(double v)

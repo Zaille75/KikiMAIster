@@ -24,6 +24,11 @@ public static class Summary
             ModLog.Info($"  Taken: hpLost={F(s.HpLost)} (enemies={F(s.HpLostFromEnemies)} allies={F(s.HpLostFromAllies)} " +
                         $"self={F(s.HpLostFromSelf)} other={F(s.HpLostOther)}) blocked={F(s.DamageBlocked)} debuffs={Powers(s.DebuffsReceived)}");
             ModLog.Info($"  Friendly fire: damage={F(s.FriendlyDamage)} self={F(s.SelfDamage)} debuffs={Powers(s.FriendlyDebuffs)}");
+            ModLog.Info($"  Debuff effects: enabledSelf={F(s.DamageEnabledSelf)} enabledAllies={F(s.DamageEnabledAllies)} " +
+                        $"preventedSelf={F(s.PreventedByDebuffsSelf)} preventedAllies={F(s.PreventedByDebuffsAllies)} ({Map(s.DebuffEffectBySource)})");
+            ModLog.Info($"  Missed: lethal={F(s.MissedLethals)} weakAttacks={F(s.WeakAttacks)} wasted={F(s.WastedBlock)}");
+            ModLog.Info($"  Other: drawn={F(s.CardsDrawn)} played={F(s.CardsPlayed)} exhausted={F(s.CardsExhausted)} " +
+                        $"discarded={F(s.CardsDiscarded)} potions={F(s.PotionsUsed)} deaths={F(s.Deaths)}");
         }
         if (engine.UnattributedBlock > 0) ModLog.Info($"  (unattributed block: {F(engine.UnattributedBlock)})");
     }

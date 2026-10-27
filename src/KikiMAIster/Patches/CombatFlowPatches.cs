@@ -6,6 +6,7 @@ using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
+using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Runs;
@@ -114,10 +115,17 @@ public static class CombatFlowPatches
     [HarmonyPatch(typeof(Hook), nameof(Hook.BeforeSideTurnEnd))]
     public static class TurnEnd
     {
-        public static void Prefix(CombatSide side) => Capture.Safe("BeforeSideTurnEnd", () =>
+        public static void Prefix(ICombatState combatState, CombatSide side) => Capture.Safe("BeforeSideTurnEnd", () =>
         {
-            if (side == CombatSide.Player) BlockAlternatives.ResolveTurn();
+            if (side == CombatSide.Player) BlockAlternatives.ResolveTurn(combatState);
         });
+    }
+
+    /// Hand drawn: the front hand of the turn (missed lethal check).
+    [HarmonyPatch(typeof(Hook), nameof(Hook.AfterPlayerTurnStart))]
+    public static class PlayerTurnStart
+    {
+        public static void Prefix(Player player) => Capture.Safe("AfterPlayerTurnStart", () => BlockAlternatives.OnTurnStarted(player));
     }
 
     /// Called for every creature starting its turn, after the game cleared (or kept) its block.
@@ -128,6 +136,27 @@ public static class CombatFlowPatches
         {
             var actor = Capture.ToActor(creature);
             if (actor.Kind == ActorKind.Player) Capture.Emit(new BlockObserved(actor, creature.Block));
+        });
+    }
+
+    /// A player died (removal not prevented by a revive effect).
+    [HarmonyPatch(typeof(Hook), nameof(Hook.AfterDeath))]
+    public static class Death
+    {
+        public static void Prefix(Creature creature, bool wasRemovalPrevented) => Capture.Safe("AfterDeath", () =>
+        {
+            if (!wasRemovalPrevented && creature.IsPlayer) Capture.Emit(new PlayerDied(Capture.ToActor(creature)));
+        });
+    }
+
+    /// Victory or defeat: the end-of-run summary (trophies, records).
+    [HarmonyPatch(typeof(RunManager), nameof(RunManager.OnEnded))]
+    public static class RunOver
+    {
+        public static void Prefix(bool isVictory) => Capture.Safe("RunManager.OnEnded", () =>
+        {
+            Capture.Emit(new RunEnded(isVictory));
+            KikiMAIster.UI.RunSummary.OnRunEnded(isVictory);
         });
     }
 
@@ -152,6 +181,7 @@ public static class CombatFlowPatches
             Capture.Safe("CardPlayStarted", () =>
             {
                 Capture.CardPlayers.Push(cardPlay.Card.Owner);
+                Capture.Emit(new CardEvent(Capture.ToActor(cardPlay.Card.Owner), CardAction.Played));
                 BlockAlternatives.OnPlayStarted(cardPlay);
             });
     }
@@ -170,19 +200,31 @@ public static class CombatFlowPatches
     [HarmonyPatch(typeof(Hook), nameof(Hook.AfterCardDrawn))]
     public static class CardDrawn
     {
-        public static void Prefix() => Capture.Safe("AfterCardDrawn", () => BlockAlternatives.OnEffect());
+        public static void Prefix(CardModel card) => Capture.Safe("AfterCardDrawn", () =>
+        {
+            BlockAlternatives.OnEffect();
+            Capture.Emit(new CardEvent(Capture.ToActor(card.Owner), CardAction.Drawn));
+        });
     }
 
     [HarmonyPatch(typeof(Hook), nameof(Hook.AfterCardDiscarded))]
     public static class CardDiscarded
     {
-        public static void Prefix(CardModel card) => Capture.Safe("AfterCardDiscarded", () => BlockAlternatives.OnCardEffect(card));
+        public static void Prefix(CardModel card) => Capture.Safe("AfterCardDiscarded", () =>
+        {
+            BlockAlternatives.OnCardEffect(card);
+            Capture.Emit(new CardEvent(Capture.ToActor(card.Owner), CardAction.Discarded));
+        });
     }
 
     [HarmonyPatch(typeof(Hook), nameof(Hook.AfterCardExhausted))]
     public static class CardExhausted
     {
-        public static void Prefix(CardModel card) => Capture.Safe("AfterCardExhausted", () => BlockAlternatives.OnCardEffect(card));
+        public static void Prefix(CardModel card) => Capture.Safe("AfterCardExhausted", () =>
+        {
+            BlockAlternatives.OnCardEffect(card);
+            Capture.Emit(new CardEvent(Capture.ToActor(card.Owner), CardAction.Exhausted));
+        });
     }
 
     [HarmonyPatch(typeof(Hook), nameof(Hook.AfterOrbChanneled))]
@@ -224,6 +266,7 @@ public static class CombatFlowPatches
         {
             Capture.PotionUser = potion.Owner;
             Capture.PotionId = $"Potion:{Capture.IdOf(potion)}";
+            Capture.Emit(new PotionUsed(Capture.ToActor(potion.Owner)));
         });
     }
 

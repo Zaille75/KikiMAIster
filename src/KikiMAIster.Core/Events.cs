@@ -95,3 +95,34 @@ public sealed record BlockRemoved(Actor Creature, int Amount, bool SpentByCard) 
 public sealed record PowerChanged(Actor Applier, Actor Target, string PowerId, double Amount, bool IsDebuff, string Origin = "") : StatEvent;
 
 public sealed record Healed(Actor Healer, Actor Target, int Amount) : StatEvent;
+
+/// A debuff changed a damage instance (spec 01-metrics §B2). Holder: the creature carrying the debuff.
+/// Beneficiary: the player (or pet) who dealt more damage (Offense: Vulnerable on an enemy) or took less
+/// (Weak / Strength down on the attacking enemy). Fifo: duration debuff whose current turn belongs to one
+/// applier (Vulnerable, Weak); else the stacks are shared by amount (Strength down: every "<PowerId>…" key).
+public sealed record DebuffEffect(Actor Holder, string PowerId, Actor Beneficiary, double Amount, bool Offense, bool Fifo) : StatEvent;
+
+/// A player could have killed every enemy with the attacks in hand at the start of the turn (front hand),
+/// but the enemies were still alive at the end of it. Cards: "Card:ID" keys of the lethal combination.
+public sealed record MissedLethal(Actor Player, IReadOnlyList<string> Cards, int EnemiesHp) : StatEvent;
+
+/// A player played an attack while a stronger one (same cost or cheaper, same target) stayed in hand unplayed.
+public sealed record WeakAttack(Actor Player, string Played, int PlayedDamage, string Better, int BetterDamage) : StatEvent;
+
+public enum CardAction { Drawn, Played, Exhausted, Discarded }
+
+public sealed record CardEvent(Actor Player, CardAction Action) : StatEvent;
+
+public sealed record PotionUsed(Actor Player) : StatEvent;
+
+/// A player died (in co-op the others keep playing).
+public sealed record PlayerDied(Actor Player) : StatEvent;
+
+/// The run ended (victory or defeat): the end-of-run summary can be shown.
+public sealed record RunEnded(bool Victory) : StatEvent;
+
+/// A missed lethal turn, kept for its explanation (not saved with the run).
+public sealed record MissedLethalTurn(int Round, IReadOnlyList<string> Cards, int EnemiesHp);
+
+/// A weaker attack played while a stronger one stayed in hand (not saved with the run).
+public sealed record WeakAttackPlay(int Round, string Played, int PlayedDamage, string Better, int BetterDamage);
