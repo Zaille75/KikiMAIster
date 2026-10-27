@@ -41,6 +41,8 @@ public static class Overlay
     private static Label? _title;
     private static bool _dragging;
     private static string _lastSignature = "";
+    /// Refreshes left before the panel shrinks back to its content again (wrapped details settle after a frame).
+    private static int _shrinkPending;
     /// Combat scope: how many combats back from the latest one is shown (0 = the latest, live if in progress).
     private static int _combatsBack;
     private static int _combatCount;
@@ -287,6 +289,7 @@ public static class Overlay
         SyncVisibility();
         if (_panel == null || _body == null || !_panel.Visible) return;
         FitOnScreen();
+        if (_shrinkPending > 0 && --_shrinkPending == 0) _panel.ResetSize();
 
         foreach (var (key, b) in ScopeButtons)
         {
@@ -578,7 +581,11 @@ public static class Overlay
         });
         var label = MakeLabel(text, Text);
         label.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        // A wrapping label measures its height at its current width: with no width yet it counts one word per line, and
+        // the panel grew to the whole screen. Give it its width up front (box width minus margins).
+        label.CustomMinimumSize = new Vector2(Math.Max(50, width - 16), 0);
         panel.AddChild(label);
+        _shrinkPending = 2;
         return panel;
     }
 

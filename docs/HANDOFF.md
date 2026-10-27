@@ -1,4 +1,4 @@
-# Handoff — state of the project (2026-10-27, v0.16.6)
+# Handoff — state of the project (2026-10-27, v0.16.7)
 
 Read this first in a new conversation, then `CLAUDE.md`, `docs/specs/01-metrics.md` and `docs/specs/02-ui.md`.
 The conversation of 2026-10-27 turned the 27 feedback points of the first co-op games into v0.8.0 → v0.13.4, then
@@ -75,6 +75,7 @@ wrong-order misses, Waterfall Giant invulnerable phase, fights kept across Save 
 - Use built-in nodes only (no custom scripts). Containers grow but never shrink by themselves: `RemoveChild` the content, then `CallDeferred(ResetSize)`.
 - Don't rebuild an `OptionButton` while its popup is open. Set a flag and rebuild on the next timer tick.
 - Charts use `Line2D` inside a `Control`.
+- A wrapping `Label` (AutowrapMode) needs a `CustomMinimumSize` width, else it measures one word per line and its container grows to the screen height.
 - The overlay is attached lazily (`Overlay.EnsureAttached`), because a deferred call from the mod initializer never ran.
 
 ## To check in game (v0.8.0 → v0.13.4)
