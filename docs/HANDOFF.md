@@ -108,7 +108,7 @@ wrong-order misses, Waterfall Giant invulnerable phase, fights kept across Save 
 - Previous fights are kept across Save & Quit since v0.14.0 (run file `combat.N.*` lines); not the explanations of misses.
 - **Asked Zaille75 (v0.14.0):** the "Agression" feedback. The log showed the only flagged play (Mante Chapardeuse T4: Frappe
   instead of Incendie) with Incendie in hand since the start of the turn (Agression adds it before the draw). Waiting
-  for the exact line he saw. Also: Intouchable only counts victories (his run was a defeat) — keep or change?
+  for the exact line he saw. Intouchable: victories only, hidden after a defeat (validated, v0.14.1).
 - Roadmap leftovers: MVP line in the summary; end-of-run Totals / Per act tabs; JSON export; settings for opacity,
   scale, hotkey; support for the default (non-beta) branch (`lib/default`); publishing (GitHub, Steam Workshop, Nexus).
 - Offered but not requested: keeping the chart history (per-combat timeline) across Save & Quit.

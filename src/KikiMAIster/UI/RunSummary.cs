@@ -161,6 +161,8 @@ public static class RunSummary
         foreach (var c in Trophies.All.OrderBy(c => c.Fun))
         {
             if (c.CoopOnly && run.Count < 2) continue;
+            // A victory-only trophy (Intouchable) is not shown after a defeat.
+            if (ended && c.LowerIsBetter && !_victory) continue;
             var winner = Trophies.Winner(c, run);
             var name = Overlay.MakeLabel(Loc.T(c.Key), c.Fun ? Overlay.Muted : Overlay.Text);
             name.TooltipText = Loc.T($"{c.Key}.tip");
@@ -179,15 +181,12 @@ public static class RunSummary
             }
             var best = book.Best(c.Key);
             var newRecord = update?.NewRecords.Contains(c.Key) == true;
-            // A victory-only trophy after a defeat: the run cannot set a record.
-            var victoryOnly = ended && c.LowerIsBetter && !_victory;
             grid.AddChild(Overlay.MakeLabel(best == null ? "-" : $"{(newRecord ? "★ " : "")}{Overlay.N(best.Value)} ({best.Name}, {best.Date})",
                 newRecord ? Overlay.Accent : Overlay.Muted));
             var personal = winner is { } pw ? book.Personal(c.Key, pw.Id) : null;
             var newPersonal = winner is { } nw && update?.NewPersonal.Contains((c.Key, nw.Id)) == true;
-            grid.AddChild(victoryOnly ? Overlay.MakeLabel(Loc.T("run.victoryOnly"), Overlay.Muted)
-                : Overlay.MakeLabel(personal == null ? "-" : $"{(newPersonal ? "★ " : "")}{Overlay.N(personal.Value)}",
-                    newPersonal ? Overlay.Accent : Overlay.Muted));
+            grid.AddChild(Overlay.MakeLabel(personal == null ? "-" : $"{(newPersonal ? "★ " : "")}{Overlay.N(personal.Value)}",
+                newPersonal ? Overlay.Accent : Overlay.Muted));
             // The best of the winner's character (in solo: the character played); the tooltip lists every character.
             var character = winner is { } cw ? engine.Players.GetValueOrDefault(cw.Id)?.Character ?? "" : "";
             var ofCharacter = character == "" ? null : book.OfCharacter(c.Key, character);
