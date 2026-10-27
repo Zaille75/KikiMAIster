@@ -2,6 +2,7 @@
 
 All-in-one co-op stats mod for Slay the Spire 2. Spec-driven: `docs/specs/` is the source of truth;
 update the spec before changing behavior. Plan: `docs/ROADMAP.md`.
+**Start here in a new conversation: `docs/HANDOFF.md`** (current state, workflow, install command, open topics).
 
 - Zaille75 does not code: Claude writes all code. Zaille75 validates specs and tests in-game on his Windows PC
   (he connects to this Linux box over SSH). Game files are never on this machine except the DLLs in `lib/`.
