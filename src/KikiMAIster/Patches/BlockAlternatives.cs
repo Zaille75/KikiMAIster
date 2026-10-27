@@ -36,6 +36,10 @@ public static class BlockAlternatives
         public bool HadOtherEffect { get; set; }
         /// An effect other than block or damage (debuff, draw, upgrade…): an attack played for it was a real choice.
         public bool HadNonDamageEffect { get; set; }
+        /// Block this play gave (all receivers).
+        public int BlockAmount { get; set; }
+        /// Its only debuff was 1 Weak on enemies that do not attack this turn: it expires having done nothing.
+        public bool IdleWeak { get; set; }
         public required bool Ethereal { get; init; }
         /// Attack played: a stronger attack in hand on the same target (same cost or cheaper), with both damages.
         public (CardModel Card, int Damage, int Played)? Stronger { get; set; }
@@ -69,6 +73,38 @@ public static class BlockAlternatives
         if (!InProgress.TryPeek(out var play) || play == null) return;
         play.HadOtherEffect = true;
         if (!damage) play.HadNonDamageEffect = true;
+    }
+
+    /// A power applied during the play in progress: an effect, except 1 Weak on an enemy that does not attack this turn
+    /// (it wears off before doing anything).
+    public static void OnPowerApplied(PowerModel power, decimal amount)
+    {
+        if (InProgress.TryPeek(out var play) && play != null && power is WeakPower && amount <= 1 && power.Amount <= 1 &&
+            power.Owner.IsEnemy && !Attacks(power.Owner))
+        {
+            play.IdleWeak = true;
+            return;
+        }
+        OnEffect();
+    }
+
+    private static bool Attacks(Creature enemy)
+    {
+        try
+        {
+            return enemy.Monster?.NextMove.Intents.OfType<AttackIntent>().Any() ?? false;
+        }
+        catch (Exception)
+        {
+            return true;
+        }
+    }
+
+    public static void OnBlockGained(int playId, int amount)
+    {
+        if (playId == 0) return;
+        var play = ThisTurn.FirstOrDefault(p => p.Id == playId);
+        if (play != null) play.BlockAmount += amount;
     }
 
     /// Another card discarded or exhausted by the play in progress (Survivor…). The played card itself going to
@@ -214,6 +250,16 @@ public static class BlockAlternatives
         // Unused energy: lost at the end of the turn (not kept by Ice Cream & co., not wanted by Pael's Tears).
         if (energy > 0 && hand.Any(Affordable) && Hook.ShouldPlayerResetEnergy(combat, player) && player.GetRelic<PaelsTears>() == null)
             Capture.Emit(new MissedChance(actor, "energy", new[] { N(energy) }, energy));
+
+        // Pael's Tears gives energy next turn for energy left: spending the last energy on a useless card lost it.
+        if (energy == 0 && player.GetRelic<PaelsTears>() is { } tears)
+        {
+            var incoming = IncomingDamage(player.Creature);
+            var useless = ThisTurn.FirstOrDefault(p => p.Owner == player && p.EnergySpent > 0 && !p.HadOtherEffect &&
+                ((p.GaveBlock && !p.Ethereal && player.Creature.Block - p.BlockAmount >= incoming) || (p.IdleWeak && !p.GaveBlock)));
+            if (useless != null)
+                Capture.Emit(new MissedChance(actor, "paelsTears", new[] { $"Relic:{Capture.IdOf(tears)}", Key(useless.Card) }));
+        }
 
         foreach (var growing in hand.Where(c => c is GeneticAlgorithm or TheScythe && Affordable(c)))
             Capture.Emit(new MissedChance(actor, "growth", new[] { Key(growing) }));

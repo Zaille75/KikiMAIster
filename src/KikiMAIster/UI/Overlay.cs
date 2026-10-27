@@ -626,7 +626,7 @@ public static class Overlay
             new Cell("col.choices", N(s.MissedChoices), tip),
             new Cell("col.unusedEnergy", N(K("energy")), tip),
             new Cell("col.hpAvoidable", N(K("blockKept")), tip),
-            new Cell("col.relicTrigger", N(K("relic")), tip),
+            new Cell("col.relicTrigger", N(K("relic") + K("paelsTears")), tip),
             new Cell("col.potionsLeft", N(K("potion")), tip)
         };
     }

@@ -56,6 +56,7 @@ public static class BlockAndPowerPatches
             PendingGiver.Remove(receiver);
             var giver = call?.Giver != null ? Capture.ToActor(call.Giver) : Capture.ToActor(receiver);
             Capture.Emit(new BlockGained(Capture.ToActor(receiver), giver, amount, call?.Source ?? Source.Unknown, call?.PlayId ?? 0));
+            BlockAlternatives.OnBlockGained(call?.PlayId ?? 0, amount);
         });
     }
 
@@ -78,7 +79,7 @@ public static class BlockAndPowerPatches
     {
         public static void Prefix(PowerModel power, decimal amount, Creature? applier) => Capture.Safe("History.PowerReceived", () =>
         {
-            BlockAlternatives.OnEffect();
+            BlockAlternatives.OnPowerApplied(power, amount);
             var id = Capture.IdOf(power);
             var value = (double)amount;
             var debuff = power.Type == PowerType.Debuff;

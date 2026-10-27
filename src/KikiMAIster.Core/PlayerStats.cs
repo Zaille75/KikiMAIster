@@ -86,7 +86,7 @@ public sealed class PlayerStats
     /// Worse choices: weak attacks + smaller block, Pen Nib on a weak attack, block below Orichalcum, growing card not played.
     public double MissedChoices => WeakAttacks + new[] { "smallBlock", "penNib", "orichalcum", "growth" }.Sum(k => MissedByKind.GetValueOrDefault(k));
     /// Every missed opportunity counted once (trophies).
-    public double MissedTotal => MissedLethals + MissedChoices + MissedByKind.GetValueOrDefault("relic") +
+    public double MissedTotal => MissedLethals + MissedChoices + MissedByKind.GetValueOrDefault("relic") + MissedByKind.GetValueOrDefault("paelsTears") +
                                  MissedByKind.GetValueOrDefault("potion") + (MissedByKind.GetValueOrDefault("blockKept") > 0 ? 1 : 0);
 
     // Co-op
