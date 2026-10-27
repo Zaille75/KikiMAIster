@@ -2,6 +2,8 @@ using System.Globalization;
 using Godot;
 using KikiMAIster.Core;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Multiplayer.Game;
+using MegaCrit.Sts2.Core.Nodes.Screens.CharacterSelect;
 
 namespace KikiMAIster.UI;
 
@@ -19,6 +21,33 @@ public static class CompositionWindow
     /// Which suggestion is shown (changed by "Another").
     private static int _neverPlayedPick, _neverWonPick;
     private static readonly Random Rng = new();
+    /// The character-select screen while it is open (set by UiPatches).
+    public static WeakReference<NCharacterSelectScreen>? Lobby;
+    private static string _contextSignature = "";
+
+    /// Where the player is: Solo true/false (null = unknown: main menu…), players, ascension, and the group's
+    /// characters ("" when not all chosen). From the run being played, else from the character-select lobby.
+    private sealed record Context(bool? Solo, int Players, int? Ascension, string Group);
+
+    private static Context Current()
+    {
+        if (Overlay.InRun)
+        {
+            var count = Patches.CombatFlowPatches.PlayerCount;
+            var players = Capture.Engine.Players.Values.ToList();
+            var group = players.Count == count ? Compositions.KeyOf(players.Select(p => p.Character)) : "";
+            return new Context(count == 1, count, Patches.CombatFlowPatches.Ascension, group);
+        }
+        if (Lobby != null && Lobby.TryGetTarget(out var screen) && GodotObject.IsInstanceValid(screen) && screen.Lobby is { } lobby)
+        {
+            var solo = lobby.NetService.Type == NetGameType.Singleplayer;
+            var known = Characters();
+            var chars = lobby.Players.Select(p => p.character?.Id.Entry ?? "").ToList();
+            var group = chars.Count > 0 && chars.All(known.Contains) ? Compositions.KeyOf(chars) : "";
+            return new Context(solo, solo ? 1 : Math.Max(2, lobby.Players.Count), lobby.Ascension, group);
+        }
+        return new Context(null, 0, null, "");
+    }
 
     public static void Attach(CanvasLayer layer)
     {
@@ -32,7 +61,18 @@ public static class CompositionWindow
         var timer = new Godot.Timer { WaitTime = 0.2, Autostart = true };
         timer.Timeout += () => Capture.Safe("CompositionWindow.Tick", () =>
         {
-            if (!_rebuildPending || _panel is not { Visible: true }) return;
+            if (_panel is not { Visible: true }) return;
+            // The lobby changed (a player joined, a character or the ascension was chosen): follow it.
+            var context = Current();
+            var signature = Signature(context);
+            if (signature != _contextSignature)
+            {
+                _contextSignature = signature;
+                if (context.Players > 0) _players = context.Players;
+                if (context.Ascension != null) _ascension = context.Ascension;
+                _rebuildPending = true;
+            }
+            if (!_rebuildPending) return;
             _rebuildPending = false;
             Rebuild();
         });
@@ -47,9 +87,10 @@ public static class CompositionWindow
             _panel.Visible = false;
             return;
         }
-        var current = Overlay.InRun ? Capture.Engine.Players.Count : 0;
-        _players = current > 0 ? current : _players > 0 ? _players : 2;
-        _ascension = current > 0 ? Patches.CombatFlowPatches.Ascension : CompositionStore.Data.MostPlayedAscension();
+        var context = Current();
+        _contextSignature = Signature(context);
+        _players = context.Players > 0 ? context.Players : _players > 0 ? _players : 2;
+        _ascension = context.Ascension ?? CompositionStore.Data.MostPlayedAscension();
         Pick();
         Rebuild();
         _panel.Visible = true;
@@ -89,6 +130,8 @@ public static class CompositionWindow
         _neverPlayedPick = Rng.Next(1000);
         _neverWonPick = Rng.Next(1000);
     }
+
+    private static string Signature(Context c) => $"{c.Solo}|{c.Players}|{c.Ascension}|{c.Group}";
 
     /// "2× La Silencieuse + Le Soldat de Fer".
     internal static string Describe(string key) =>
@@ -133,10 +176,14 @@ public static class CompositionWindow
 
         var count = new HBoxContainer();
         count.AddChild(Overlay.MakeLabel(Loc.T("compo.players"), Overlay.Text));
+        var context = Current();
         foreach (var n in new[] { 1, 2, 3, 4 })
         {
             var b = Overlay.MakeButton(n.ToString(CultureInfo.InvariantCulture));
             b.AddThemeColorOverride("font_color", n == _players ? Overlay.Accent : Overlay.Muted);
+            // Solo: only 1 player; co-op: 2 or more (greyed out otherwise).
+            b.Disabled = context.Solo == true ? n != 1 : context.Solo == false && n == 1;
+            b.AddThemeColorOverride("font_disabled_color", new Color(Overlay.Muted, 0.35f));
             b.Pressed += () => Capture.Safe("CompositionWindow.Players", () =>
             {
                 _players = n;
@@ -167,7 +214,11 @@ public static class CompositionWindow
         }
         _content.AddChild(levels);
 
-        if (Overlay.InRun && CurrentLine() is { Length: > 0 } current) _content.AddChild(Overlay.MakeLabel(current, Overlay.Text));
+        // The group being played or being chosen in the lobby, at its ascension level.
+        if (context.Group != "")
+            _content.AddChild(Overlay.MakeLabel($"{Loc.T("compo.group")} {Describe(context.Group)} · " +
+                (context.Ascension is { } a ? string.Format(Loc.T("compo.at"), a) : "") + Stats(CompositionStore.Data.Get(context.Group, context.Ascension)),
+                Overlay.Text));
 
         // Played compositions, most played first.
         var compositions = data.Played(_players, _ascension).ToList();

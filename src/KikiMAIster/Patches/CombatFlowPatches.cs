@@ -25,6 +25,8 @@ public static class CombatFlowPatches
 
     /// The ascension level of the run being played (group compositions are counted per level).
     public static int Ascension { get; private set; }
+    /// The number of players of the run being played.
+    public static int PlayerCount { get; private set; }
 
     /// Ends the combat once, whether it was won (AfterCombatEnd) or lost (LoseCombat).
     private static void EndCombat(bool victory)
@@ -55,6 +57,7 @@ public static class CombatFlowPatches
     {
         _floor = runState.TotalFloor;
         Ascension = runState.AscensionLevel;
+        PlayerCount = runState.Players.Count;
         if (_currentRun != null && _currentRun.TryGetTarget(out var run) && ReferenceEquals(run, runState)) return;
         _currentRun = new WeakReference<IRunState>(runState);
         _runKey = null;
