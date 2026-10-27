@@ -2,6 +2,8 @@ using HarmonyLib;
 using KikiMAIster.Core;
 using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Combat.History;
+using MegaCrit.Sts2.Core.Commands;
+using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Hooks;
@@ -168,7 +170,7 @@ public static class CombatFlowPatches
     [HarmonyPatch(typeof(Hook), nameof(Hook.AfterCardDrawn))]
     public static class CardDrawn
     {
-        public static void Prefix() => Capture.Safe("AfterCardDrawn", BlockAlternatives.OnEffect);
+        public static void Prefix() => Capture.Safe("AfterCardDrawn", () => BlockAlternatives.OnEffect());
     }
 
     [HarmonyPatch(typeof(Hook), nameof(Hook.AfterCardDiscarded))]
@@ -186,19 +188,43 @@ public static class CombatFlowPatches
     [HarmonyPatch(typeof(Hook), nameof(Hook.AfterOrbChanneled))]
     public static class OrbChanneled
     {
-        public static void Prefix() => Capture.Safe("AfterOrbChanneled", BlockAlternatives.OnEffect);
+        public static void Prefix() => Capture.Safe("AfterOrbChanneled", () => BlockAlternatives.OnEffect());
     }
 
     [HarmonyPatch(typeof(Hook), nameof(Hook.AfterCardGeneratedForCombat))]
     public static class CardGenerated
     {
-        public static void Prefix() => Capture.Safe("AfterCardGeneratedForCombat", BlockAlternatives.OnEffect);
+        public static void Prefix() => Capture.Safe("AfterCardGeneratedForCombat", () => BlockAlternatives.OnEffect());
+    }
+
+    // Side effects that make a block card more than block (Armaments upgrades, Gather Light gives stars).
+    [HarmonyPatch(typeof(CardCmd), nameof(CardCmd.Upgrade), typeof(IEnumerable<CardModel>), typeof(CardPreviewStyle))]
+    public static class CardUpgraded
+    {
+        public static void Prefix() => Capture.Safe("CardCmd.Upgrade", () => BlockAlternatives.OnEffect());
+    }
+
+    /// Choosing a card in hand to upgrade (Armaments) is a side effect even when nothing could be upgraded.
+    [HarmonyPatch(typeof(CardSelectCmd), nameof(CardSelectCmd.FromHandForUpgrade))]
+    public static class UpgradeChoice
+    {
+        public static void Prefix() => Capture.Safe("CardSelectCmd.FromHandForUpgrade", () => BlockAlternatives.OnEffect());
+    }
+
+    [HarmonyPatch(typeof(Hook), nameof(Hook.AfterStarsGained))]
+    public static class StarsGained
+    {
+        public static void Prefix() => Capture.Safe("AfterStarsGained", () => BlockAlternatives.OnEffect());
     }
 
     [HarmonyPatch(typeof(Hook), nameof(Hook.BeforePotionUsed))]
     public static class PotionStart
     {
-        public static void Prefix(PotionModel potion) => Capture.Safe("BeforePotionUsed", () => Capture.PotionUser = potion.Owner);
+        public static void Prefix(PotionModel potion) => Capture.Safe("BeforePotionUsed", () =>
+        {
+            Capture.PotionUser = potion.Owner;
+            Capture.PotionId = $"Potion:{Capture.IdOf(potion)}";
+        });
     }
 
     [HarmonyPatch(typeof(Hook), nameof(Hook.AfterPotionUsed))]

@@ -56,7 +56,7 @@ public static class Loc
         ["tip.other"] = ("Other", "Autres"),
         ["tip.none"] = ("Nothing yet", "Rien pour l'instant"),
         ["col.total"] = ("Total", "Total"),
-        ["cat.cards"] = ("Cards", "Cartes"),
+        ["cat.cards"] = ("Direct", "Direct"),
         ["cat.powers"] = ("Powers", "Pouvoirs"),
         ["cat.pet"] = ("Pet", "Familier"),
         ["cat.orbs"] = ("Orbs", "Orbes"),

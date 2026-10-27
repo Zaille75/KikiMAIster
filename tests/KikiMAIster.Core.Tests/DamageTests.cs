@@ -179,4 +179,27 @@ public class DamageTests : TestBase
         Assert.Equal(1, Combat(IdA).DamageDealt);
         Assert.Equal(13, Engine.Get(Scope.Run, IdA).DamageDealt);
     }
+
+    [Fact]
+    public void DotFromPotion_CountsAsPotionDamage()
+    {
+        Engine.Handle(new PowerChanged(A, Enemy, "DEMISE_POWER", 9, true, "Potion:POWDERED_DEMISE"));
+        Engine.Handle(new DamageDealt(Actor.None, Enemy, 0, 9, 0, false, Source.Dot("DEMISE_POWER")));
+
+        Assert.Equal(9, Combat(IdA).DamageDealt);
+        Assert.Equal(9, Combat(IdA).DamageBySource["Potion:POWDERED_DEMISE"]);
+        Assert.Equal(0, Combat(IdA).DotDamage);
+    }
+
+    [Fact]
+    public void ThornsFromPotion_SplitBetweenPotionAndPower()
+    {
+        Engine.Handle(new PowerChanged(A, A, "THORNS_POWER", 3, false, "Potion:LIQUID_BRONZE"));
+        Engine.Handle(new PowerChanged(A, A, "THORNS_POWER", 1, false));
+        Engine.Handle(new DamageDealt(A, Enemy, 0, 4, 0, false, Source.Power("THORNS_POWER")));
+
+        Assert.Equal(4, Combat(IdA).DamageDealt);
+        Assert.Equal(3, Combat(IdA).DamageBySource["Potion:LIQUID_BRONZE"], 6);
+        Assert.Equal(1, Combat(IdA).DamageBySource["Power:THORNS_POWER"], 6);
+    }
 }

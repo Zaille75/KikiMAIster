@@ -39,10 +39,18 @@ public static class DamagePatches
             Capture.Safe("CreatureCmd.Damage", () =>
             {
                 if (targets == null) return;
-                BlockAlternatives.OnEffect();
+                BlockAlternatives.OnEffect(damage: true);
                 // The call stack is only needed when the card is unknown (powers, relics, orbs, poison…).
                 var call = new DamageCall(dealer, cardSource, cardSource == null ? Capture.CallingModelType() : null);
-                foreach (var t in targets) LastCallOnTarget.AddOrUpdate(t, WithDot(call, t));
+                foreach (var t in targets)
+                {
+                    var c = WithDot(call, t);
+                    // A player's buff dealing damage with no dealer (Haunt: Soul cards) counts for its holder.
+                    if (c.Dealer == null && c.DotPowerId == null && t.CombatState is { } cs &&
+                        Capture.PowerHolder(c.CallingModel, cs.Players) is { } holder)
+                        c = c with { Dealer = holder };
+                    LastCallOnTarget.AddOrUpdate(t, c);
+                }
             });
     }
 
@@ -136,6 +144,8 @@ public static class DamagePatches
         if (r.TotalDamage + r.OverkillDamage <= 0) return;
 
         var target = r.Receiver;
+        // An enemy shown with infinite HP (Waterfall Giant about to explode) cannot be hurt for real: not counted.
+        if (target.IsEnemy && target.HpDisplay != HpDisplay.Normal) return;
         Source source;
         if (card != null) source = Source.Card(Capture.IdOf(card));
         else if (call?.DotPowerId is { } powerId && (dealer == null || dealer == target))

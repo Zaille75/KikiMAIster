@@ -21,8 +21,12 @@ public static class Capture
     /// Card plays in progress (a card can trigger another card's auto-play).
     public static readonly Stack<Player> CardPlayers = new();
 
-    /// Player using a potion right now, if any.
+    /// Player using a potion right now, if any, and that potion ("Potion:<ID>").
     public static Player? PotionUser;
+    public static string PotionId = "";
+
+    /// "Potion:<ID>" while a potion is being used (not inside a card it plays), else "".
+    public static string CurrentOrigin => PotionUser != null && CardPlayers.Count == 0 ? PotionId : "";
 
     public static void Emit(StatEvent e)
     {
@@ -124,6 +128,17 @@ public static class Capture
         if (typeof(OrbModel).IsAssignableFrom(modelType)) return new Source(SourceKind.Orb, id);
         if (typeof(PotionModel).IsAssignableFrom(modelType)) return Source.Potion(id);
         return Source.Card(id);
+    }
+
+    /// The player creature holding a buff of this type that deals damage without a dealer (Haunt…): the player
+    /// acting right now if they hold it, else the only holder.
+    public static Creature? PowerHolder(Type? modelType, IEnumerable<Player> players)
+    {
+        if (modelType == null || !typeof(PowerModel).IsAssignableFrom(modelType)) return null;
+        var holders = players.Where(p => p.Creature.Powers.Any(x => x.GetType() == modelType)).ToList();
+        var acting = CurrentActingPlayer;
+        if (acting != null && holders.Contains(acting)) return acting.Creature;
+        return holders.Count == 1 ? holders[0].Creature : null;
     }
 
     /// The player who owns a power or relic of this type, if exactly one player does.

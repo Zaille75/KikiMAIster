@@ -91,6 +91,7 @@ public sealed record BlockObserved(Actor Creature, int ActualBlock) : StatEvent;
 public sealed record BlockRemoved(Actor Creature, int Amount, bool SpentByCard) : StatEvent;
 
 /// A power's amount changed on Target (Amount < 0 = stacks removed, e.g. decay). IsDebuff from the game.
-public sealed record PowerChanged(Actor Applier, Actor Target, string PowerId, double Amount, bool IsDebuff) : StatEvent;
+/// Origin: "Potion:<ID>" when a potion applied it (its damage then counts as potion damage), else "".
+public sealed record PowerChanged(Actor Applier, Actor Target, string PowerId, double Amount, bool IsDebuff, string Origin = "") : StatEvent;
 
 public sealed record Healed(Actor Healer, Actor Target, int Amount) : StatEvent;

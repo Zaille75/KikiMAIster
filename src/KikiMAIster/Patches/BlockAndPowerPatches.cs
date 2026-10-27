@@ -106,7 +106,7 @@ public static class BlockAndPowerPatches
             }
             // The stat loss a temporary power applies to its holder is already counted as that temporary power.
             if (id.EndsWith("~DOWN") && TakeSuppressed(power.Owner)) return;
-            Capture.Emit(new PowerChanged(Capture.ToActor(applier), Capture.ToActor(power.Owner), id, value, debuff));
+            Capture.Emit(new PowerChanged(Capture.ToActor(applier), Capture.ToActor(power.Owner), id, value, debuff, Capture.CurrentOrigin));
         });
     }
 

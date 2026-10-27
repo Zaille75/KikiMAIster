@@ -4,6 +4,7 @@ using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.MonsterMoves.Intents;
 
 namespace KikiMAIster.Patches;
@@ -24,6 +25,8 @@ public static class BlockAlternatives
         public required List<CardModel> UsefulCardsInHand { get; init; }
         public bool GaveBlock { get; set; }
         public bool HadOtherEffect { get; set; }
+        /// An effect other than block or damage (debuff, draw, upgrade…): an attack played for it was a real choice.
+        public bool HadNonDamageEffect { get; set; }
         public required bool Ethereal { get; init; }
     }
 
@@ -40,9 +43,11 @@ public static class BlockAlternatives
 
     /// Something other than block happened (power applied, damage, heal, draw, orb, card created…):
     /// credited to the card play in progress, if any.
-    public static void OnEffect()
+    public static void OnEffect(bool damage = false)
     {
-        if (InProgress.TryPeek(out var play) && play != null) play.HadOtherEffect = true;
+        if (!InProgress.TryPeek(out var play) || play == null) return;
+        play.HadOtherEffect = true;
+        if (!damage) play.HadNonDamageEffect = true;
     }
 
     /// Another card discarded or exhausted by the play in progress (Survivor…). The played card itself going to
@@ -96,8 +101,12 @@ public static class BlockAlternatives
         {
             var state = play.Owner.PlayerCombatState;
             var budget = play.EnergySpent + (state?.Energy ?? 0);
+            var creature = play.Owner.Creature;
+            var surplus = creature.Block - IncomingDamage(creature);
+            // An attack into Thorns is an alternative only if the block left would still have covered the Thorns damage.
             var alternative = state == null || play.HadOtherEffect || play.Ethereal ? null : play.UsefulCardsInHand.FirstOrDefault(c =>
-                !used.Contains(c) && state.Hand.Cards.Contains(c) && Cost(c) <= budget && PlayableExceptEnergy(c));
+                !used.Contains(c) && state.Hand.Cards.Contains(c) && Cost(c) <= budget && PlayableExceptEnergy(c) &&
+                ThornsDamage(c, creature) <= Math.Max(0, surplus));
             if (alternative != null) used.Add(alternative);
             ModLog.Info($"block play {play.Id}: other effect {play.HadOtherEffect}, ethereal {play.Ethereal}, energy budget {budget}, useful cards in hand when played: " +
                         $"[{string.Join(", ", play.UsefulCardsInHand.Select(c => Capture.IdOf(c)))}] → alternative: " +
@@ -119,6 +128,13 @@ public static class BlockAlternatives
     {
         var creature = play.Owner.Creature;
         var useful = state.Hand.Cards.Where(IsUseful).Select(c => $"Card:{Capture.IdOf(c)}").ToList();
+        return new BlockChoice($"Card:{Capture.IdOf(play.Card)}", $"Card:{Capture.IdOf(alternative)}", useful,
+            creature.Block, IncomingDamage(creature));
+    }
+
+    /// Attack damage the enemies announced against this player.
+    internal static int IncomingDamage(Creature creature)
+    {
         var incoming = 0;
         try
         {
@@ -131,8 +147,20 @@ public static class BlockAlternatives
         {
             ModLog.Error("incoming damage", e);
         }
-        return new BlockChoice($"Card:{Capture.IdOf(play.Card)}", $"Card:{Capture.IdOf(alternative)}", useful,
-            creature.Block, incoming);
+        return incoming;
+    }
+
+    /// Thorns damage the player would take by playing this attack: every enemy hit for an attack on all enemies,
+    /// else the enemy with the least Thorns; once per hit.
+    private static decimal ThornsDamage(CardModel card, Creature player)
+    {
+        if (card.Type != CardType.Attack) return 0;
+        var enemies = player.CombatState?.HittableEnemies ?? Array.Empty<Creature>();
+        if (enemies.Count == 0) return 0;
+        var thorns = enemies.Select(e => e.GetPowerAmount<ThornsPower>()).ToList();
+        var perHit = card.TargetType == TargetType.AllEnemies ? thorns.Sum() : thorns.Min();
+        var hits = card.DynamicVars.TryGetValue("Repeat", out var repeat) ? Math.Max(1, repeat.IntValue) : 1;
+        return perHit * hits;
     }
 
     private static int Cost(CardModel card) => Math.Max(0, card.EnergyCost.GetWithModifiers(CostModifiers.All));

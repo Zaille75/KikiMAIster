@@ -166,15 +166,24 @@ public sealed class StatsEngine
         {
             if (!_dots.TryGetValue((d.Target.CreatureId, d.Source.Id), out var dot)) return;
             var shares = dot.Shares().Where(s => s.ApplierId != 0).ToList();
-            foreach (var (applier, share) in shares)
-                CreditEnemyDamage(applier, d, share, d.Source.ToString(), isDot: true);
+            // Stacks from a potion (Powdered Demise…) count as potion damage.
+            foreach (var (applier, origin, share) in shares)
+                CreditEnemyDamage(applier, d, share, origin != "" ? origin : d.Source.ToString(), isDot: origin == "");
             if (d.Killed && shares.Count > 0)
                 Each(shares.MaxBy(s => s.Share).ApplierId, s => s.Kills++);
             return;
         }
         if (!d.Dealer.IsPlayerSide) return;
-        var key = d.Dealer.Kind == ActorKind.Pet ? "Pet" : d.Source.ToString();
-        CreditEnemyDamage(d.Dealer.PlayerId, d, 1, key, isDot: false);
+        if (d.Dealer.Kind == ActorKind.Pet) CreditEnemyDamage(d.Dealer.PlayerId, d, 1, "Pet", isDot: false);
+        else if (d.Source.Kind == SourceKind.Power && _dots.TryGetValue((d.Dealer.CreatureId, d.Source.Id), out var stacks))
+        {
+            // A power the player got from a potion (Thorns from Liquid Bronze…): that share counts as potion damage.
+            var byOrigin = stacks.Shares().GroupBy(s => s.Origin).Select(g => (Origin: g.Key, Share: g.Sum(s => s.Share))).ToList();
+            if (byOrigin.Count == 0) byOrigin.Add(("", 1));
+            foreach (var (origin, share) in byOrigin)
+                CreditEnemyDamage(d.Dealer.PlayerId, d, share, origin != "" ? origin : d.Source.ToString(), isDot: false);
+        }
+        else CreditEnemyDamage(d.Dealer.PlayerId, d, 1, d.Source.ToString(), isDot: false);
         if (d.Killed) Each(d.Dealer.PlayerId, s => s.Kills++);
     }
 
@@ -323,11 +332,9 @@ public sealed class StatsEngine
 
     private void OnPowerChanged(PowerChanged p)
     {
-        if (p.IsDebuff)
-        {
-            var applierId = p.Applier.IsPlayerSide ? p.Applier.PlayerId : 0;
-            Dot(p.Target.CreatureId, p.PowerId).Apply(applierId, p.Amount);
-        }
+        // Who applied each power's stacks, and from what origin: damage-over-time split, potion powers (Thorns…).
+        var applierId = p.Applier.IsPlayerSide ? p.Applier.PlayerId : 0;
+        Dot(p.Target.CreatureId, p.PowerId).Apply(applierId, p.Amount, p.Origin);
         if (p.Amount <= 0 || !p.IsDebuff) return;
 
         if (p.Applier.IsPlayerSide && p.Target.IsEnemy)

@@ -20,7 +20,8 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
 | Total raw damage | Damage dealt + damage into block + overkill. | v1 |
 | Kills | Number of enemies this player landed the killing hit on. | v1 |
 | Biggest hit | Largest single damage instance (combat and run records). | v1 |
-| Damage by source | Breakdown by source: cards, powers (e.g. Poison, Thorns), orbs, relics, pets, potions. | v1 |
+| Damage by source | Breakdown by source: direct (the card played), powers (e.g. Thorns), damage over time (Poison…), orbs, relics, pets, potions. **The origin wins over the mechanism (v0.8.0):** a power or debuff applied by a potion (Thorns from Liquid Bronze, Demise from Powdered Demise) counts as potion damage, split by stacks with the same power from cards. A player's power that deals damage with no dealer (Haunt: damage when a Soul is played) counts for the player holding it. | v1 |
+| Invulnerable phase | Damage to an enemy the game shows with infinite HP (Waterfall Giant about to explode) is not counted. Debuffs on it still are. | v1 |
 | Damage enabled for allies | Extra damage allies dealt **because** of this player's Vulnerable (or similar debuffs) on the target. | v2 |
 
 ## B. Debuffs ("negative effects")
@@ -147,8 +148,12 @@ the player could already absorb, which is exactly your example. It is also easy 
   - Same rule for block given to allies; the part given to allies is also shown as "…of which given to allies".
   - In the examples above, "useless help" now reads "wasted or useless (given to an ally)".
 - **F4 (v0.4.5).** A block card that **also did something else** during its play (applied a power or debuff, dealt
-  damage, healed, drew cards, discarded or exhausted another card, channeled an orb, created a card, summoned) is never wasted: its unused block is useless.
+  damage, healed, drew cards, discarded or exhausted another card, channeled an orb, created a card, summoned, upgraded a card or offered to (Armaments),
+  gained stars (Gather Light)) is never wasted: its unused block is useless.
   Known limit: an effect triggered by something else during that play (a relic reacting to it) also counts.
 - **F6 (v0.4.7).** The alternative is not only an attack: any **useful card** counts, meaning an attack, or a skill or power
   that gives no block (debuff, draw, buff…). Status cards, curses and other block cards are not alternatives.
+- **F7 (v0.8.0, Thorns).** An attack is an alternative only if the player could afford the Thorns damage it causes: the
+  block left at the end of the turn minus the incoming attack must cover it (Thorns × hits; on all enemies for an attack
+  on all enemies, else the enemy with the least Thorns). Otherwise not playing it was right, and the block is useless.
 - **F5 (v0.4.6).** An **Ethereal** block card is never wasted either (not playing it would have lost it anyway).
