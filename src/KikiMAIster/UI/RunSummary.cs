@@ -49,6 +49,11 @@ public static class RunSummary
         Show(ended: true);
     }
 
+    public static void Hide()
+    {
+        if (_panel != null && _panel.Visible) _panel.Visible = false;
+    }
+
     public static void Toggle()
     {
         if (_panel == null) return;

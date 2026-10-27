@@ -119,7 +119,7 @@ public static class Overlay
         outer.AddChild(_body);
         _panel.AddChild(outer);
         _layer.AddChild(_panel);
-        _panel.Visible = Cfg.Visible;
+        _panel.Visible = Cfg.Visible && InRun;
 
         var timer = new Godot.Timer { WaitTime = 0.3, Autostart = true };
         timer.Timeout += () => Capture.Safe("Overlay.Refresh", Refresh);
@@ -136,13 +136,43 @@ public static class Overlay
         GameNames.ExportOnce();
     }
 
+    /// A run is being played (not the game's start-up nor the main menu): the only time the mod's windows show.
+    internal static bool InRun
+    {
+        get
+        {
+            var rm = MegaCrit.Sts2.Core.Runs.RunManager.Instance;
+            return rm is { IsInProgress: true, IsCleaningUp: false };
+        }
+    }
+
+    /// F7 / ✕: remembered show/hide choice; the panel itself only shows during a run.
     public static void Toggle()
     {
         EnsureAttached("F7");
         if (_panel == null || !GodotObject.IsInstanceValid(_panel)) return;
-        _panel.Visible = !_panel.Visible;
-        Cfg.Visible = _panel.Visible;
+        Cfg.Visible = !Cfg.Visible;
         Cfg.Save();
+        SyncVisibility();
+    }
+
+    /// Shows the panel only in a run (and when not hidden with F7); outside a run every mod window is closed.
+    private static void SyncVisibility()
+    {
+        if (_panel == null) return;
+        var inRun = InRun;
+        var show = Cfg.Visible && inRun;
+        if (_panel.Visible != show)
+        {
+            _panel.Visible = show;
+            if (show) _lastSignature = "";
+        }
+        if (!inRun)
+        {
+            CombatSummary.Hide();
+            SettingsMenu.Hide();
+            RunSummary.Hide();
+        }
     }
 
     /// Forces a rebuild on the next refresh (settings or language changed).
@@ -249,6 +279,7 @@ public static class Overlay
 
     private static void Refresh()
     {
+        SyncVisibility();
         if (_panel == null || _body == null || !_panel.Visible) return;
         FitOnScreen();
 

@@ -1,8 +1,8 @@
-# Handoff — state of the project (2026-10-27, v0.13.2)
+# Handoff — state of the project (2026-10-27, v0.13.3)
 
 Read this first in a new conversation, then `CLAUDE.md`, `docs/specs/01-metrics.md` and `docs/specs/02-ui.md`.
 v0.8.0 and v0.9.0 implement the 27 feedback points of the first co-op games (all 6 batches at once, Zaille75 reviews
-afterwards). **Nothing of v0.8.0 → v0.13.2 has been tested in game yet.**
+afterwards). **Nothing of v0.8.0 → v0.13.3 has been tested in game yet.**
 
 ## How Zaille75 and Claude work
 - Zaille75 writes in English or French, plays in **French**, and doesn't code. He tests in game and sends feedback, screenshots, and logs.
