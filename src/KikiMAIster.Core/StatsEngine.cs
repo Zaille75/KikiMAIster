@@ -330,6 +330,8 @@ public sealed class StatsEngine
         if (d.Blocked > 0)
         {
             ConsumeBlock(owner, d.Blocked, (layer, taken) =>
+            {
+                layer.Absorbed += taken;
                 Each(layer.GiverId, s =>
                 {
                     if (layer.GiverId == owner) s.PreventedOwnBlock += taken;
@@ -338,7 +340,8 @@ public sealed class StatsEngine
                         s.PreventedForAllies += taken;
                         PlayerStats.Add(s.SavedPerAlly, AllyKey(owner), taken);
                     }
-                }));
+                });
+            });
             Each(owner, s => s.DamageBlocked += d.Blocked);
         }
 
@@ -445,8 +448,9 @@ public sealed class StatsEngine
     private void CreditUnused(ulong owner, BlockLedger.Layer layer, double amount)
     {
         if (amount <= 0) return;
-        // Wasted only when the play was resolved with a real alternative; anything else is useless.
-        var wasted = _hadAlternative.GetValueOrDefault(layer.PlayId);
+        // Wasted only when the play was resolved with a real alternative and its block stopped nothing; anything else
+        // is useless (block that absorbed part of the damage was needed: its leftover is overshoot, spec F3).
+        var wasted = _hadAlternative.GetValueOrDefault(layer.PlayId) && layer.Absorbed <= 0;
         var toAlly = layer.GiverId != owner;
         var hasChoice = _choices.TryGetValue(layer.PlayId, out var choice);
         Action<PlayerStats> credit = s =>

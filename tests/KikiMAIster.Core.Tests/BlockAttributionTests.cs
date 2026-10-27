@@ -265,4 +265,19 @@ public class BlockAttributionTests : TestBase
         Assert.Equal(10, Combat(IdA).WastedBlock);
         Assert.Equal(3, Engine.Get(Scope.Run, IdA).MissedWasted);
     }
+
+    [Fact]
+    public void PartlyUsedBlock_IsNeverWasted()
+    {
+        Engine.Handle(new BlockGained(A, A, 6, Source.Card("DEFY"), PlayId: 1));
+        Engine.Handle(new BlockGained(A, A, 5, Source.Card("DEFEND"), PlayId: 2));
+        var choice = new BlockChoice("Card:DEFEND", "Card:STRIKE", new List<string>(), 11, 9);
+        Engine.Handle(new BlockPlayResolved(2, true, choice));
+        EnemyHits(A, 9, 0);
+        Engine.Handle(new RoundStarted(2));
+        Engine.Handle(new BlockObserved(A, 0));
+        Assert.Equal(0, Combat(IdA).WastedBlock);
+        Assert.Equal(2, Combat(IdA).UselessBlock);
+        Assert.Equal(0, Combat(IdA).MissedWasted);
+    }
 }

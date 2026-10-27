@@ -230,7 +230,9 @@ the player could already absorb, which is exactly your example. It is also easy 
     attack card that was in hand when it was played is still in hand, is playable (only energy aside), and costs no more
     than the block card's energy + the energy left at the end of the turn. One attack can serve as the alternative of
     only one block card.
-  - Unused block from a card with an alternative → **wasted** ("gâché"). Everything else → **useless** ("inutile"):
+  - Unused block from a card with an alternative → **wasted** ("gâché"), **only if that card's block absorbed nothing**
+    (v0.16.8): block that stopped part of the damage was needed (without it, HP or the pet's HP would have been lost),
+    so its leftover is overshoot → useless. Everything else → **useless** ("inutile"):
     no alternative, block from relics/powers/potions/auto-play, or block played on the turn the combat ended.
   - Same rule for block given to allies; the part given to allies is also shown as "…of which given to allies".
   - In the examples above, "useless help" now reads "wasted or useless (given to an ally)".

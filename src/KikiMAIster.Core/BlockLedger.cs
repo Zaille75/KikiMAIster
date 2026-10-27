@@ -6,6 +6,8 @@ public sealed class BlockLedger
     public sealed record Layer(ulong GiverId, int Round, int PlayId = 0)
     {
         public double Amount { get; set; }
+        /// Damage this layer already absorbed (its leftover is then overshoot, never a misplay).
+        public double Absorbed { get; set; }
     }
 
     private readonly LinkedList<Layer> _layers = new();
