@@ -58,7 +58,7 @@ public static class Overlay
             return cols.Count > 0 ? cols : new[] { "col.noDebuff" };
         }, s => s.DebuffsApplied.Values.Sum(t => t.Stacks)),
         new("missed", MissedRow, () => Visible("missed", MissedColumns),
-            s => -(s.MissedTotal * 100 + s.MissedByKind.GetValueOrDefault("energy") * 10 + s.WastedBlock)),
+            s => -(s.MissedTotal * 100 + s.MissedByKind.GetValueOrDefault("energy"))),
         new("taken", TakenRow, () => Visible("taken", Fixed("col.hpLost", "col.fromAllies", "col.blocked", "col.debuffs")), s => -s.HpLost),
         new("coop", CoopRow, () => Visible("coop", new[] { "col.blockGiven", "col.saved", "col.takenForAllies", "col.enabled", "col.energyGiven", "col.cardsGiven", "col.friendly", "col.deaths" }),
             s => s.SavedForAllies + s.DamageEnabledAllies + s.BlockGivenToAllies * 0.01, CoopOnly: true),
@@ -617,12 +617,12 @@ public static class Overlay
         // Other kinds: the 6 most recent ("T3 · 2 energy left unused"…).
         foreach (var m in s.MissedEntries.AsEnumerable().Reverse().Take(6))
             lines.Add($"T{m.Round} · " + string.Format(Loc.T($"why.{m.Kind}"), m.Args.Select(a => (object)(a.Contains(':') ? GameNames.Of(a) : a)).ToArray()));
-        var tip = lines.Count == 0 ? (s.MissedTotal + s.WastedBlock > 0 ? "" : Loc.T("tip.none")) : string.Join('\n', lines);
+        var tip = lines.Count == 0 ? (s.MissedTotal > 0 ? "" : Loc.T("tip.none")) : string.Join('\n', lines);
         double K(string kind) => s.MissedByKind.GetValueOrDefault(kind);
         return new[]
         {
             new Cell("col.lethal", N(s.MissedLethals), tip),
-            new Cell("col.wastedBlock", N(s.WastedBlock), tip),
+            new Cell("col.wastedBlock", N(s.MissedWasted), tip),
             new Cell("col.choices", N(s.MissedChoices), tip),
             new Cell("col.unusedEnergy", N(K("energy")), tip),
             new Cell("col.hpAvoidable", N(K("blockKept")), tip),

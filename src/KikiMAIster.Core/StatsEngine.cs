@@ -392,7 +392,8 @@ public sealed class StatsEngine
             if (wasted) s.WastedBlock += amount;
             else s.UselessBlock += amount;
             if (toAlly) s.UnusedGivenToAllies += amount;
-            if (wasted && hasChoice) PlayerStats.AddWasted(s.WastedPlays, layer.PlayId, layer.Round, choice.Choice, amount);
+            if (wasted && hasChoice && PlayerStats.AddWasted(s.WastedPlays, layer.PlayId, layer.Round, choice.Choice, amount))
+                s.WastedPlayCount++;
         };
         credit(Stats(Scope.Combat, layer.GiverId));
         credit(Stats(Scope.Run, layer.GiverId));

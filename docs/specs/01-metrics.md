@@ -64,7 +64,7 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
   - **Strangle** (one instance per player, triggered by its own player's cards): each instance's damage counts only for
     the player who applied it.
   - **Growing cards** (never wasted as block / weak attack): Genetic Algorithm, The Scythe, The Ball, Claw, Maul,
-    Rampage. (Kingly Punch grows when drawn, not played: not in the list.) **Missed (v0.13.0):** once per card and fight,
+    Rampage. (Kingly Punch grows when drawn, not played: not in the list.) **Missed (v0.13.0, counted in Gâché since v0.13.1):** once per card and fight,
     when the card could have been played at the end of at least one turn, was never played, and is still in the deck
     (hand, draw or discard pile) when the fight ends.
   - Already right, no change: Oblivion (Doom credited to its applier), Magic Bomb and Constrict (by stacks), Sic 'Em,
@@ -131,6 +131,7 @@ Cards drawn, played, exhausted, discarded; potions used.
 | Stat | Definition |
 |---|---|
 | Missed lethal | Turns where the player's **front hand** (the hand and energy at the start of their turn) could have killed every enemy that must die, yet enemies were still alive at the end of the turn. Only attacks on one enemy or on all enemies, with the game's own damage computation (Strength, Vulnerable…) × hits; X-cost cards and cards whose damage is computed differently are left out. It is a **minimum**: draw, random effects and combos are ignored. |
+| Gâché (v0.13.1: a count of misplays, like the other columns) | One per block card play whose block was wasted (rule F3), plus one per growing card never played in a fight (below). The block amount stays in the details. |
 | Wasted block | The "gâché" block of rule F3 (block that saved nothing while a useful card stayed in hand), with its explanation: incoming attack → block already there → card played → what could have been played. In "Protection", gâché and inutile are now one "Inutile" column. |
 | Unused energy (v0.10.0) | Energy left at the end of the turn while a playable card that energy could pay was in hand. Not counted when the energy is kept (Ice Cream…) or wanted (Pael's Tears gives energy for leftover energy). |
 | Avoidable HP (v0.10.0) | A playable block card (affordable with the energy left) stayed in hand at the end of the turn, then the player lost HP to enemies before the next round: min(HP lost, that card's block) counts. |

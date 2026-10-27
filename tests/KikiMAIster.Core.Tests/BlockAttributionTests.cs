@@ -247,4 +247,22 @@ public class BlockAttributionTests : TestBase
         Hit(A, Enemy, 0, 3);
         Assert.Equal(7, Engine.Get(Scope.PreviousTurn, IdA).DamageDealt);
     }
+
+    [Fact]
+    public void Gache_CountsMisplays_OncePerBlockCardPlay()
+    {
+        var choice = new BlockChoice("Card:DEFEND", "Card:STRIKE", new[] { "Card:STRIKE" }, 10, 0);
+        Engine.Handle(new BlockGained(A, A, 5, Source.Card("DEFEND"), PlayId: 4));
+        Engine.Handle(new BlockGained(A, A, 5, Source.Card("DEFEND"), PlayId: 5));
+        Engine.Handle(new BlockPlayResolved(4, true, choice));
+        Engine.Handle(new BlockPlayResolved(5, true, choice));
+        Engine.Handle(new RoundStarted(2));
+        Engine.Handle(new BlockObserved(A, 3));   // part of play 5 kept (Barricade-like), then lost at combat end
+        Engine.Handle(new CombatEnded(true));
+        Engine.Handle(new MissedChance(A, "growth", new[] { "Card:RAMPAGE" }));
+
+        Assert.Equal(2, Combat(IdA).WastedPlayCount);
+        Assert.Equal(10, Combat(IdA).WastedBlock);
+        Assert.Equal(3, Engine.Get(Scope.Run, IdA).MissedWasted);
+    }
 }

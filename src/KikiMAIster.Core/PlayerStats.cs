@@ -84,9 +84,13 @@ public sealed class PlayerStats
     public Dictionary<string, double> MissedByKind { get; } = new();
     public List<MissedEntry> MissedEntries { get; } = new();
     /// Worse choices: weak attacks + smaller block, Pen Nib on a weak attack, block below Orichalcum, growing card not played.
-    public double MissedChoices => WeakAttacks + new[] { "smallBlock", "penNib", "orichalcum", "growth" }.Sum(k => MissedByKind.GetValueOrDefault(k));
+    public double MissedChoices => WeakAttacks + new[] { "smallBlock", "penNib", "orichalcum" }.Sum(k => MissedByKind.GetValueOrDefault(k));
+    /// Block card plays whose block was wasted (gâché, rule F3), counted once per play (saved with the run).
+    public double WastedPlayCount { get; set; }
+    /// "Gâché" misplays (v0.13.1): wasted block card plays + growing cards never played in a fight.
+    public double MissedWasted => WastedPlayCount + MissedByKind.GetValueOrDefault("growth");
     /// Every missed opportunity counted once (trophies).
-    public double MissedTotal => MissedLethals + MissedChoices + MissedByKind.GetValueOrDefault("relic") + MissedByKind.GetValueOrDefault("paelsTears") +
+    public double MissedTotal => MissedLethals + MissedWasted + MissedChoices + MissedByKind.GetValueOrDefault("relic") + MissedByKind.GetValueOrDefault("paelsTears") +
                                  MissedByKind.GetValueOrDefault("potion") + (MissedByKind.GetValueOrDefault("blockKept") > 0 ? 1 : 0);
 
     // Co-op
@@ -118,11 +122,14 @@ public sealed class PlayerStats
     public double DamageBlocked { get; set; }
     public Dictionary<string, PowerTally> DebuffsReceived { get; } = new();
 
-    internal static void AddWasted(List<WastedPlay> list, int playId, int round, BlockChoice choice, double amount)
+    /// Returns true when this block card play was not wasted before (a new misplay).
+    internal static bool AddWasted(List<WastedPlay> list, int playId, int round, BlockChoice choice, double amount)
     {
         var entry = list.FirstOrDefault(w => w.PlayId == playId);
+        var added = entry == null;
         if (entry == null) list.Add(entry = new WastedPlay(playId, round, choice));
         entry.Amount += amount;
+        return added;
     }
 
     internal static void AddPower(Dictionary<string, PowerTally> map, string powerId, double stacks)
