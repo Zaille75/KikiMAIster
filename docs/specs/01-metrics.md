@@ -186,7 +186,18 @@ the player could already absorb, which is exactly your example. It is also easy 
   Known limit: an effect triggered by something else during that play (a relic reacting to it) also counts.
 - **F6 (v0.4.7).** The alternative is not only an attack: any **useful card** counts, meaning an attack, or a skill or power
   that gives no block (debuff, draw, buff…). Status cards, curses and other block cards are not alternatives.
-- **F7 (v0.8.0, Thorns).** An attack is an alternative only if the player could afford the Thorns damage it causes: the
+- **F4 audit (v0.9.1): every card of the game that gives block (80 cards, beta branch) was checked.**
+  - Side effect detected by a generic hook (so new cards are covered too): power/debuff applied (Blur, Flame Barrier,
+    Leg Sweep, Taunt…), damage (Iron Wave, Dash, Blood Wall…), draw (Backflip, Shrug It Off…), another card discarded,
+    exhausted or **moved between piles** (Survivor, True Grit, Second Wind, Hologram, Cosmic Indifference, Compact),
+    orb channeled (Glacier…), card created (Cloak and Dagger, Fight Through…), summon (Pull Aggro), upgrade (Armaments,
+    Compact, Manifest Authority), stars (Gather Light), **energy** (Constellation), **Forge** (Bulwark), **Sly given**
+    (Hand Trick).
+  - Special case: **Genetic Algorithm** (its block grows each time it is played) is never wasted.
+  - Pure block (can be wasted): the Defends, Deflect, Leap, Cloak of Stars, Particle Wall, Ultimate Defend, Untouchable,
+    Melancholy, Entrench, Stack, Rally, Lift, Boot Sequence, Impervious, Minion Sacrifice, Mimic, Mirage, Expect a Fight,
+    Death's Door, Evil Eye, I Am Invincible, Mad Science (block version, unless its rider does something), Sacrifice
+    (killing your own pet is a cost, not a benefit — to confirm with Zaille75). An attack is an alternative only if the player could afford the Thorns damage it causes: the
   block left at the end of the turn minus the incoming attack must cover it (Thorns × hits; on all enemies for an attack
   on all enemies, else the enemy with the least Thorns). Otherwise not playing it was right, and the block is useless.
 - **F5 (v0.4.6).** An **Ethereal** block card is never wasted either (not playing it would have lost it anyway).

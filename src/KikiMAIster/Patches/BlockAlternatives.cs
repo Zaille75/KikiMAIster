@@ -5,6 +5,7 @@ using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Cards;
 using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Localization.DynamicVars;
@@ -93,6 +94,8 @@ public static class BlockAlternatives
             Card = cardPlay.Card,
             EnergySpent = cardPlay.Resources.EnergySpent,
             Ethereal = cardPlay.Card.Keywords.Contains(CardKeyword.Ethereal),
+            // Genetic Algorithm grows its own block each time it is played: a side effect no hook reports.
+            HadOtherEffect = cardPlay.Card is GeneticAlgorithm,
             UsefulCardsInHand = hand.Where(c => c != cardPlay.Card && IsUseful(c)).ToList()
         };
         if (cardPlay.Card.Type == CardType.Attack && cardPlay.Target is { IsEnemy: true } target)

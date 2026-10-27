@@ -246,6 +246,32 @@ public static class CombatFlowPatches
         public static void Prefix() => Capture.Safe("CardCmd.Upgrade", () => BlockAlternatives.OnEffect());
     }
 
+    // More side effects (spec §F, F4 audit of every block card): another card moved between piles (Hologram, Cosmic
+    // Indifference, Compact's transform…), energy gained (Constellation), Forge (Bulwark), Sly given (Hand Trick).
+    [HarmonyPatch(typeof(Hook), nameof(Hook.AfterCardChangedPiles))]
+    public static class CardMoved
+    {
+        public static void Prefix(CardModel card) => Capture.Safe("AfterCardChangedPiles", () => BlockAlternatives.OnCardEffect(card));
+    }
+
+    [HarmonyPatch(typeof(PlayerCmd), nameof(PlayerCmd.GainEnergy))]
+    public static class EnergyGained
+    {
+        public static void Prefix() => Capture.Safe("PlayerCmd.GainEnergy", () => BlockAlternatives.OnEffect());
+    }
+
+    [HarmonyPatch(typeof(Hook), nameof(Hook.AfterForge))]
+    public static class Forged
+    {
+        public static void Prefix() => Capture.Safe("AfterForge", () => BlockAlternatives.OnEffect());
+    }
+
+    [HarmonyPatch(typeof(CardCmd), nameof(CardCmd.ApplySingleTurnSly))]
+    public static class SlyGiven
+    {
+        public static void Prefix() => Capture.Safe("CardCmd.ApplySingleTurnSly", () => BlockAlternatives.OnEffect());
+    }
+
     /// Choosing a card in hand to upgrade (Armaments) is a side effect even when nothing could be upgraded.
     [HarmonyPatch(typeof(CardSelectCmd), nameof(CardSelectCmd.FromHandForUpgrade))]
     public static class UpgradeChoice
