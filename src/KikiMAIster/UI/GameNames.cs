@@ -66,6 +66,33 @@ public static class GameNames
         return Pretty(id);
     }
 
+    /// Writes every card, relic, power, potion and orb with its game name ("KikiMAIster.names.txt" next to the DLL),
+    /// once per mod version and language: lets Claude use the names Zaille75 sees in game. Lines: kind|class|id|name.
+    public static void ExportOnce() => Capture.Safe("GameNames.Export", () =>
+    {
+        var dir = Path.GetDirectoryName(typeof(GameNames).Assembly.Location);
+        if (string.IsNullOrEmpty(dir)) return;
+        var path = Path.Combine(dir, "KikiMAIster.names.txt");
+        var stamp = $"# {typeof(GameNames).Assembly.GetName().Version} {LocManager.Instance?.Language}";
+        if (File.Exists(path) && File.ReadLines(path).FirstOrDefault() == stamp) return;
+        var lines = new List<string> { stamp };
+        void Add(string kind, IEnumerable<AbstractModel> models)
+        {
+            foreach (var m in models.OrderBy(m => m.Id.Entry, StringComparer.Ordinal))
+            {
+                Register(m.Id.Entry, m.GetType());
+                lines.Add($"{kind}|{m.GetType().Name}|{m.Id.Entry}|{Of($"{kind}:{m.Id.Entry}")}");
+            }
+        }
+        Add("Card", ModelDb.AllCards);
+        Add("Relic", ModelDb.AllRelics);
+        Add("Power", ModelDb.AllPowers);
+        Add("Potion", ModelDb.AllPotions);
+        Add("Orb", ModelDb.Orbs);
+        File.WriteAllLines(path, lines);
+        ModLog.Info($"game names exported ({lines.Count - 1})");
+    });
+
     private static string? ModelTitle(Type type)
     {
         try

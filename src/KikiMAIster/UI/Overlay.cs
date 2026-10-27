@@ -133,6 +133,7 @@ public static class Overlay
         root.AddChild(_layer);
         Refresh();
         ModLog.Info($"overlay attached (inside tree: {_layer.IsInsideTree()}, visible: {_panel.Visible})");
+        GameNames.ExportOnce();
     }
 
     public static void Toggle()
