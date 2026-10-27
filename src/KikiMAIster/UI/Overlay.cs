@@ -132,6 +132,7 @@ public static class Overlay
         CombatSummary.Attach(_layer);
         SettingsMenu.Attach(_layer);
         RunSummary.Attach(_layer);
+        CompositionWindow.Attach(_layer);
         root.AddChild(_layer);
         Refresh();
         ModLog.Info($"overlay attached (inside tree: {_layer.IsInsideTree()}, visible: {_panel.Visible})");
@@ -327,6 +328,15 @@ public static class Overlay
         _panel.CallDeferred(Control.MethodName.ResetSize);
 
         if (shownCombat != null && combats.Count > 1) _body.AddChild(BuildCombatPicker(shownCombat, combats.Count));
+        // Co-op: the group's composition and its record, during the first fight and in the Run tab.
+        if ((CurrentScope == Scope.Run || (engine.Combats.Count == 0 && engine.CurrentCombat != null)) &&
+            CompositionWindow.CurrentLine() is { Length: > 0 } group)
+        {
+            var line = MakeLabel(group, Muted);
+            line.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+            line.CustomMinimumSize = new Vector2(320, 0);
+            _body.AddChild(line);
+        }
 
         if (stats.Count == 0)
         {

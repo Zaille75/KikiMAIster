@@ -1,4 +1,4 @@
-# Handoff — state of the project (2026-10-27, v0.15.2)
+# Handoff — state of the project (2026-10-27, v0.16.0)
 
 Read this first in a new conversation, then `CLAUDE.md`, `docs/specs/01-metrics.md` and `docs/specs/02-ui.md`.
 The conversation of 2026-10-27 turned the 27 feedback points of the first co-op games into v0.8.0 → v0.13.4, then
@@ -64,6 +64,7 @@ wrong-order misses, Waterfall Giant invulnerable phase, fights kept across Save 
 | `UI/Overlay.cs` | Live panel: scope tabs, ◂ ▸ previous combats, sections Dégâts / Protection / Affaiblissements / Occasions manquées / Subis / Coop / Autres, players sorted best first, details under the player's line, hidden columns from settings |
 | `UI/SettingsMenu.cs` | ⚙ window: language, auto summary, shown sections/columns (`ModConfig.Hidden`) |
 | `UI/CombatSummary.cs` | Draggable chart window (cumulative or per round), combat picker, co-op summary, keeps out of the panel's way, Trophées button |
+| `UI/CompositionWindow.cs`, `Core/Compositions.cs` | Group compositions (F8, also in the lobby): games/wins per composition, never played / never won suggestions (`KikiMAIster.compositions.cfg`) |
 | `UI/RunSummary.cs` | End-of-run trophies window + `RecordStore` (`KikiMAIster.records.cfg`) |
 | `UI/Loc.cs` | All EN/FR strings |
 | `UI/GameNames.cs` | Localized card/power/relic names from the game's own models |

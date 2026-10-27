@@ -71,4 +71,24 @@ public class TrophyTests
         Assert.Equal(150, book.Best("trophy.damage", coop: true)!.Value);
         Assert.Equal(100, book.Personal("trophy.damage", 1, coop: true)!.Value);
     }
+
+    [Fact]
+    public void Compositions_CountGamesAndSuggest()
+    {
+        var c = new Compositions();
+        c.Add(new[] { "SILENT", "IRONCLAD", "SILENT" }, victory: false);
+        c.Add(new[] { "SILENT", "SILENT", "IRONCLAD" }, victory: true);
+        c.Add(new[] { "DEFECT", "IRONCLAD" }, victory: false);
+        c = Compositions.Read(c.Write());
+        var key = Compositions.KeyOf(new[] { "IRONCLAD", "SILENT", "SILENT" });
+        Assert.Equal(new Compositions.Tally(2, 1), c.Get(key));
+        Assert.Equal(0.5, c.Get(key).WinRate);
+
+        var chars = new[] { "IRONCLAD", "SILENT", "DEFECT" };
+        Assert.Equal(6, Compositions.AllPossible(chars, 2).Count()); // 3 pairs + 3 doubles
+        Assert.Equal(10, Compositions.AllPossible(chars, 3).Count());
+        Assert.Equal(5, c.NeverPlayed(chars, 2).Count());
+        Assert.Equal(new[] { "DEFECT+IRONCLAD" }, c.NeverWon(chars, 2));
+        Assert.Single(c.Played(3));
+    }
 }

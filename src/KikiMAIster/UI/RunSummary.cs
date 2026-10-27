@@ -42,6 +42,7 @@ public static class RunSummary
         var names = Capture.Engine.Players.ToDictionary(kv => kv.Key, kv => kv.Value.Name);
         var characters = Capture.Engine.Players.ToDictionary(kv => kv.Key, kv => kv.Value.Character);
         _update = RecordStore.Add(run, names, characters, victory);
+        CompositionStore.Add(characters.Values, victory);
         _showPending = true;
     }
 
@@ -138,6 +139,10 @@ public static class RunSummary
             (ended ? Loc.T(_victory ? "summary.victory" : "summary.defeat") : Loc.T("summary.inProgress")), Overlay.Accent);
         title.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         header.AddChild(title);
+        var compos = Overlay.MakeButton(Loc.T("compo.button"));
+        compos.TooltipText = Loc.T("compo.buttonTip");
+        compos.Pressed += () => Capture.Safe("RunSummary.Compositions", CompositionWindow.Toggle);
+        header.AddChild(compos);
         var close = Overlay.MakeButton("✕");
         close.Pressed += () => Capture.Safe("RunSummary.Close", () => _panel!.Visible = false);
         header.AddChild(close);

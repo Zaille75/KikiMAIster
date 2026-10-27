@@ -131,6 +131,7 @@ public static class SettingsMenu
         Overlay.Invalidate();
         CombatSummary.Refresh();
         RunSummary.Refresh();
+        CompositionWindow.Refresh();
         _rebuildPending = true;
     }
 

@@ -215,7 +215,19 @@ public static class Loc
         ["trophy.deaths.tip"] = ("Most deaths", "Le plus de morts"),
 
         ["empty"] = ("No combat yet", "Aucun combat pour l'instant"),
-        ["hint"] = ("F7: show/hide · drag the title to move · click a row for details", "F7 : afficher/masquer · glisser le titre pour déplacer · cliquer sur une ligne pour le détail"),
+        ["hint"] = ("F7: show/hide · F8: group compositions · drag the title to move · click a row for details", "F7 : afficher/masquer · F8 : compositions de groupe · glisser le titre pour déplacer · cliquer sur une ligne pour le détail"),
+        ["compo.title"] = ("Group compositions (F8)", "Compositions de groupe (F8)"),
+        ["compo.button"] = ("Compositions", "Compositions"),
+        ["compo.buttonTip"] = ("Compositions played, win rates and suggestions (F8, also in the lobby)", "Compositions jouées, taux de victoire et suggestions (F8, aussi dans le salon)"),
+        ["compo.players"] = ("Players:", "Joueurs :"),
+        ["compo.group"] = ("Group:", "Groupe :"),
+        ["compo.never"] = ("never played", "jamais jouée"),
+        ["compo.stats"] = ("{0} game(s), {1} win(s) ({2})", "{0} partie(s), {1} victoire(s) ({2})"),
+        ["compo.none"] = ("No composition played yet with this number of players", "Aucune composition jouée avec ce nombre de joueurs"),
+        ["compo.neverPlayed"] = ("Never played ({0}): ", "Jamais jouée ({0}) : "),
+        ["compo.neverWon"] = ("Never won ({0}): ", "Jamais gagnée ({0}) : "),
+        ["compo.another"] = ("Another", "Une autre"),
+        ["compo.note"] = ("Counted when a run ends (victory or defeat), from v0.16.0 on", "Comptées à la fin de chaque partie (victoire ou défaite), depuis la v0.16.0"),
     };
 
     public static bool French => ModConfig.Current.Language switch
