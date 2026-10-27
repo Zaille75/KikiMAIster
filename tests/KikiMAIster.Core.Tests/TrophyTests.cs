@@ -76,9 +76,10 @@ public class TrophyTests
     public void Compositions_CountGamesAndSuggest()
     {
         var c = new Compositions();
-        c.Add(new[] { "SILENT", "IRONCLAD", "SILENT" }, victory: false);
-        c.Add(new[] { "SILENT", "SILENT", "IRONCLAD" }, victory: true);
-        c.Add(new[] { "DEFECT", "IRONCLAD" }, victory: false);
+        c.Add(new[] { "SILENT", "IRONCLAD", "SILENT" }, 10, victory: false);
+        c.Add(new[] { "SILENT", "SILENT", "IRONCLAD" }, 10, victory: true);
+        c.Add(new[] { "DEFECT", "IRONCLAD" }, 10, victory: false);
+        c.Add(new[] { "DEFECT", "IRONCLAD" }, 3, victory: true);
         c = Compositions.Read(c.Write());
         var key = Compositions.KeyOf(new[] { "IRONCLAD", "SILENT", "SILENT" });
         Assert.Equal(new Compositions.Tally(2, 1), c.Get(key));
@@ -88,7 +89,13 @@ public class TrophyTests
         Assert.Equal(6, Compositions.AllPossible(chars, 2).Count()); // 3 pairs + 3 doubles
         Assert.Equal(10, Compositions.AllPossible(chars, 3).Count());
         Assert.Equal(5, c.NeverPlayed(chars, 2).Count());
-        Assert.Equal(new[] { "DEFECT+IRONCLAD" }, c.NeverWon(chars, 2));
-        Assert.Single(c.Played(3));
+        Assert.Empty(c.NeverWon(chars, 2)); // all levels: won once at A3
+        Assert.Equal(new[] { "DEFECT+IRONCLAD" }, c.NeverWon(chars, 2, 10));
+        Assert.Equal(new Compositions.Tally(1, 1), c.Get("DEFECT+IRONCLAD", 3));
+        Assert.Equal(new Compositions.Tally(2, 1), c.Get("DEFECT+IRONCLAD"));
+        Assert.Equal(new[] { 10, 3 }, c.Ascensions());
+        Assert.Equal(10, c.MostPlayedAscension());
+        Assert.Single(c.Played(3, 10));
+        Assert.Empty(c.Played(3, 3));
     }
 }

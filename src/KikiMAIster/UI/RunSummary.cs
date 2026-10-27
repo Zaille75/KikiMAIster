@@ -42,7 +42,7 @@ public static class RunSummary
         var names = Capture.Engine.Players.ToDictionary(kv => kv.Key, kv => kv.Value.Name);
         var characters = Capture.Engine.Players.ToDictionary(kv => kv.Key, kv => kv.Value.Character);
         _update = RecordStore.Add(run, names, characters, victory);
-        CompositionStore.Add(characters.Values, victory);
+        CompositionStore.Add(characters.Values, Patches.CombatFlowPatches.Ascension, victory);
         _showPending = true;
     }
 

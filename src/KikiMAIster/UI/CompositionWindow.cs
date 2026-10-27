@@ -14,6 +14,8 @@ public static class CompositionWindow
     private static bool _rebuildPending;
     private static bool _dragging;
     private static int _players;
+    /// The ascension level shown (null = every level).
+    private static int? _ascension;
     /// Which suggestion is shown (changed by "Another").
     private static int _neverPlayedPick, _neverWonPick;
     private static readonly Random Rng = new();
@@ -47,6 +49,7 @@ public static class CompositionWindow
         }
         var current = Overlay.InRun ? Capture.Engine.Players.Count : 0;
         _players = current > 0 ? current : _players > 0 ? _players : 2;
+        _ascension = current > 0 ? Patches.CombatFlowPatches.Ascension : CompositionStore.Data.MostPlayedAscension();
         Pick();
         Rebuild();
         _panel.Visible = true;
@@ -97,13 +100,14 @@ public static class CompositionWindow
         t.Played == 0 ? Loc.T("compo.never")
             : string.Format(Loc.T("compo.stats"), t.Played, t.Won, t.WinRate.ToString("P0", CultureInfo.InvariantCulture));
 
-    /// The current run's composition and its record before this run ("" in solo or outside a run).
+    /// The current run's composition and its record at this ascension level before this run ("" in solo or outside a run).
     internal static string CurrentLine()
     {
         var players = Capture.Engine.Players.Values.ToList();
         if (players.Count < 2) return "";
         var key = Compositions.KeyOf(players.Select(p => p.Character));
-        return $"{Loc.T("compo.group")} {Describe(key)} · {Stats(CompositionStore.Data.Get(key))}";
+        var level = Patches.CombatFlowPatches.Ascension;
+        return $"{Loc.T("compo.group")} {Describe(key)} · {string.Format(Loc.T("compo.at"), level)}{Stats(CompositionStore.Data.Get(key, level))}";
     }
 
     private static void Rebuild()
@@ -143,17 +147,37 @@ public static class CompositionWindow
         }
         _content.AddChild(count);
 
+        // Ascension level: every level, or one of the levels played (and the current run's).
+        var levels = new HBoxContainer();
+        levels.AddChild(Overlay.MakeLabel(Loc.T("compo.ascension"), Overlay.Text));
+        var played = data.Ascensions().ToList();
+        if (Overlay.InRun && !played.Contains(Patches.CombatFlowPatches.Ascension)) played.Add(Patches.CombatFlowPatches.Ascension);
+        if (_ascension is { } chosen && !played.Contains(chosen)) played.Add(chosen);
+        foreach (var level in new int?[] { null }.Concat(played.OrderByDescending(a => a).Select(a => (int?)a)))
+        {
+            var b = Overlay.MakeButton(level == null ? Loc.T("compo.allLevels") : $"A{level.Value.ToString(CultureInfo.InvariantCulture)}");
+            b.AddThemeColorOverride("font_color", level == _ascension ? Overlay.Accent : Overlay.Muted);
+            b.Pressed += () => Capture.Safe("CompositionWindow.Ascension", () =>
+            {
+                _ascension = level;
+                Pick();
+                _rebuildPending = true;
+            });
+            levels.AddChild(b);
+        }
+        _content.AddChild(levels);
+
         if (Overlay.InRun && CurrentLine() is { Length: > 0 } current) _content.AddChild(Overlay.MakeLabel(current, Overlay.Text));
 
         // Played compositions, most played first.
-        var played = data.Played(_players).ToList();
-        if (played.Count == 0) _content.AddChild(Overlay.MakeLabel(Loc.T("compo.none"), Overlay.Muted));
+        var compositions = data.Played(_players, _ascension).ToList();
+        if (compositions.Count == 0) _content.AddChild(Overlay.MakeLabel(Loc.T("compo.none"), Overlay.Muted));
         else
         {
             var grid = new GridContainer { Columns = 2, MouseFilter = Control.MouseFilterEnum.Pass };
             grid.AddThemeConstantOverride("h_separation", 14);
             grid.AddThemeConstantOverride("v_separation", 0);
-            foreach (var (key, tally) in played.Take(12))
+            foreach (var (key, tally) in compositions.Take(12))
             {
                 grid.AddChild(Overlay.MakeLabel(Describe(key), Overlay.Text));
                 grid.AddChild(Overlay.MakeLabel(Stats(tally), tally.Won > 0 ? Overlay.Text : Overlay.Muted));
@@ -162,8 +186,8 @@ public static class CompositionWindow
         }
 
         // Suggestions: a composition never played, one never won.
-        AddSuggestion("compo.neverPlayed", data.NeverPlayed(characters, _players).ToList(), _neverPlayedPick, () => _neverPlayedPick++);
-        AddSuggestion("compo.neverWon", data.NeverWon(characters, _players).ToList(), _neverWonPick, () => _neverWonPick++);
+        AddSuggestion("compo.neverPlayed", data.NeverPlayed(characters, _players, _ascension).ToList(), _neverPlayedPick, () => _neverPlayedPick++);
+        AddSuggestion("compo.neverWon", data.NeverWon(characters, _players, _ascension).ToList(), _neverWonPick, () => _neverWonPick++);
         _content.AddChild(Overlay.MakeLabel(Loc.T("compo.note"), Overlay.Muted));
     }
 
@@ -215,11 +239,11 @@ public static class CompositionStore
     }
 
     /// A finished run (victory or defeat) counts one game for its composition.
-    public static void Add(IEnumerable<string> characters, bool victory) => Capture.Safe("CompositionStore.Save", () =>
+    public static void Add(IEnumerable<string> characters, int ascension, bool victory) => Capture.Safe("CompositionStore.Save", () =>
     {
         var list = characters.ToList();
-        Data.Add(list, victory);
+        Data.Add(list, ascension, victory);
         if (FilePath != null) File.WriteAllText(FilePath, Data.Write());
-        ModLog.Info($"composition {Compositions.KeyOf(list)}: {(victory ? "victory" : "defeat")} recorded");
+        ModLog.Info($"composition A{ascension} {Compositions.KeyOf(list)}: {(victory ? "victory" : "defeat")} recorded");
     });
 }
