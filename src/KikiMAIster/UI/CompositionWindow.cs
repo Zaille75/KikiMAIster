@@ -23,6 +23,10 @@ public static class CompositionWindow
     private static readonly Random Rng = new();
     /// The character-select screen while it is open (set by UiPatches).
     public static WeakReference<NCharacterSelectScreen>? Lobby;
+
+    /// The character-select screen is open (outside a run).
+    internal static bool InLobby => Lobby != null && Lobby.TryGetTarget(out var screen) && GodotObject.IsInstanceValid(screen) &&
+                                    screen.IsInsideTree() && screen.IsVisibleInTree();
     private static string _contextSignature = "";
 
     /// Where the player is: Solo true/false (null = unknown: main menu…), players, ascension, and the group's
@@ -238,8 +242,9 @@ public static class CompositionWindow
 
         // Suggestions: a composition never played, one never won.
         AddSuggestion("compo.neverPlayed", data.NeverPlayed(characters, _players, _ascension).ToList(), _neverPlayedPick, () => _neverPlayedPick++);
-        AddSuggestion("compo.neverWon", data.NeverWon(characters, _players, _ascension).ToList(), _neverWonPick, () => _neverWonPick++);
-        _content.AddChild(Overlay.MakeLabel(Loc.T("compo.note"), Overlay.Muted));
+        // Never won = played and always lost: only shown once such a composition exists.
+        var neverWon = data.NeverWon(characters, _players, _ascension).ToList();
+        if (neverWon.Count > 0) AddSuggestion("compo.neverWon", neverWon, _neverWonPick, () => _neverWonPick++);
     }
 
     private static void AddSuggestion(string labelKey, List<string> options, int pick, Action next)

@@ -230,7 +230,7 @@ public static class Loc
         ["compo.neverPlayed"] = ("Never played ({0}): ", "Jamais jouée ({0}) : "),
         ["compo.neverWon"] = ("Never won ({0}): ", "Jamais gagnée ({0}) : "),
         ["compo.another"] = ("Another", "Une autre"),
-        ["compo.note"] = ("Counted when a run ends (victory or defeat), from v0.16.0 on", "Comptées à la fin de chaque partie (victoire ou défaite), depuis la v0.16.0"),
+        ["lobby.compositions"] = ("▸ Group compositions (F8)", "▸ Compositions de groupe (F8)"),
     };
 
     public static bool French => ModConfig.Current.Language switch

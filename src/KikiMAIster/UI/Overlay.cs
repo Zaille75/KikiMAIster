@@ -121,7 +121,7 @@ public static class Overlay
         outer.AddChild(_body);
         _panel.AddChild(outer);
         _layer.AddChild(_panel);
-        _panel.Visible = Cfg.Visible && InRun;
+        _panel.Visible = Cfg.Visible && (InRun || CompositionWindow.InLobby);
 
         var timer = new Godot.Timer { WaitTime = 0.3, Autostart = true };
         timer.Timeout += () => Capture.Safe("Overlay.Refresh", Refresh);
@@ -164,7 +164,9 @@ public static class Overlay
     {
         if (_panel == null) return;
         var inRun = InRun;
-        var show = Cfg.Visible && inRun;
+        // The character-select lobby also shows the panel (settings, compositions), without stats.
+        var inLobby = !inRun && CompositionWindow.InLobby;
+        var show = Cfg.Visible && (inRun || inLobby);
         if (_panel.Visible != show)
         {
             _panel.Visible = show;
@@ -173,8 +175,8 @@ public static class Overlay
         if (!inRun)
         {
             CombatSummary.Hide();
-            SettingsMenu.Hide();
             RunSummary.Hide();
+            if (!inLobby) SettingsMenu.Hide();
         }
     }
 
@@ -299,6 +301,29 @@ public static class Overlay
             _summaryButton.TooltipText = Loc.T("summary.tip");
             _summaryButton.Visible = CombatSummary.HasData;
         }
+
+        if (!InRun)
+        {
+            // Lobby: no stats (the last run's would be misleading), only what can be used there.
+            foreach (var key in ScopeButtons.Keys) ScopeButtons[key].Visible = false;
+            if (_summaryButton != null) _summaryButton.Visible = false;
+            var lobbySignature = $"lobby|{Loc.French}";
+            if (lobbySignature == _lastSignature) return;
+            _lastSignature = lobbySignature;
+            foreach (var child in _body.GetChildren())
+            {
+                _body.RemoveChild(child);
+                child.QueueFree();
+            }
+            _panel.CallDeferred(Control.MethodName.ResetSize);
+            var compos = MakeButton(Loc.T("lobby.compositions"));
+            compos.Alignment = HorizontalAlignment.Left;
+            compos.AddThemeColorOverride("font_color", Accent);
+            compos.Pressed += () => Capture.Safe("Overlay.Compositions", CompositionWindow.Toggle);
+            _body.AddChild(compos);
+            return;
+        }
+        foreach (var key in ScopeButtons.Keys) ScopeButtons[key].Visible = true;
 
         var engine = Capture.Engine;
         var combats = CombatList(engine);
