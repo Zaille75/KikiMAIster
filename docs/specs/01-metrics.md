@@ -203,11 +203,11 @@ the player could already absorb, which is exactly your example. It is also easy 
     orb channeled (Glacier…), card created (Cloak and Dagger, Fight Through…), summon (Pull Aggro), upgrade (Armaments,
     Compact, Manifest Authority), stars (Gather Light), **energy** (Constellation), **Forge** (Bulwark), **Sly given**
     (Hand Trick).
-  - Special case: **Genetic Algorithm** (its block grows each time it is played) is never wasted.
+  - Special cases, never wasted: **Genetic Algorithm** (its block grows each time it is played) and **Sacrifice**
+    (kills your own pet; validated by Zaille75, v0.10.3).
   - Pure block (can be wasted): the Defends, Deflect, Leap, Cloak of Stars, Particle Wall, Ultimate Defend, Untouchable,
     Melancholy, Entrench, Stack, Rally, Lift, Boot Sequence, Impervious, Minion Sacrifice, Mimic, Mirage, Expect a Fight,
-    Death's Door, Evil Eye, I Am Invincible, Mad Science (block version, unless its rider does something), Sacrifice
-    (killing your own pet is a cost, not a benefit — to confirm with Zaille75). An attack is an alternative only if the player could afford the Thorns damage it causes: the
+    Death's Door, Evil Eye, I Am Invincible, Mad Science (block version, unless its rider does something). An attack is an alternative only if the player could afford the Thorns damage it causes: the
   block left at the end of the turn minus the incoming attack must cover it (Thorns × hits; on all enemies for an attack
   on all enemies, else the enemy with the least Thorns). Otherwise not playing it was right, and the block is useless.
 - **F5 (v0.4.6).** An **Ethereal** block card is never wasted either (not playing it would have lost it anyway).

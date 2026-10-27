@@ -142,7 +142,8 @@ public static class BlockAlternatives
             EnergySpent = cardPlay.Resources.EnergySpent,
             Ethereal = cardPlay.Card.Keywords.Contains(CardKeyword.Ethereal),
             // Genetic Algorithm / The Scythe grow each time they are played: a side effect no hook reports.
-            HadOtherEffect = cardPlay.Card is GeneticAlgorithm or TheScythe,
+            // Sacrifice kills the player's own pet (validated by Zaille75: never wasted).
+            HadOtherEffect = cardPlay.Card is GeneticAlgorithm or TheScythe or Sacrifice,
             HadNonDamageEffect = cardPlay.Card is GeneticAlgorithm or TheScythe,
             UsefulCardsInHand = hand.Where(c => c != cardPlay.Card && IsUseful(c)).ToList()
         };
