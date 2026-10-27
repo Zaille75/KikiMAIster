@@ -16,7 +16,8 @@ namespace KikiMAIster.Patches;
 /// a real hit (AfterModifyingDamageAmount receives the same modifier list right after).
 public static class DebuffEffectPatches
 {
-    private sealed record Pending(IEnumerable<AbstractModel> Modifiers, List<DebuffEffect> Effects);
+    /// Vulnerable: enemies whose Vulnerable increased this hit.
+    private sealed record Pending(IEnumerable<AbstractModel> Modifiers, List<DebuffEffect> Effects, List<Creature> Vulnerable);
 
     private static Pending? _last;
 
@@ -35,6 +36,7 @@ public static class DebuffEffectPatches
             Capture.Safe("Hook.ModifyDamage", () =>
             {
                 var effects = new List<DebuffEffect>();
+                var vulnerable = new List<Creature>();
                 var damage = (double)__result;
                 foreach (var m in mods)
                 {
@@ -44,7 +46,11 @@ public static class DebuffEffectPatches
                         case VulnerablePower v when v.Owner == target && target.IsEnemy && target.HpDisplay == HpDisplay.Normal:
                         {
                             var factor = (double)v.ModifyDamageMultiplicative(target, __result, props, dealer, cardSource, cardPlay);
-                            if (factor > 1) Add(effects, target, v, dealer, damage - damage / factor, offense: true, fifo: true);
+                            if (factor > 1)
+                            {
+                                Add(effects, target, v, dealer, damage - damage / factor, offense: true, fifo: true);
+                                vulnerable.Add(target);
+                            }
                             break;
                         }
                         // Weak on an enemy attacking a player or pet: damage it did not deal.
@@ -61,7 +67,7 @@ public static class DebuffEffectPatches
                             break;
                     }
                 }
-                _last = effects.Count > 0 ? new Pending(mods, effects) : null;
+                _last = effects.Count > 0 ? new Pending(mods, effects, vulnerable) : null;
             });
         }
 
@@ -80,6 +86,7 @@ public static class DebuffEffectPatches
         {
             if (_last == null || !ReferenceEquals(_last.Modifiers, modifiers)) return;
             foreach (var e in _last.Effects) Capture.Emit(e);
+            foreach (var enemy in _last.Vulnerable) BlockAlternatives.OnVulnerableUsed(enemy);
             _last = null;
         });
     }

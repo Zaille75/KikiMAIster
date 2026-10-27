@@ -69,7 +69,7 @@ public static class Loc
         ["why.energy"] = ("{0} energy left unused", "{0} énergie non utilisée"),
         ["why.blockKept"] = ("{0} (+{1}) kept in hand, {2} HP lost", "{0} (+{1}) gardée en main, {2} PV perdus"),
         ["why.relic"] = ("{0}: one card short", "{0} : à une carte près"),
-        ["why.paelsTears"] = ("{0}: last energy spent on {1}, which was not needed", "{0} : dernière énergie dépensée pour {1}, qui ne servait à rien"),
+        ["why.paelsTears"] = ("{0}: energy spent on {1}, which was not needed (bonus lost)", "{0} : énergie dépensée pour {1}, qui ne servait à rien (bonus perdu)"),
         ["why.potion"] = ("died with {0} potion(s)", "mort avec {0} potion(s)"),
         ["tip.col.lethal"] = ("Turns where your starting hand could kill every enemy, yet they survived (minimum)", "Tours où ta main de départ pouvait tuer tous les ennemis, mais ils ont survécu (minimum)"),
         ["tip.col.wastedBlock"] = ("Block that stopped nothing while a useful card stayed in hand", "Armure qui n'a rien arrêté alors qu'une carte utile est restée en main"),

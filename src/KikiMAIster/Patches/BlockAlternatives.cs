@@ -38,8 +38,9 @@ public static class BlockAlternatives
         public bool HadNonDamageEffect { get; set; }
         /// Block this play gave (all receivers).
         public int BlockAmount { get; set; }
-        /// Its only debuff was 1 Weak on enemies that do not attack this turn: it expires having done nothing.
-        public bool IdleWeak { get; set; }
+        /// It applied a debuff that does nothing: 1 Weak on an enemy that does not attack this turn, or 1 Vulnerable on an
+        /// enemy with none that nobody hits before the end of the turn (spec §F, F8).
+        public bool UselessDebuff { get; set; }
         public required bool Ethereal { get; init; }
         /// Attack played: a stronger attack in hand on the same target (same cost or cheaper), with both damages.
         public (CardModel Card, int Damage, int Played)? Stronger { get; set; }
@@ -57,6 +58,8 @@ public static class BlockAlternatives
     private static readonly Dictionary<Player, Lethal.Attack[]?> FrontHand = new();
     /// Cards each player played this turn (auto-plays included, as relics count them), by type.
     private static readonly Dictionary<Player, Dictionary<CardType, int>> TurnPlays = new();
+    /// Enemies given their first Vulnerable this turn, and the play that gave it (useless until someone hits them).
+    private static readonly Dictionary<Creature, Play> PendingVulnerable = new();
 
     public static void Reset()
     {
@@ -64,6 +67,7 @@ public static class BlockAlternatives
         InProgress.Clear();
         FrontHand.Clear();
         TurnPlays.Clear();
+        PendingVulnerable.Clear();
     }
 
     /// Something other than block happened (power applied, damage, heal, draw, orb, card created…):
@@ -77,15 +81,33 @@ public static class BlockAlternatives
 
     /// A power applied during the play in progress: an effect, except 1 Weak on an enemy that does not attack this turn
     /// (it wears off before doing anything).
-    public static void OnPowerApplied(PowerModel power, decimal amount)
+    /// Stacked: the power was already on its owner (adding turns to it is always an effect).
+    public static void OnPowerApplied(PowerModel power, decimal amount, bool stacked)
     {
-        if (InProgress.TryPeek(out var play) && play != null && power is WeakPower && amount <= 1 && power.Amount <= 1 &&
-            power.Owner.IsEnemy && !Attacks(power.Owner))
+        if (InProgress.TryPeek(out var play) && play != null && !stacked && amount == 1 && power.Owner.IsEnemy)
         {
-            play.IdleWeak = true;
-            return;
+            if (power is WeakPower && !Attacks(power.Owner))
+            {
+                play.UselessDebuff = true;
+                return;
+            }
+            // Useful only if someone hits that enemy with an attack before the end of the turn (OnVulnerableUsed).
+            if (power is VulnerablePower)
+            {
+                play.UselessDebuff = true;
+                PendingVulnerable[power.Owner] = play;
+                return;
+            }
         }
         OnEffect();
+    }
+
+    /// A real attack hit was increased by Vulnerable on this enemy: the play that applied it did something.
+    public static void OnVulnerableUsed(Creature enemy)
+    {
+        if (!PendingVulnerable.Remove(enemy, out var play)) return;
+        play.HadOtherEffect = true;
+        play.HadNonDamageEffect = true;
     }
 
     private static bool Attacks(Creature enemy)
@@ -232,6 +254,7 @@ public static class BlockAlternatives
         foreach (var player in combat.Players.Where(p => p.Creature.IsAlive))
             Capture.Safe("end of turn checks", () => EndOfTurnChecks(combat, player));
         TurnPlays.Clear();
+        PendingVulnerable.Clear();
     }
 
     private static string Key(CardModel card) => $"Card:{Capture.IdOf(card)}";
@@ -252,12 +275,13 @@ public static class BlockAlternatives
         if (energy > 0 && hand.Any(Affordable) && Hook.ShouldPlayerResetEnergy(combat, player) && player.GetRelic<PaelsTears>() == null)
             Capture.Emit(new MissedChance(actor, "energy", new[] { N(energy) }, energy));
 
-        // Pael's Tears gives energy next turn for energy left: spending the last energy on a useless card lost it.
+        // Pael's Tears gives energy next turn for energy left: energy spent on a useless card (at any time in the turn)
+        // would have been left.
         if (energy == 0 && player.GetRelic<PaelsTears>() is { } tears)
         {
             var incoming = IncomingDamage(player.Creature);
             var useless = ThisTurn.FirstOrDefault(p => p.Owner == player && p.EnergySpent > 0 && !p.HadOtherEffect &&
-                ((p.GaveBlock && !p.Ethereal && player.Creature.Block - p.BlockAmount >= incoming) || (p.IdleWeak && !p.GaveBlock)));
+                ((p.GaveBlock && !p.Ethereal && player.Creature.Block - p.BlockAmount >= incoming) || (p.UselessDebuff && !p.GaveBlock)));
             if (useless != null)
                 Capture.Emit(new MissedChance(actor, "paelsTears", new[] { $"Relic:{Capture.IdOf(tears)}", Key(useless.Card) }));
         }

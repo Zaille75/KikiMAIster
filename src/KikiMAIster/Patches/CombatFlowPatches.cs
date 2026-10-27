@@ -92,6 +92,7 @@ public static class CombatFlowPatches
             Capture.PotionUser = null;
             DamagePatches.Reset();
             BlockAlternatives.Reset();
+            BlockAndPowerPatches.Reset();
             _combatOpen = true;
             KikiMAIster.UI.Overlay.EnsureAttached("combat start");
             KikiMAIster.UI.CombatSummary.HideAutoShown();

@@ -79,7 +79,7 @@ public static class BlockAndPowerPatches
     {
         public static void Prefix(PowerModel power, decimal amount, Creature? applier) => Capture.Safe("History.PowerReceived", () =>
         {
-            BlockAlternatives.OnPowerApplied(power, amount);
+            BlockAlternatives.OnPowerApplied(power, amount, Stacking.Remove(power));
             var id = Capture.IdOf(power);
             var value = (double)amount;
             var debuff = power.Type == PowerType.Debuff;
@@ -141,11 +141,20 @@ public static class BlockAndPowerPatches
             Capture.Safe("PowerCmd.Apply", () => SuppressIfFromTemporaryPower(power, target, amount));
     }
 
+    /// Powers whose amount is being changed on a creature that already had them (stacking): reported by the history
+    /// before the new amount is set, so the history alone cannot tell a first application from added turns.
+    private static readonly HashSet<PowerModel> Stacking = new(ReferenceEqualityComparer.Instance);
+
+    public static void Reset() => Stacking.Clear();
+
     [HarmonyPatch(typeof(PowerCmd), nameof(PowerCmd.ModifyAmount))]
     public static class PowerModify
     {
-        public static void Prefix(PowerModel power, decimal offset) =>
-            Capture.Safe("PowerCmd.ModifyAmount", () => SuppressIfFromTemporaryPower(power, power.Owner, offset));
+        public static void Prefix(PowerModel power, decimal offset) => Capture.Safe("PowerCmd.ModifyAmount", () =>
+        {
+            Stacking.Add(power);
+            SuppressIfFromTemporaryPower(power, power.Owner, offset);
+        });
     }
 
     [HarmonyPatch(typeof(CreatureCmd), nameof(CreatureCmd.Heal))]
