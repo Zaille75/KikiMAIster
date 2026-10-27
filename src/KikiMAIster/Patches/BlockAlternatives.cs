@@ -456,11 +456,14 @@ public static class BlockAlternatives
     {
         try
         {
+            // Cards whose number of hits the mod cannot know (Whirlwind, Fiend Fire…) are never compared.
+            if (HitCount(played, target) == null) return null;
             var damage = EstimateDamage(played, target);
             if (damage <= 0 || damage >= target.CurrentHp + target.Block) return null;
             var factor = doubled ? 2 : 1;
             var best = hand.Where(c => c != played && c.Type == CardType.Attack && !c.EnergyCost.CostsX && Cost(c) <= budget &&
-                                       c.TargetType is TargetType.AnyEnemy or TargetType.AllEnemies && PlayableExceptEnergy(c))
+                                       c.TargetType is TargetType.AnyEnemy or TargetType.AllEnemies && PlayableExceptEnergy(c) &&
+                                       HitCount(c, target) != null)
                 .Select(c => (Card: c, Damage: EstimateDamage(c, target) * factor))
                 .Where(x => x.Damage > damage).OrderByDescending(x => x.Damage).FirstOrDefault();
             return best.Card == null ? null : (best.Card, best.Damage, damage);
@@ -472,8 +475,28 @@ public static class BlockAlternatives
         }
     }
 
-    /// The game's own damage computation for a card against one enemy (Strength, Vulnerable, Weak…) × its hits.
-    /// 0 for cards whose damage is computed in another way (they are left out: the result stays a minimum).
+    /// Cards that always hit twice without saying it in a variable.
+    private static readonly HashSet<string> TwoHits = new() { "ASTRAL_PULSE", "MAUL", "DAGGER_SPRAY", "TWIN_STRIKE", "UPROAR", "RIP_AND_TEAR", "REFRACT", "THRASH" };
+
+    /// Cards whose number of hits depends on things the mod does not compute (energy spent, cards in piles…).
+    private static readonly HashSet<string> UnknownHits = new()
+        { "SPITE", "ERADICATE", "FLAK_CANNON", "FIEND_FIRE", "HEAVENLY_DRILL", "MAD_SCIENCE", "SKEWER", "STARDUST", "VOLLEY", "WHIRLWIND" };
+
+    /// Number of hits of an attack on this target (card audit of every "hit count" in the game), null when unknown.
+    /// "CalculatedHits" is the game's own count (En miettes: 1 + times the player lost HP this fight; Barrage…).
+    private static int? HitCount(CardModel card, Creature? target)
+    {
+        var id = card.Id.Entry;
+        if (UnknownHits.Contains(id)) return null;
+        if (card.DynamicVars.TryGetValue("CalculatedHits", out var calc) && calc is CalculatedVar cv) return Math.Max(1, (int)cv.Calculate(target));
+        if (card.DynamicVars.TryGetValue("Repeat", out var repeat)) return Math.Max(1, repeat.IntValue);
+        if (TwoHits.Contains(id)) return 2;
+        if (card is Dismantle) return target?.HasPower<VulnerablePower>() == true ? 2 : 1;
+        return 1;
+    }
+
+    /// The game's own damage computation for a card against one enemy (Strength, Vulnerable, Weak…) × its hits
+    /// (1 when unknown: the result stays a minimum). 0 for cards whose damage is computed in another way.
     private static int EstimateDamage(CardModel card, Creature target)
     {
         var owner = card.Owner;
@@ -495,8 +518,7 @@ public static class BlockAlternatives
         {
             DebuffEffectPatches.Computing = false;
         }
-        var hits = card.DynamicVars.TryGetValue("Repeat", out var repeat) ? Math.Max(1, repeat.IntValue) : 1;
-        return Math.Max(0, (int)damage) * hits;
+        return Math.Max(0, (int)damage) * (HitCount(card, target) ?? 1);
     }
 
     /// Attacks, and skills/powers that give no block (debuffs, draw, buffs…). Status, curses and other block
@@ -541,8 +563,7 @@ public static class BlockAlternatives
         if (enemies.Count == 0) return 0;
         var thorns = enemies.Select(e => e.GetPowerAmount<ThornsPower>()).ToList();
         var perHit = card.TargetType == TargetType.AllEnemies ? thorns.Sum() : thorns.Min();
-        var hits = card.DynamicVars.TryGetValue("Repeat", out var repeat) ? Math.Max(1, repeat.IntValue) : 1;
-        return perHit * hits;
+        return perHit * (HitCount(card, null) ?? 1);
     }
 
     private static int Cost(CardModel card) => Math.Max(0, card.EnergyCost.GetWithModifiers(CostModifiers.All));
