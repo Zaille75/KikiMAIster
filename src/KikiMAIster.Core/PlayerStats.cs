@@ -80,6 +80,14 @@ public sealed class PlayerStats
     public List<MissedLethalTurn> MissedLethalTurns { get; } = new();
     public double WeakAttacks { get; set; }
     public List<WeakAttackPlay> WeakAttackPlays { get; } = new();
+    /// Other missed opportunities per kind ("smallBlock", "energy", "relic"…), and their latest explanations.
+    public Dictionary<string, double> MissedByKind { get; } = new();
+    public List<MissedEntry> MissedEntries { get; } = new();
+    /// Worse choices: weak attacks + smaller block, Pen Nib on a weak attack, block below Orichalcum, growing card not played.
+    public double MissedChoices => WeakAttacks + new[] { "smallBlock", "penNib", "orichalcum", "growth" }.Sum(k => MissedByKind.GetValueOrDefault(k));
+    /// Every missed opportunity counted once (trophies).
+    public double MissedTotal => MissedLethals + MissedChoices + MissedByKind.GetValueOrDefault("relic") +
+                                 MissedByKind.GetValueOrDefault("potion") + (MissedByKind.GetValueOrDefault("blockKept") > 0 ? 1 : 0);
 
     // Co-op
     /// HP this player saved for allies: block given that absorbed damage + their debuffs' prevented damage + healing.

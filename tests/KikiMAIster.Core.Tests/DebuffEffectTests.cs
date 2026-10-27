@@ -86,3 +86,36 @@ public class LethalTests
         Assert.Null(Lethal.Find(hand, 2, new[] { 5, 7 }));
     }
 }
+
+public class MissedChanceTests : TestBase
+{
+    [Fact]
+    public void BlockKept_CountsHpLostUpToTheCardsBlock()
+    {
+        Engine.Handle(new BlockCardKept(A, "Card:DEFEND", 5));
+        EnemyHits(A, blocked: 0, hp: 3);
+        EnemyHits(A, blocked: 0, hp: 4);
+        Engine.Handle(new RoundStarted(2));
+
+        Assert.Equal(5, Combat(IdA).MissedByKind["blockKept"]);
+        Assert.Single(Combat(IdA).MissedEntries);
+    }
+
+    [Fact]
+    public void BlockKept_NoHpLost_NothingCounted()
+    {
+        Engine.Handle(new BlockCardKept(A, "Card:DEFEND", 5));
+        Engine.Handle(new RoundStarted(2));
+        Assert.False(Combat(IdA).MissedByKind.ContainsKey("blockKept"));
+    }
+
+    [Fact]
+    public void Choices_SumWeakAttacksAndOtherKinds()
+    {
+        Engine.Handle(new WeakAttack(A, "Card:STRIKE", 6, "Card:BASH", 8));
+        Engine.Handle(new MissedChance(A, "smallBlock", new[] { "Card:DEFEND", "5", "Card:SHRUG", "8" }));
+        Engine.Handle(new MissedChance(A, "energy", new[] { "2" }, 2));
+        Assert.Equal(2, Combat(IdA).MissedChoices);
+        Assert.Equal(2, Combat(IdA).MissedByKind["energy"]);
+    }
+}

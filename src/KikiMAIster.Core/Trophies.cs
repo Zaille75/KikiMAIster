@@ -22,7 +22,7 @@ public static class Trophies
         new("trophy.enabled", s => s.DamageEnabledAllies, CoopOnly: true),
         new("trophy.untouched", s => s.HpLost, LowerIsBetter: true),
         new("trophy.useless", s => s.UnusedBlock, Fun: true),
-        new("trophy.missed", s => s.MissedLethals + s.WeakAttacks, Fun: true),
+        new("trophy.missed", s => s.MissedTotal, Fun: true),
         new("trophy.friendly", s => s.FriendlyDamage, CoopOnly: true, Fun: true),
         new("trophy.deaths", s => s.Deaths, CoopOnly: true, Fun: true),
     };

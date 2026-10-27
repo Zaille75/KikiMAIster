@@ -5,7 +5,9 @@ using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Models;
+using HarmonyLib;
 using MegaCrit.Sts2.Core.Models.Cards;
+using MegaCrit.Sts2.Core.Models.Relics;
 using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Localization.DynamicVars;
@@ -37,6 +39,10 @@ public static class BlockAlternatives
         public required bool Ethereal { get; init; }
         /// Attack played: a stronger attack in hand on the same target (same cost or cheaper), with both damages.
         public (CardModel Card, int Damage, int Played)? Stronger { get; set; }
+        /// Attack doubled by Pen Nib while a stronger affordable attack was in hand (both shown doubled).
+        public (CardModel Card, int Damage, int Played)? PenNibBetter { get; set; }
+        /// Block card played: a block card in hand giving more block (same cost or cheaper), with both amounts.
+        public (CardModel Card, int Block, int Played)? BiggerBlock { get; set; }
     }
 
     private static readonly ConditionalWeakTable<CardPlay, Play> Plays = new();
@@ -45,12 +51,15 @@ public static class BlockAlternatives
     private static int _nextId;
     /// Players whose front hand was already checked this turn, and the lethal combination found (if any).
     private static readonly Dictionary<Player, Lethal.Attack[]?> FrontHand = new();
+    /// Cards each player played this turn (auto-plays included, as relics count them), by type.
+    private static readonly Dictionary<Player, Dictionary<CardType, int>> TurnPlays = new();
 
     public static void Reset()
     {
         ThisTurn.Clear();
         InProgress.Clear();
         FrontHand.Clear();
+        TurnPlays.Clear();
     }
 
     /// Something other than block happened (power applied, damage, heal, draw, orb, card created…):
@@ -77,6 +86,8 @@ public static class BlockAlternatives
     /// Card play starts: remember the useful cards in the player's hand. Auto-played cards were not a choice.
     public static void OnPlayStarted(CardPlay cardPlay)
     {
+        if (!TurnPlays.TryGetValue(cardPlay.Player, out var counts)) TurnPlays[cardPlay.Player] = counts = new();
+        counts[cardPlay.Card.Type] = counts.GetValueOrDefault(cardPlay.Card.Type) + 1;
         var hand = cardPlay.Player.PlayerCombatState?.Hand.Cards;
         if (cardPlay.IsAutoPlay || hand == null)
         {
@@ -94,12 +105,18 @@ public static class BlockAlternatives
             Card = cardPlay.Card,
             EnergySpent = cardPlay.Resources.EnergySpent,
             Ethereal = cardPlay.Card.Keywords.Contains(CardKeyword.Ethereal),
-            // Genetic Algorithm grows its own block each time it is played: a side effect no hook reports.
-            HadOtherEffect = cardPlay.Card is GeneticAlgorithm,
+            // Genetic Algorithm / The Scythe grow each time they are played: a side effect no hook reports.
+            HadOtherEffect = cardPlay.Card is GeneticAlgorithm or TheScythe,
+            HadNonDamageEffect = cardPlay.Card is GeneticAlgorithm or TheScythe,
             UsefulCardsInHand = hand.Where(c => c != cardPlay.Card && IsUseful(c)).ToList()
         };
+        var energyBefore = (cardPlay.Player.PlayerCombatState?.Energy ?? 0) + cardPlay.Resources.EnergySpent;
         if (cardPlay.Card.Type == CardType.Attack && cardPlay.Target is { IsEnemy: true } target)
-            play.Stronger = StrongerAttack(cardPlay.Card, target, hand);
+        {
+            if (IsDoubledByPenNib(cardPlay)) play.PenNibBetter = StrongerAttack(cardPlay.Card, target, hand, energyBefore, doubled: true);
+            else play.Stronger = StrongerAttack(cardPlay.Card, target, hand, Cost(cardPlay.Card), doubled: false);
+        }
+        if (cardPlay.Card.GainsBlock) play.BiggerBlock = BiggerBlock(cardPlay.Card, hand);
         Plays.AddOrUpdate(cardPlay, play);
         ThisTurn.Add(play);
         InProgress.Push(play);
@@ -161,11 +178,135 @@ public static class BlockAlternatives
 
         foreach (var play in ThisTurn)
         {
-            if (play.Stronger is not { } better || play.HadNonDamageEffect) continue;
-            if (play.Owner.PlayerCombatState?.Hand.Cards.Contains(better.Card) != true) continue;
-            Capture.Emit(new WeakAttack(Capture.ToActor(play.Owner), $"Card:{Capture.IdOf(play.Card)}", better.Played,
-                $"Card:{Capture.IdOf(better.Card)}", better.Damage));
+            var hand = play.Owner.PlayerCombatState?.Hand.Cards;
+            if (hand == null) continue;
+            var actor = Capture.ToActor(play.Owner);
+            if (play.Stronger is { } better && !play.HadNonDamageEffect && hand.Contains(better.Card))
+                Capture.Emit(new WeakAttack(actor, Key(play.Card), better.Played, Key(better.Card), better.Damage));
+            // Pen Nib doubled a weak attack: counted even if the stronger one was played later (it was not doubled).
+            if (play.PenNibBetter is { } nib && !play.HadNonDamageEffect)
+                Capture.Emit(new MissedChance(actor, "penNib", new[] { Key(play.Card), N(nib.Played), Key(nib.Card), N(nib.Damage) }));
+            // A smaller block card, while the bigger one stayed in hand and the block was not enough for the attack.
+            if (play.BiggerBlock is { } bigger && !play.HadOtherEffect && hand.Contains(bigger.Card) &&
+                play.Owner.Creature.Block < IncomingDamage(play.Owner.Creature))
+                Capture.Emit(new MissedChance(actor, "smallBlock", new[] { Key(play.Card), N(bigger.Played), Key(bigger.Card), N(bigger.Block) }));
         }
+
+        foreach (var player in combat.Players.Where(p => p.Creature.IsAlive))
+            Capture.Safe("end of turn checks", () => EndOfTurnChecks(combat, player));
+        TurnPlays.Clear();
+    }
+
+    private static string Key(CardModel card) => $"Card:{Capture.IdOf(card)}";
+    private static string N(int v) => v.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    /// Per player at the end of the turn: unused energy, growing card not played, block card kept, Orichalcum
+    /// beaten by a small block, relic triggers missed by one card (spec 01-metrics §E0).
+    private static void EndOfTurnChecks(ICombatState combat, Player player)
+    {
+        if (player.PlayerCombatState is not { } st) return;
+        var actor = Capture.ToActor(player);
+        var energy = st.Energy;
+        var hand = st.Hand.Cards.ToList();
+        bool Affordable(CardModel c) => !IsStatusOrCurse(c) && PlayableExceptEnergy(c) && (c.EnergyCost.CostsX || Cost(c) <= energy);
+        var plays = TurnPlays.GetValueOrDefault(player) ?? new Dictionary<CardType, int>();
+
+        // Unused energy: lost at the end of the turn (not kept by Ice Cream & co., not wanted by Pael's Tears).
+        if (energy > 0 && hand.Any(Affordable) && Hook.ShouldPlayerResetEnergy(combat, player) && player.GetRelic<PaelsTears>() == null)
+            Capture.Emit(new MissedChance(actor, "energy", new[] { N(energy) }, energy));
+
+        foreach (var growing in hand.Where(c => c is GeneticAlgorithm or TheScythe && Affordable(c)))
+            Capture.Emit(new MissedChance(actor, "growth", new[] { Key(growing) }));
+
+        var kept = hand.Where(c => c.GainsBlock && Affordable(c)).Select(c => (Card: c, Block: EstimateBlock(c)))
+            .Where(x => x.Block > 0).OrderByDescending(x => x.Block).FirstOrDefault();
+        if (kept.Card != null) Capture.Emit(new BlockCardKept(actor, Key(kept.Card), kept.Block));
+
+        // Orichalcum gives its block only when the player has none: a smaller block card played instead was a loss.
+        RelicModel? orichalcum = (RelicModel?)player.GetRelic<Orichalcum>() ?? player.GetRelic<FakeOrichalcum>();
+        if (orichalcum != null)
+        {
+            var given = (int)orichalcum.DynamicVars.Block.BaseValue;
+            var block = player.Creature.Block;
+            if (block > 0 && block <= given && ThisTurn.Any(p => p.Owner == player && p.GaveBlock && !p.HadOtherEffect && !p.Ethereal))
+                Capture.Emit(new MissedChance(actor, "orichalcum", new[] { $"Relic:{Capture.IdOf(orichalcum)}", N(block), N(given) }));
+        }
+
+        foreach (var relic in player.Relics)
+        {
+            if (MissedRelicTrigger(relic, plays, hand, energy, Affordable))
+                Capture.Emit(new MissedChance(actor, "relic", new[] { $"Relic:{Capture.IdOf(relic)}" }));
+        }
+    }
+
+    /// One more card would have triggered the relic this turn, and a playable one was in hand.
+    private static bool MissedRelicTrigger(RelicModel relic, Dictionary<CardType, int> plays, List<CardModel> hand, int energy,
+        Func<CardModel, bool> affordable)
+    {
+        int Played(CardType t) => plays.GetValueOrDefault(t);
+        bool InHand(CardType t) => hand.Any(c => c.Type == t && affordable(c));
+        int Every() => relic.DynamicVars.TryGetValue("Cards", out var v) ? v.IntValue : 3;
+        switch (relic)
+        {
+            case Shuriken or Kunai or OrnamentalFan or Kusarigama:
+                return Played(CardType.Attack) % Every() == Every() - 1 && InHand(CardType.Attack);
+            case LetterOpener:
+                return Played(CardType.Skill) % Every() == Every() - 1 && InHand(CardType.Skill);
+            case RainbowRing:
+            {
+                var types = new[] { CardType.Attack, CardType.Skill, CardType.Power };
+                var missing = types.Where(t => Played(t) == 0).ToList();
+                return missing.Count == 1 && InHand(missing[0]);
+            }
+            case BrilliantScarf:
+                // The Nth card of the turn is free: energy does not matter.
+                return plays.Values.Sum() == Every() - 1 && hand.Any(c => !IsStatusOrCurse(c) && PlayableExceptEnergy(c));
+            case ScreamingFlagon:
+                // Damage to all enemies when the hand is empty at the end of the turn.
+                return hand.Count > 0 && hand.All(c => !IsStatusOrCurse(c) && PlayableExceptEnergy(c) && !c.EnergyCost.CostsX) &&
+                       hand.Sum(Cost) <= energy;
+            default:
+                return false;
+        }
+    }
+
+    private static bool IsStatusOrCurse(CardModel c) => c.Type is CardType.Status or CardType.Curse;
+
+    /// Pen Nib picks the attack to double before the play starts.
+    private static bool IsDoubledByPenNib(CardPlay cardPlay)
+    {
+        var nib = cardPlay.Player.GetRelic<PenNib>();
+        if (nib == null) return false;
+        return Traverse.Create(nib).Property("AttackToDouble").GetValue<CardModel>() == cardPlay.Card;
+    }
+
+    /// A block card in hand giving more block than the one played (same cost or cheaper).
+    private static (CardModel, int, int)? BiggerBlock(CardModel played, IEnumerable<CardModel> hand)
+    {
+        try
+        {
+            var block = EstimateBlock(played);
+            if (block <= 0) return null;
+            var cost = Cost(played);
+            var best = hand.Where(c => c != played && c.GainsBlock && !c.EnergyCost.CostsX && Cost(c) <= cost && PlayableExceptEnergy(c))
+                .Select(c => (Card: c, Block: EstimateBlock(c))).Where(x => x.Block > block)
+                .OrderByDescending(x => x.Block).FirstOrDefault();
+            return best.Card == null ? null : (best.Card, best.Block, block);
+        }
+        catch (Exception e)
+        {
+            ModLog.Error("bigger block", e);
+            return null;
+        }
+    }
+
+    /// The game's own block computation for a card (Dexterity, Frail…); 0 when its block is computed another way.
+    private static int EstimateBlock(CardModel card)
+    {
+        if (!card.DynamicVars.TryGetValue("Block", out var v) || v is not BlockVar bv || card.CombatState is not { } cs) return 0;
+        var block = Hook.ModifyBlock(cs, card.Owner.Creature, bv.BaseValue, bv.Props, card, null, out _);
+        var times = card.DynamicVars.TryGetValue("Repeat", out var repeat) ? Math.Max(1, repeat.IntValue) : 1;
+        return Math.Max(0, (int)block) * times;
     }
 
     /// The front hand's lethal combination, if the attacks in hand could kill every enemy that must die.
@@ -194,16 +335,19 @@ public static class BlockAlternatives
 
     /// The strongest attack in hand on the same target, if it beats the attack played, costs no more, and the
     /// played attack could not kill the target anyway.
-    private static (CardModel, int, int)? StrongerAttack(CardModel played, Creature target, IEnumerable<CardModel> hand)
+    /// Budget: the most the stronger attack may cost. Doubled: the played attack is doubled by Pen Nib (its estimate
+    /// already is), so the other attacks are compared doubled too.
+    private static (CardModel, int, int)? StrongerAttack(CardModel played, Creature target, IEnumerable<CardModel> hand, int budget,
+        bool doubled)
     {
         try
         {
             var damage = EstimateDamage(played, target);
             if (damage <= 0 || damage >= target.CurrentHp + target.Block) return null;
-            var cost = Cost(played);
-            var best = hand.Where(c => c != played && c.Type == CardType.Attack && !c.EnergyCost.CostsX && Cost(c) <= cost &&
+            var factor = doubled ? 2 : 1;
+            var best = hand.Where(c => c != played && c.Type == CardType.Attack && !c.EnergyCost.CostsX && Cost(c) <= budget &&
                                        c.TargetType is TargetType.AnyEnemy or TargetType.AllEnemies && PlayableExceptEnergy(c))
-                .Select(c => (Card: c, Damage: EstimateDamage(c, target)))
+                .Select(c => (Card: c, Damage: EstimateDamage(c, target) * factor))
                 .Where(x => x.Damage > damage).OrderByDescending(x => x.Damage).FirstOrDefault();
             return best.Card == null ? null : (best.Card, best.Damage, damage);
         }

@@ -7,6 +7,7 @@ using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Entities.Potions;
 using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Runs;
@@ -145,7 +146,12 @@ public static class CombatFlowPatches
     {
         public static void Prefix(Creature creature, bool wasRemovalPrevented) => Capture.Safe("AfterDeath", () =>
         {
-            if (!wasRemovalPrevented && creature.IsPlayer) Capture.Emit(new PlayerDied(Capture.ToActor(creature)));
+            if (wasRemovalPrevented || !creature.IsPlayer) return;
+            Capture.Emit(new PlayerDied(Capture.ToActor(creature)));
+            // Died with potions that could have been drunk in combat (spec §E0).
+            var potions = creature.Player?.Potions.Count(p => p.Usage is PotionUsage.CombatOnly or PotionUsage.AnyTime) ?? 0;
+            if (potions > 0)
+                Capture.Emit(new MissedChance(Capture.ToActor(creature), "potion", new[] { potions.ToString(System.Globalization.CultureInfo.InvariantCulture) }, potions));
         });
     }
 

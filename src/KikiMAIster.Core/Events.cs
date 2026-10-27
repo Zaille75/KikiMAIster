@@ -126,3 +126,15 @@ public sealed record MissedLethalTurn(int Round, IReadOnlyList<string> Cards, in
 
 /// A weaker attack played while a stronger one stayed in hand (not saved with the run).
 public sealed record WeakAttackPlay(int Round, string Played, int PlayedDamage, string Better, int BetterDamage);
+
+/// Another missed opportunity (spec 01-metrics §E0). Kind: "smallBlock", "penNib", "orichalcum", "growth", "energy",
+/// "relic", "potion". Args: values for its explanation ("Card:ID"/"Relic:ID" keys are shown with their game names).
+/// Amount: what is counted (1 per occurrence, energy points for "energy", potions for "potion").
+public sealed record MissedChance(Actor Player, string Kind, IReadOnlyList<string> Args, double Amount = 1) : StatEvent;
+
+/// End of a player turn with a playable block card kept in hand: if the player then loses HP to enemies before the
+/// next round, min(HP lost, Block) counts as "HP that could have been saved" (kind "blockKept").
+public sealed record BlockCardKept(Actor Player, string Card, int Block) : StatEvent;
+
+/// A missed opportunity kept for its explanation (not saved with the run).
+public sealed record MissedEntry(int Round, string Kind, IReadOnlyList<string> Args, double Amount);

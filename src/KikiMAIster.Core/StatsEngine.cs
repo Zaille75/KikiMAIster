@@ -13,6 +13,8 @@ public sealed class StatsEngine
     private readonly Dictionary<(int CreatureId, string PowerId), DotLedger> _dots = new();
     private readonly Dictionary<(int CreatureId, string PowerId), FifoLedger> _fifo = new();
     private readonly Dictionary<int, bool> _hadAlternative = new();
+    /// Block cards kept in hand at the end of the player turn, and the HP lost to enemies since.
+    private readonly Dictionary<ulong, (string Card, int Block, double Lost)> _blockKept = new();
     private readonly Dictionary<int, (int Round, BlockChoice Choice)> _choices = new();
 
     public int Round { get; private set; }
@@ -78,6 +80,8 @@ public sealed class StatsEngine
                     s.WeakAttackPlays.Add(new WeakAttackPlay(Round, w.Played, w.PlayedDamage, w.Better, w.BetterDamage));
                 });
                 break;
+            case MissedChance m when m.Player.IsPlayerSide && m.Amount > 0: AddMissed(m.Player.PlayerId, m.Kind, m.Args, m.Amount); break;
+            case BlockCardKept k when k.Player.IsPlayerSide && k.Block > 0: _blockKept[k.Player.PlayerId] = (k.Card, k.Block, 0); break;
             case CardEvent c when c.Player.IsPlayerSide:
                 Each(c.Player.PlayerId, s =>
                 {
@@ -137,6 +141,7 @@ public sealed class StatsEngine
 
     private void OnRoundStarted(RoundStarted r)
     {
+        ResolveBlockKept();
         // A new round closes the previous one on the chart.
         if (InCombat && r.Round > 1 && _timeline[^1].Round < r.Round - 1) AddRoundPoint(r.Round - 1);
         Round = r.Round;
@@ -160,6 +165,7 @@ public sealed class StatsEngine
 
     private void OnCombatEnded(CombatEnded c)
     {
+        ResolveBlockKept();
         // Block left at the end of combat counts as wasted / useless help (spec §F, decision F2).
         foreach (var (owner, ledger) in _block)
             foreach (var layer in ledger.Clear())
@@ -182,6 +188,7 @@ public sealed class StatsEngine
         _fifo.Clear();
         _hadAlternative.Clear();
         _choices.Clear();
+        _blockKept.Clear();
     }
 
     // ---------- Damage ----------
@@ -262,6 +269,7 @@ public sealed class StatsEngine
         if (d.Dealer.IsEnemy)
         {
             Each(owner, s => s.HpLostFromEnemies += d.Hp);
+            if (_blockKept.TryGetValue(owner, out var kept)) _blockKept[owner] = kept with { Lost = kept.Lost + d.Hp };
         }
         else if (d.Dealer.IsPlayerSide && d.Dealer.PlayerId == owner)
         {
@@ -422,6 +430,27 @@ public sealed class StatsEngine
             if (healer == target) s.HealingSelf += h.Amount;
             else s.HealingAllies += h.Amount;
         });
+    }
+
+    // ---------- Missed opportunities ----------
+
+    private void AddMissed(ulong playerId, string kind, IReadOnlyList<string> args, double amount) =>
+        Each(playerId, s =>
+        {
+            PlayerStats.Add(s.MissedByKind, kind, amount);
+            s.MissedEntries.Add(new MissedEntry(Round, kind, args, amount));
+        });
+
+    /// A block card kept in hand while HP was then lost to enemies: the HP it could have saved (spec §E0).
+    private void ResolveBlockKept()
+    {
+        foreach (var (id, (card, block, lost)) in _blockKept)
+        {
+            var saved = Math.Min(block, lost);
+            if (saved > 0) AddMissed(id, "blockKept", new[] { card, block.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                lost.ToString("0", System.Globalization.CultureInfo.InvariantCulture) }, saved);
+        }
+        _blockKept.Clear();
     }
 
     // ---------- Helpers ----------
