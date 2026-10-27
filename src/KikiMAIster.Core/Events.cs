@@ -55,7 +55,8 @@ public sealed record BlockGained(Actor Receiver, Actor Giver, int Amount, Source
 
 /// HP given to a pet (summon, max HP gain, heal). Giver: the player who gave it. Separate from block:
 /// never wasted or useless.
-public sealed record PetHpGiven(Actor Giver, double Amount) : StatEvent;
+/// Owner: the player whose pet got the HP (None = the giver's own pet).
+public sealed record PetHpGiven(Actor Giver, double Amount, Actor Owner = default) : StatEvent;
 
 /// HP loss reduced by a relic or power (Tungsten Rod, Intangible, Buffer…) on a player or pet. SourceId: the
 /// model that reduced it ("Relic:TUNGSTEN_ROD"…).
@@ -162,6 +163,11 @@ public sealed record MissedChance(Actor Player, string Kind, IReadOnlyList<strin
 /// End of a player turn with a playable block card kept in hand: if the player then loses HP to enemies before the
 /// next round, min(HP lost, Block) counts as "HP that could have been saved" (kind "blockKept").
 public sealed record BlockCardKept(Actor Player, string Card, int Block) : StatEvent;
+
+/// End of a player turn with a playable block card for allies kept in hand (Lift, Rally…), an ally being alive: the HP
+/// allies then lose to enemies before the next round could have been saved, up to Block (kind "allyBlockKept").
+/// AllAllies: the card protects every ally (sum of their losses), else one ally (the most one ally lost).
+public sealed record AllyBlockCardKept(Actor Player, string Card, int Block, bool AllAllies) : StatEvent;
 
 /// A missed opportunity kept for its explanation (not saved with the run).
 public sealed record MissedEntry(int Round, string Kind, IReadOnlyList<string> Args, double Amount, int Combat = 0);

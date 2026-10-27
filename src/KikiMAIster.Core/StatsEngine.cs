@@ -17,6 +17,10 @@ public sealed class StatsEngine
     private readonly Dictionary<int, bool> _hadAlternative = new();
     /// Block cards kept in hand at the end of the player turn, and the HP lost to enemies since.
     private readonly Dictionary<ulong, (string Card, int Block, double Lost)> _blockKept = new();
+    /// Block cards for allies kept in hand at the end of the turn, and the HP each ally lost to enemies since.
+    private readonly Dictionary<ulong, (string Card, int Block, bool All, Dictionary<ulong, double> Lost)> _allyBlockKept = new();
+    /// Each player's pet HP by who gave them (Legion of Bone gives pets to allies): owner → giver → HP.
+    private readonly Dictionary<ulong, Dictionary<ulong, double>> _petHp = new();
     private readonly Dictionary<int, (int Round, BlockChoice Choice)> _choices = new();
     /// Card plays in progress per player (a card can play other cards), and the damage of the outermost play so far.
     private readonly Dictionary<ulong, int> _playDepth = new();
@@ -68,8 +72,13 @@ public sealed class StatsEngine
             case Healed h: OnHealed(h); break;
             case HpLossPrevented h: OnHpLossPrevented(h); break;
             case PetHpGiven p when p.Giver.IsPlayerSide && p.Giver.PlayerId != 0 && p.Amount > 0:
+            {
                 Each(p.Giver.PlayerId, s => s.PetHpGiven += p.Amount);
+                var owner = p.Owner.IsPlayerSide && p.Owner.PlayerId != 0 ? p.Owner.PlayerId : p.Giver.PlayerId;
+                if (!_petHp.TryGetValue(owner, out var by)) _petHp[owner] = by = new();
+                by[p.Giver.PlayerId] = by.GetValueOrDefault(p.Giver.PlayerId) + p.Amount;
                 break;
+            }
             case DebuffEffect x: OnDebuffEffect(x); break;
             case StrengthBorrowed b: OnStrengthBorrowed(b); break;
             case StrengthUsed u: OnStrengthUsed(u); break;
@@ -95,6 +104,9 @@ public sealed class StatsEngine
                 break;
             case MissedChance m when m.Player.IsPlayerSide && m.Amount > 0: AddMissed(m.Player.PlayerId, m.Kind, m.Args, m.Amount); break;
             case BlockCardKept k when k.Player.IsPlayerSide && k.Block > 0: _blockKept[k.Player.PlayerId] = (k.Card, k.Block, 0); break;
+            case AllyBlockCardKept k when k.Player.IsPlayerSide && k.Block > 0:
+                _allyBlockKept[k.Player.PlayerId] = (k.Card, k.Block, k.AllAllies, new());
+                break;
             case CardEvent c when c.Player.IsPlayerSide:
                 Each(c.Player.PlayerId, s =>
                 {
@@ -234,6 +246,8 @@ public sealed class StatsEngine
         _hadAlternative.Clear();
         _choices.Clear();
         _blockKept.Clear();
+        _allyBlockKept.Clear();
+        _petHp.Clear();
         _playDepth.Clear();
         _playDamage.Clear();
     }
@@ -325,12 +339,24 @@ public sealed class StatsEngine
 
         if (d.Target.Kind == ActorKind.Pet)
         {
-            // Damage a pet takes instead of its owner is protection, not damage taken (Q5).
+            // Damage a pet takes instead of its owner is protection, not damage taken (Q5). The part from HP an ally
+            // gave the pet is that ally's help (spec §D2).
+            var by = _petHp.GetValueOrDefault(owner);
+            var total = by?.Values.Sum() ?? 0;
+            double own = d.Hp;
+            if (by != null && total > 0)
+                foreach (var (giver, hp) in by.Where(kv => kv.Key != owner))
+                {
+                    var part = d.Hp * hp / total;
+                    own -= part;
+                    Each(giver, s => s.PetAbsorbedForAllies += part);
+                }
             Each(owner, s =>
             {
-                s.AbsorbedByPet += d.Hp;
+                s.AbsorbedByPet += own;
                 if (d.Killed) s.PetDeaths++;
             });
+            if (d.Killed) _petHp.Remove(owner);
             return;
         }
 
@@ -338,6 +364,8 @@ public sealed class StatsEngine
         {
             Each(owner, s => s.HpLostFromEnemies += d.Hp);
             if (_blockKept.TryGetValue(owner, out var kept)) _blockKept[owner] = kept with { Lost = kept.Lost + d.Hp };
+            foreach (var (giver, allyKept) in _allyBlockKept)
+                if (giver != owner) allyKept.Lost[owner] = allyKept.Lost.GetValueOrDefault(owner) + d.Hp;
         }
         else if (d.Dealer.IsPlayerSide && d.Dealer.PlayerId == owner)
         {
@@ -564,6 +592,13 @@ public sealed class StatsEngine
                 lost.ToString("0", System.Globalization.CultureInfo.InvariantCulture) }, saved);
         }
         _blockKept.Clear();
+        foreach (var (id, (card, block, all, lost)) in _allyBlockKept)
+        {
+            var saved = all ? lost.Values.Sum(l => Math.Min(block, l)) : lost.Values.Select(l => Math.Min(block, l)).DefaultIfEmpty(0).Max();
+            if (saved > 0) AddMissed(id, "allyBlockKept", new[] { card, block.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                saved.ToString("0", System.Globalization.CultureInfo.InvariantCulture) }, saved);
+        }
+        _allyBlockKept.Clear();
     }
 
     // ---------- Helpers ----------

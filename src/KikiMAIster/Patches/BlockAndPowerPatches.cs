@@ -198,7 +198,8 @@ public static class BlockAndPowerPatches
             {
                 // The heal that is part of a summon is already counted by History.Summoned.
                 if (!Capture.IsInsideCall(typeof(OstyCmd)))
-                    Capture.Emit(new PetHpGiven(healer.Kind == ActorKind.Player ? healer : Actor.Player(target.PlayerId, 0), healed));
+                    Capture.Emit(new PetHpGiven(healer.Kind == ActorKind.Player ? healer : Actor.Player(target.PlayerId, 0), healed,
+                        Actor.Player(target.PlayerId, 0)));
                 return;
             }
             Capture.Emit(new Healed(healer, target, healed));
@@ -214,7 +215,7 @@ public static class BlockAndPowerPatches
             BlockAlternatives.OnEffect();
             // A card that summons for every player (co-op) is credited to whoever played it, not to each pet owner.
             var giver = Capture.CurrentActingPlayer ?? player;
-            Capture.Emit(new PetHpGiven(Capture.ToActor(giver), amount));
+            Capture.Emit(new PetHpGiven(Capture.ToActor(giver), amount, Capture.ToActor(player)));
         });
     }
 }

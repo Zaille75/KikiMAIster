@@ -100,7 +100,25 @@ public static class DebuffEffectPatches
                             if (factor > 1) effects.Add(new HelpGiven(Capture.ToActor(target), "taken", damage - damage / factor));
                             break;
                         }
-                        case PowerModel p when p is not (VulnerablePower or WeakPower or StrengthPower or TemporaryStrengthPower or InterceptPower) &&
+                        // Tank: the Tank's player takes 50% more while allies are alive (taken for them, like Intercept)…
+                        case TankPower tp when tp.Owner == target && dealer.IsEnemy &&
+                                               target.CombatState?.GetTeammatesOf(target).Any(t => t != target && t.IsAlive && t.IsPlayer) == true:
+                        {
+                            var factor = (double)tp.ModifyDamageMultiplicative(target, __result, props, dealer, cardSource, cardPlay);
+                            if (factor > 1) effects.Add(new HelpGiven(Capture.ToActor(target), "taken", damage - damage / factor));
+                            break;
+                        }
+                        // …and its allies (Guarded) take 50% less: HP saved for them by the Tank's player.
+                        case GuardedPower g when g.Owner == target && dealer.IsEnemy && g.Applier is { IsPlayer: true } guard && guard != target:
+                        {
+                            var factor = (double)g.ModifyDamageMultiplicative(target, __result, props, dealer, cardSource, cardPlay);
+                            if (factor is > 0 and < 1)
+                                effects.Add(new DebuffEffect(Capture.ToActor(target), Capture.IdOf(g), Capture.ToActor(target), damage / factor - damage,
+                                    Offense: false, Credit: DebuffCredit.Direct, Applier: Capture.ToActor(guard)));
+                            break;
+                        }
+                        case PowerModel p when p is not (VulnerablePower or WeakPower or StrengthPower or TemporaryStrengthPower or InterceptPower or
+                                                   TankPower or GuardedPower) &&
                                                p.Applier is { IsPlayer: true } applier:
                             AddApplied(effects, p, applier, target, dealer, props, cardSource, cardPlay, __result, vulnFactor);
                             break;

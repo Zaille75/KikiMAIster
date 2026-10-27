@@ -63,8 +63,11 @@ public sealed class PlayerStats
     public double PreventedByEffects { get; set; }
     public Dictionary<string, double> PreventedByEffectSource { get; } = new();
     /// Everything that really stopped damage: own block, block given to allies, pet, relics/powers, debuffs.
-    public double PreventedTotal => PreventedOwnBlock + PreventedForAllies + AbsorbedByPet + PreventedByEffects +
-                                    PreventedByDebuffsSelf + PreventedByDebuffsAllies;
+    public double PreventedTotal => PreventedSelf + PreventedForAllies + PetAbsorbedForAllies + PreventedByDebuffsAllies;
+    /// What this player prevented for themself (trophy Forteresse): own block, own pet, relics/powers, own debuffs.
+    public double PreventedSelf => PreventedOwnBlock + AbsorbedByPet + PreventedByEffects + PreventedByDebuffsSelf;
+    /// Damage absorbed by an ally's pet, from the pet HP this player gave it (Legion of Bone…).
+    public double PetAbsorbedForAllies { get; set; }
     /// Damage stopped by block (own block + block given to allies).
     public double PreventedByBlock => PreventedOwnBlock + PreventedForAllies;
     /// Block that stopped nothing, wasted or useless (v0.9.0: one "useless" column; wasted is a missed opportunity).
@@ -91,11 +94,14 @@ public sealed class PlayerStats
     public double MissedWasted => WastedPlayCount + MissedByKind.GetValueOrDefault("growth");
     /// Every missed opportunity counted once (trophies).
     public double MissedTotal => MissedLethals + MissedWasted + MissedChoices + MissedByKind.GetValueOrDefault("relic") + MissedByKind.GetValueOrDefault("paelsTears") +
-                                 MissedByKind.GetValueOrDefault("potion") + (MissedByKind.GetValueOrDefault("blockKept") > 0 ? 1 : 0);
+                                 MissedByKind.GetValueOrDefault("potion") + (MissedByKind.GetValueOrDefault("blockKept") > 0 ? 1 : 0) +
+                                 (MissedByKind.GetValueOrDefault("allyBlockKept") > 0 ? 1 : 0);
+    /// HP lost (own and allies') while a playable block card stayed in hand.
+    public double AvoidableHp => MissedByKind.GetValueOrDefault("blockKept") + MissedByKind.GetValueOrDefault("allyBlockKept");
 
     // Co-op
     /// HP this player saved for allies: block given that absorbed damage + their debuffs' prevented damage + healing.
-    public double SavedForAllies => PreventedForAllies + PreventedByDebuffsAllies + HealingAllies;
+    public double SavedForAllies => PreventedForAllies + PreventedByDebuffsAllies + HealingAllies + PetAbsorbedForAllies;
     public double Deaths { get; set; }
     /// Help that is not damage or block: energy, cards (drawn, created, brought to hand), orbs given to allies, and
     /// damage taken instead of allies (Intercept).

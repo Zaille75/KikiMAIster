@@ -1,4 +1,4 @@
-# Handoff — state of the project (2026-10-27, v0.14.0)
+# Handoff — state of the project (2026-10-27, v0.15.0)
 
 Read this first in a new conversation, then `CLAUDE.md`, `docs/specs/01-metrics.md` and `docs/specs/02-ui.md`.
 The conversation of 2026-10-27 turned the 27 feedback points of the first co-op games into v0.8.0 → v0.13.4, then
@@ -102,7 +102,8 @@ wrong-order misses, Waterfall Giant invulnerable phase, fights kept across Save 
 
 ## Open topics for the next conversation
 - Zaille75 tests v0.13.4 in co-op and sends the log ("log transferred").
-- **Trophy list** is a proposal (spec 02-ui, v0.9.0): to discuss with Zaille75.
+- **Trophy list:** v0.15.0 co-op additions validated by Zaille75 (Bouclier humain, Dynamo, Croupier; Forteresse = own only;
+  Traître includes ally HP that a kept ally block card could have saved; Tank and pets given to allies credited). Not tested in game.
 - Chart: "remove the blocked stats" was read as removing the "Évités" chart; Zaille75 said he would check.
 - Growing cards were moved from "Choix" to "Gâché" (v0.13.1); Zaille75 may prefer "Choix".
 - Previous fights are kept across Save & Quit since v0.14.0 (run file `combat.N.*` lines); not the explanations of misses.

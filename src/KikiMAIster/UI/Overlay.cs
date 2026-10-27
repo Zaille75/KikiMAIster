@@ -606,8 +606,10 @@ public static class Overlay
         if (s.PreventedByBlock > 0)
             lines.Add(_solo ? $"{Loc.T("tip.byBlock")}: {N(s.PreventedByBlock)}"
                 : $"{Loc.T("tip.byBlock")}: {N(s.PreventedByBlock)} ({Loc.T("tip.self")} {N(s.PreventedOwnBlock)} · {Loc.T("tip.allies")} {N(s.PreventedForAllies)})");
-        if (s.AbsorbedByPet > 0 || s.PetDeaths > 0)
-            lines.Add($"{Loc.T("tip.pet")}: {N(s.AbsorbedByPet)}" + (s.PetDeaths > 0 ? $" · {Loc.T("tip.petDeaths")} {N(s.PetDeaths)}" : ""));
+        if (s.AbsorbedByPet + s.PetAbsorbedForAllies > 0 || s.PetDeaths > 0)
+            lines.Add($"{Loc.T("tip.pet")}: {N(s.AbsorbedByPet + s.PetAbsorbedForAllies)}" +
+                      (s.PetAbsorbedForAllies >= 0.5 ? $" ({Loc.T("tip.petOfAllies")} {N(s.PetAbsorbedForAllies)})" : "") +
+                      (s.PetDeaths > 0 ? $" · {Loc.T("tip.petDeaths")} {N(s.PetDeaths)}" : ""));
         if (s.PreventedByEffects > 0)
             lines.Add($"{Loc.T("tip.byEffects")}: " + string.Join(", ", s.PreventedByEffectSource.OrderByDescending(kv => kv.Value)
                 .Select(kv => $"{GameNames.Of(kv.Key)} {N(kv.Value)}")));
@@ -623,7 +625,7 @@ public static class Overlay
         {
             new Cell("col.prevented", N(s.PreventedTotal), tip),
             new Cell("col.byBlock", N(s.PreventedByBlock), tip),
-            new Cell("col.byPet", N(s.AbsorbedByPet), tip),
+            new Cell("col.byPet", N(s.AbsorbedByPet + s.PetAbsorbedForAllies), tip),
             new Cell("col.useless", N(s.UnusedBlock), tip),
             new Cell("col.petHp", N(s.PetHpGiven), tip)
         };
@@ -677,7 +679,7 @@ public static class Overlay
             new Cell("col.choices", N(s.MissedChoices), tip),
             new Cell(MisplaysKey, N(s.MissedWasted + s.MissedChoices), tip),
             new Cell("col.unusedEnergy", N(K("energy")), tip),
-            new Cell("col.hpAvoidable", N(K("blockKept")), tip),
+            new Cell("col.hpAvoidable", N(s.AvoidableHp), tip),
             new Cell("col.relicTrigger", N(K("relic") + K("paelsTears")), tip),
             new Cell("col.potionsLeft", N(K("potion")), tip)
         };
@@ -690,7 +692,7 @@ public static class Overlay
     private static IReadOnlyList<Cell> CoopRow(ulong id, PlayerStats s)
     {
         var tip = Line(("tip.preventedAllies", s.PreventedForAllies, false), ("tip.byDebuffs", s.PreventedByDebuffsAllies, false),
-                      ("tip.healAllies", s.HealingAllies, false))
+                      ("tip.healAllies", s.HealingAllies, false), ("tip.pet", s.PetAbsorbedForAllies, false))
                   + Block(Line(("tip.orbsGiven", s.OrbsGiven, false)))
                   + (s.DebuffEffectBySource.Count > 0 ? Block(Loc.T("tip.helpBy") + ": " + string.Join(", ", s.DebuffEffectBySource
                       .Where(kv => Math.Round(kv.Value) != 0).OrderByDescending(kv => kv.Value).Select(kv => $"{GameNames.Of(kv.Key)} {N(kv.Value)}"))) : "")

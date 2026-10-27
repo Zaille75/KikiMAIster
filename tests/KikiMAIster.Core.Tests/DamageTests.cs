@@ -233,4 +233,30 @@ public class DamageTests : TestBase
         Assert.Equal(1, Combat(IdA).MissedEntries[0].Combat);
         Assert.Equal(1, Combat(IdA).MissedChoices);
     }
+
+    [Fact]
+    public void PetGivenToAlly_AbsorbedDamageIsTheGiversHelp()
+    {
+        var petB = Actor.Pet(IdB, 11);
+        Engine.Handle(new PetHpGiven(B, 5, B));
+        Engine.Handle(new PetHpGiven(A, 15, B)); // Legion of Bone played by A
+        Engine.Handle(new DamageDealt(Enemy, petB, 0, 8, 0, false, Source.Unknown));
+        Assert.Equal(6, Combat(IdA).PetAbsorbedForAllies);
+        Assert.Equal(6, Combat(IdA).SavedForAllies);
+        Assert.Equal(2, Combat(IdB).AbsorbedByPet);
+        Assert.Equal(0, Combat(IdA).PreventedSelf);
+    }
+
+    [Fact]
+    public void AllyBlockKept_CountsAllyHpLost()
+    {
+        Engine.Handle(new AllyBlockCardKept(A, "Card:LIFT", 8, AllAllies: false));
+        EnemyHits(B, 0, 5);
+        EnemyHits(C, 0, 12);
+        EnemyHits(A, 0, 3); // A's own loss does not count
+        Engine.Handle(new RoundStarted(2));
+        Assert.Equal(8, Combat(IdA).MissedByKind["allyBlockKept"]);
+        Assert.Equal(8, Combat(IdA).AvoidableHp);
+        Assert.Equal(8, Trophies.All.First(c => c.Key == "trophy.friendly").Value(Combat(IdA)));
+    }
 }

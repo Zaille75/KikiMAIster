@@ -123,6 +123,10 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
 | Energy given (v0.13.0) | Energy given to other players (Believe in You, Energy Surge…). |
 | Cards given (v0.13.0) | Cards drawn for, created for, or brought back to the hand of other players (Huddle Up, Plot, Blade Symphony, Largesse, Glimpse Beyond, Outrage, Tutor…). Orbs channeled for allies (Ignition) are in the details. |
 | Most cards in a turn (v0.13.0) | The most cards this player played in one turn (trophy "Roi du combo"). |
+| Tank (v0.15.0) | Tank makes its holder take 50% more attack damage and its allies (Guarded) 50% less. The damage an ally did not take counts as HP saved for that ally by the Tank's player (Ange gardien, "PV sauvés"); the extra damage the Tank's player takes while an ally is alive counts as "Encaissés" (taken for allies), like Intercept. |
+| Pet given to an ally (v0.15.0) | A pet's HP are shared by who gave them (summon, max HP, heal; Légion d'ossements summons for every player). Damage the pet absorbs is split in the same proportions: the part from HP an ally gave counts as HP saved for that ally by the giver (Ange gardien), the rest as the owner's own "Familier" protection. A dead pet starts from zero. |
+| Fortress vs guardian angel (v0.15.0) | Forteresse (trophy) = damage prevented **for yourself** (own block on you, your pet, relics/powers, your Weak / Strength down on enemies attacking you). What you prevent for allies is Ange gardien. Solo: unchanged. |
+| Ally HP you could have saved (v0.15.0) | A playable block card that gives block to an ally (Lift, Rally, Constellation…; any ally / all allies) stayed in hand at the end of the turn with an ally alive, then allies lost HP to enemies before the next round: min(HP lost, its block) — for one ally the most any one ally lost, for all allies the sum — counts in "Évitables" (kind "allyBlockKept") and in the Traître trophy. |
 | Best card play (v0.14.0) | The most damage dealt by one card play: every hit of the card, plus the cards it plays itself (Knife Trap's Shivs…), block and overkill included (trophy "Carte maîtresse"). |
 
 ## C3. Other stats (v0.9.0)

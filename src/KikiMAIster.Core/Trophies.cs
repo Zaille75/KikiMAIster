@@ -19,13 +19,16 @@ public static class Trophies
         new("trophy.combo", s => s.MostCardsInTurn),
         new("trophy.kills", s => s.Kills),
         new("trophy.debuffs", s => s.DebuffsApplied.Values.Sum(t => t.Stacks)),
-        new("trophy.prevented", s => s.PreventedTotal),
+        new("trophy.prevented", s => s.PreventedSelf),
         new("trophy.saved", s => s.SavedForAllies, CoopOnly: true),
         new("trophy.enabled", s => s.DamageEnabledAllies, CoopOnly: true),
+        new("trophy.taken", s => s.TakenForAllies, CoopOnly: true),
+        new("trophy.energy", s => s.EnergyGiven, CoopOnly: true),
+        new("trophy.cards", s => s.CardsGiven, CoopOnly: true),
         new("trophy.untouched", s => s.HpLost, LowerIsBetter: true),
         new("trophy.useless", s => s.UnusedBlock, Fun: true),
         new("trophy.missed", s => s.MissedTotal, Fun: true),
-        new("trophy.friendly", s => s.FriendlyDamage, CoopOnly: true, Fun: true),
+        new("trophy.friendly", s => s.FriendlyDamage + s.MissedByKind.GetValueOrDefault("allyBlockKept"), CoopOnly: true, Fun: true),
         new("trophy.deaths", s => s.Deaths, CoopOnly: true, Fun: true),
     };
 

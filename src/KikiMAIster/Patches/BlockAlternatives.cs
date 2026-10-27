@@ -409,9 +409,19 @@ public static class BlockAlternatives
 
         foreach (var growing in hand.Where(c => IsGrowing(c) && Affordable(c))) GrowingAffordable.Add(growing);
 
-        var kept = hand.Where(c => c.GainsBlock && Affordable(c)).Select(c => (Card: c, Block: EstimateBlock(c)))
+        // Block for one ally (Lift…) does not protect the player: only the ally check below.
+        var kept = hand.Where(c => c.GainsBlock && Affordable(c) && (c.TargetType != TargetType.AnyAlly || c is Mimic)).Select(c => (Card: c, Block: EstimateBlock(c)))
             .Where(x => x.Block > 0).OrderByDescending(x => x.Block).FirstOrDefault();
         if (kept.Card != null) Capture.Emit(new BlockCardKept(actor, Key(kept.Card), kept.Block));
+
+        // A block card for allies (Lift, Rally…) kept in hand while an ally is alive: their HP lost may have been avoidable.
+        if (combat.Players.Any(p => p != player && p.Creature.IsAlive))
+        {
+            var forAllies = hand.Where(c => c.GainsBlock && c.TargetType is TargetType.AnyAlly or TargetType.AllAllies && c is not Mimic && Affordable(c))
+                .Select(c => (Card: c, Block: EstimateBlock(c))).Where(x => x.Block > 0).OrderByDescending(x => x.Block).FirstOrDefault();
+            if (forAllies.Card != null)
+                Capture.Emit(new AllyBlockCardKept(actor, Key(forAllies.Card), forAllies.Block, forAllies.Card.TargetType == TargetType.AllAllies));
+        }
 
         // Orichalcum gives its block only when the player has none: a smaller block card played instead was a loss.
         RelicModel? orichalcum = (RelicModel?)player.GetRelic<Orichalcum>() ?? player.GetRelic<FakeOrichalcum>();
