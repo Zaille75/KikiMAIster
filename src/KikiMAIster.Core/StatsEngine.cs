@@ -12,6 +12,8 @@ public sealed class StatsEngine
     private readonly Dictionary<ulong, BlockLedger> _block = new();
     private readonly Dictionary<(int CreatureId, string PowerId), DotLedger> _dots = new();
     private readonly Dictionary<(int CreatureId, string PowerId), FifoLedger> _fifo = new();
+    /// Strength each player got from others' debuffs (Dominate), per player it was borrowed from.
+    private readonly Dictionary<ulong, Dictionary<ulong, double>> _borrowed = new();
     private readonly Dictionary<int, bool> _hadAlternative = new();
     /// Block cards kept in hand at the end of the player turn, and the HP lost to enemies since.
     private readonly Dictionary<ulong, (string Card, int Block, double Lost)> _blockKept = new();
@@ -66,6 +68,8 @@ public sealed class StatsEngine
                 Each(p.Giver.PlayerId, s => s.PetHpGiven += p.Amount);
                 break;
             case DebuffEffect x: OnDebuffEffect(x); break;
+            case StrengthBorrowed b: OnStrengthBorrowed(b); break;
+            case StrengthUsed u: OnStrengthUsed(u); break;
             case MissedLethal m when m.Player.IsPlayerSide:
                 Each(m.Player.PlayerId, s =>
                 {
@@ -186,6 +190,7 @@ public sealed class StatsEngine
         _block.Clear();
         _dots.Clear();
         _fifo.Clear();
+        _borrowed.Clear();
         _hadAlternative.Clear();
         _choices.Clear();
         _blockKept.Clear();
@@ -392,18 +397,24 @@ public sealed class StatsEngine
     {
         if (x.Amount <= 0 || !x.Beneficiary.IsPlayerSide || x.Beneficiary.PlayerId == 0) return;
         var shares = new List<(ulong Id, double Share)>();
-        if (x.Fifo)
+        _fifo.TryGetValue((x.Holder.CreatureId, x.PowerId), out var fifo);
+        switch (x.Credit)
         {
-            if (_fifo.TryGetValue((x.Holder.CreatureId, x.PowerId), out var fifo) && fifo.Current != 0)
-                shares.Add((fifo.Current, 1));
-        }
-        else
-        {
-            var stacks = _dots.Where(kv => kv.Key.CreatureId == x.Holder.CreatureId && kv.Key.PowerId.StartsWith(x.PowerId))
-                .SelectMany(kv => kv.Value.Shares().Select(s => (s.ApplierId, Stacks: s.Share * kv.Value.Total)))
-                .GroupBy(s => s.ApplierId).Select(g => (Id: g.Key, Stacks: g.Sum(s => s.Stacks))).ToList();
-            var total = stacks.Sum(s => s.Stacks);
-            if (total > 0) shares.AddRange(stacks.Where(s => s.Id != 0).Select(s => (s.Id, s.Stacks / total)));
+            case DebuffCredit.CurrentTurn:
+                if (fifo != null && fifo.Current != 0) shares.Add((fifo.Current, 1));
+                break;
+            case DebuffCredit.RemainingTurns:
+                if (fifo != null) shares.AddRange(fifo.Remaining().Where(r => r.ApplierId != 0));
+                break;
+            default:
+            {
+                var stacks = _dots.Where(kv => kv.Key.CreatureId == x.Holder.CreatureId && kv.Key.PowerId.StartsWith(x.PowerId))
+                    .SelectMany(kv => kv.Value.Shares().Select(s => (s.ApplierId, Stacks: s.Share * kv.Value.Total)))
+                    .GroupBy(s => s.ApplierId).Select(g => (Id: g.Key, Stacks: g.Sum(s => s.Stacks))).ToList();
+                var total = stacks.Sum(s => s.Stacks);
+                if (total > 0) shares.AddRange(stacks.Where(s => s.Id != 0).Select(s => (s.Id, s.Stacks / total)));
+                break;
+            }
         }
         var beneficiary = x.Beneficiary.PlayerId;
         foreach (var (id, share) in shares)
@@ -416,6 +427,35 @@ public sealed class StatsEngine
                 else if (id == beneficiary) s.PreventedByDebuffsSelf += amount;
                 else s.PreventedByDebuffsAllies += amount;
                 PlayerStats.Add(s.DebuffEffectBySource, x.PowerId, amount);
+            });
+        }
+    }
+
+    private void OnStrengthBorrowed(StrengthBorrowed b)
+    {
+        if (b.Amount <= 0 || b.Player.Kind != ActorKind.Player) return;
+        if (!_fifo.TryGetValue((b.Holder.CreatureId, b.PowerId), out var fifo)) return;
+        if (!_borrowed.TryGetValue(b.Player.PlayerId, out var from)) _borrowed[b.Player.PlayerId] = from = new();
+        foreach (var (id, share) in fifo.Remaining().Where(r => r.ApplierId != 0))
+            from[id] = from.GetValueOrDefault(id) + b.Amount * share;
+    }
+
+    /// The borrowed share of the Strength used in a hit is damage enabled for the players it came from (capped at the
+    /// Strength the player has now: Strength lost later reduces it).
+    private void OnStrengthUsed(StrengthUsed u)
+    {
+        if (u.Strength <= 0 || u.Damage <= 0 || !u.Player.IsPlayerSide || !_borrowed.TryGetValue(u.Player.PlayerId, out var from)) return;
+        var borrowed = from.Values.Sum();
+        if (borrowed <= 0) return;
+        var scale = Math.Min(1, u.Strength / borrowed);
+        foreach (var (id, amount) in from)
+        {
+            var extra = u.Damage * amount * scale / u.Strength;
+            Each(id, s =>
+            {
+                if (id == u.Player.PlayerId) s.DamageEnabledSelf += extra;
+                else s.DamageEnabledAllies += extra;
+                PlayerStats.Add(s.DebuffEffectBySource, "STRENGTH_POWER", extra);
             });
         }
     }

@@ -10,6 +10,7 @@ using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.Powers;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Cards;
 using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.ValueProps;
 
@@ -80,6 +81,10 @@ public static class BlockAndPowerPatches
         public static void Prefix(PowerModel power, decimal amount, Creature? applier) => Capture.Safe("History.PowerReceived", () =>
         {
             BlockAlternatives.OnPowerApplied(power, amount, Stacking.Remove(power));
+            // Dominate: the Strength it gives equals the target's Vulnerable, borrowed from whoever applied it.
+            if (power is StrengthPower && amount > 0 && power.Owner.IsPlayer && Capture.CardPlays.TryPeek(out var play) &&
+                play.Card is Dominate && play.Target is { IsEnemy: true } target)
+                Capture.Emit(new StrengthBorrowed(Capture.ToActor(power.Owner), Capture.ToActor(target), ModelDb.GetId<VulnerablePower>().Entry, (double)amount));
             var id = Capture.IdOf(power);
             var value = (double)amount;
             var debuff = power.Type == PowerType.Debuff;

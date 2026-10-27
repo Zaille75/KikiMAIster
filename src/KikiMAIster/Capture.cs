@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using KikiMAIster.Core;
+using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Models;
@@ -20,6 +21,8 @@ public static class Capture
 
     /// Card plays in progress (a card can trigger another card's auto-play).
     public static readonly Stack<Player> CardPlayers = new();
+    /// The same card plays (card, target…).
+    public static readonly Stack<CardPlay> CardPlays = new();
 
     /// Player using a potion right now, if any, and that potion ("Potion:<ID>").
     public static Player? PotionUser;

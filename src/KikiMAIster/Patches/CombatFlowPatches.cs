@@ -89,6 +89,7 @@ public static class CombatFlowPatches
         {
             EnsureRun(runState);
             Capture.CardPlayers.Clear();
+            Capture.CardPlays.Clear();
             Capture.PotionUser = null;
             DamagePatches.Reset();
             BlockAlternatives.Reset();
@@ -188,6 +189,7 @@ public static class CombatFlowPatches
             Capture.Safe("CardPlayStarted", () =>
             {
                 Capture.CardPlayers.Push(cardPlay.Card.Owner);
+                Capture.CardPlays.Push(cardPlay);
                 Capture.Emit(new CardEvent(Capture.ToActor(cardPlay.Card.Owner), CardAction.Played));
                 BlockAlternatives.OnPlayStarted(cardPlay);
             });
@@ -199,6 +201,7 @@ public static class CombatFlowPatches
         public static void Prefix() => Capture.Safe("CardPlayFinished", () =>
         {
             if (Capture.CardPlayers.Count > 0) Capture.CardPlayers.Pop();
+            if (Capture.CardPlays.Count > 0) Capture.CardPlays.Pop();
             BlockAlternatives.OnPlayFinished();
         });
     }

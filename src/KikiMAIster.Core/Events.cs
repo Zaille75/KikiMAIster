@@ -97,10 +97,22 @@ public sealed record PowerChanged(Actor Applier, Actor Target, string PowerId, d
 public sealed record Healed(Actor Healer, Actor Target, int Amount) : StatEvent;
 
 /// A debuff changed a damage instance (spec 01-metrics §B2). Holder: the creature carrying the debuff.
-/// Beneficiary: the player (or pet) who dealt more damage (Offense: Vulnerable on an enemy) or took less
-/// (Weak / Strength down on the attacking enemy). Fifo: duration debuff whose current turn belongs to one
-/// applier (Vulnerable, Weak); else the stacks are shared by amount (Strength down: every "<PowerId>…" key).
-public sealed record DebuffEffect(Actor Holder, string PowerId, Actor Beneficiary, double Amount, bool Offense, bool Fifo) : StatEvent;
+/// Beneficiary: the player (or pet) who dealt more damage (Offense: Vulnerable on an enemy, Bully's bonus) or took
+/// less (Weak / Strength down on the attacking enemy). Credit: who is responsible (see DebuffCredit).
+public sealed record DebuffEffect(Actor Holder, string PowerId, Actor Beneficiary, double Amount, bool Offense, DebuffCredit Credit) : StatEvent;
+
+/// CurrentTurn: the applier of the current turn of a duration debuff (Vulnerable, Weak: first in, first out).
+/// RemainingTurns: every applier, by the turns each still has in the queue (effects that use all the stacks at once:
+/// Bully, Dominate). Stacks: every applier by stacks, over all "<PowerId>…" keys (Strength down).
+public enum DebuffCredit { CurrentTurn, RemainingTurns, Stacks }
+
+/// A player gained Strength from a debuff on an enemy (Dominate: Strength = the target's Vulnerable). Those Strength
+/// points remember who applied the debuff (by remaining turns) for the rest of the combat.
+public sealed record StrengthBorrowed(Actor Player, Actor Holder, string PowerId, double Amount) : StatEvent;
+
+/// A real attack hit of this player (or pet) got Damage extra from their Strength (Strength points in total): the
+/// share of borrowed Strength is damage enabled for whoever it was borrowed from.
+public sealed record StrengthUsed(Actor Player, double Strength, double Damage) : StatEvent;
 
 /// A player could have killed every enemy with the attacks in hand at the start of the turn (front hand),
 /// but the enemies were still alive at the end of it. Cards: "Card:ID" keys of the lethal combination.

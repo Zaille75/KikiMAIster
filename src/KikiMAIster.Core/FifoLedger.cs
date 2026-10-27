@@ -32,4 +32,12 @@ public sealed class FifoLedger
 
     /// The player whose stacks are active now (0 = none, or an enemy's own stacks).
     public ulong Current => _chunks.First?.Value.Applier ?? 0;
+
+    /// Each applier's share of the turns still queued (sum = 1; applier 0 = enemy or unknown).
+    public IEnumerable<(ulong ApplierId, double Share)> Remaining()
+    {
+        var total = _chunks.Sum(c => c.Amount);
+        if (total <= 0) yield break;
+        foreach (var g in _chunks.GroupBy(c => c.Applier)) yield return (g.Key, g.Sum(c => c.Amount) / total);
+    }
 }

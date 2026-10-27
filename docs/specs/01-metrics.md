@@ -42,6 +42,16 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
   removes the oldest turn. Example: turn 1, A applies 2 Vulnerable; turn 2, B applies 2 → the turns 1–2 of Vulnerable
   count for A, the turns 3–4 for B.
 - **Strength down** does not decay by turns: the loss is shared by the stacks each player removed.
+- **Effects that use all the Vulnerable stacks at once (v0.11.0, validated by Zaille75):** shared by the turns each
+  player still has in the queue (the proportion rule), not by the current turn.
+  - **Bully (Harcèlement):** its "+2 per Vulnerable stack" part of the damage (measured before the ×1.5).
+    Example: A applied 2 Vulnerable, B 1 → Bully gets +6: 4 enabled by A, 2 by B.
+  - **Dominate (Domination):** the Strength it gives remembers who applied the target's Vulnerable (same proportion,
+    including the player's own new stack). For the rest of the combat, on each of that player's attacks, the damage
+    added by those Strength points (Strength × Vulnerable multiplier) is enabled by them. If the player has other
+    Strength, only the borrowed share counts; Strength lost later reduces it.
+- **The damage itself always counts in full for the attacker** (Dégâts). "Damage enabled" is an extra credit shown in
+  the co-op section ("Permis") for allies, and in the debuff details for self; nothing is taken from the attacker.
 - Stacks an enemy put on itself credit nobody.
 - Extra damage from a player's Vulnerable is "damage enabled" (for self or for allies). Damage avoided thanks to a
   player's Weak / Strength down is "prevented" (for self or for allies) and is part of "Évités".

@@ -5,7 +5,7 @@ namespace KikiMAIster.Core.Tests;
 public class DebuffEffectTests : TestBase
 {
     private void Vulnerable(Actor dealer, double extra) =>
-        Engine.Handle(new DebuffEffect(Enemy, "VULNERABLE_POWER", dealer, extra, Offense: true, Fifo: true));
+        Engine.Handle(new DebuffEffect(Enemy, "VULNERABLE_POWER", dealer, extra, Offense: true, Credit: DebuffCredit.CurrentTurn));
 
     [Fact]
     public void Vulnerable_TurnsAreCreditedFirstInFirstOut()
@@ -28,8 +28,8 @@ public class DebuffEffectTests : TestBase
     public void Weak_PreventsDamage_ForTheTarget()
     {
         Power(A, Enemy, "WEAK_POWER", 1);
-        Engine.Handle(new DebuffEffect(Enemy, "WEAK_POWER", B, 3, Offense: false, Fifo: true));
-        Engine.Handle(new DebuffEffect(Enemy, "WEAK_POWER", A, 2, Offense: false, Fifo: true));
+        Engine.Handle(new DebuffEffect(Enemy, "WEAK_POWER", B, 3, Offense: false, Credit: DebuffCredit.CurrentTurn));
+        Engine.Handle(new DebuffEffect(Enemy, "WEAK_POWER", A, 2, Offense: false, Credit: DebuffCredit.CurrentTurn));
 
         Assert.Equal(3, Combat(IdA).PreventedByDebuffsAllies);
         Assert.Equal(2, Combat(IdA).PreventedByDebuffsSelf);
@@ -42,7 +42,7 @@ public class DebuffEffectTests : TestBase
     {
         Power(A, Enemy, "STRENGTH_POWER~DOWN", 3);
         Power(B, Enemy, "STRENGTH_POWER~DOWN@ENFEEBLING_TOUCH_POWER", 1);
-        Engine.Handle(new DebuffEffect(Enemy, "STRENGTH_POWER~DOWN", C, 4, Offense: false, Fifo: false));
+        Engine.Handle(new DebuffEffect(Enemy, "STRENGTH_POWER~DOWN", C, 4, Offense: false, Credit: DebuffCredit.Stacks));
 
         Assert.Equal(3, Combat(IdA).PreventedByDebuffsAllies, 6);
         Assert.Equal(1, Combat(IdB).PreventedByDebuffsAllies, 6);
@@ -54,6 +54,43 @@ public class DebuffEffectTests : TestBase
         Power(Enemy, Enemy, "VULNERABLE_POWER", 1);
         Vulnerable(A, 5);
         Assert.Equal(0, Combat(IdA).DamageEnabledSelf);
+    }
+}
+
+public class BorrowedTests : TestBase
+{
+    [Fact]
+    public void Bully_BonusSharedByRemainingTurns()
+    {
+        Power(A, Enemy, "VULNERABLE_POWER", 2);
+        Power(B, Enemy, "VULNERABLE_POWER", 1);
+        Engine.Handle(new DebuffEffect(Enemy, "VULNERABLE_POWER", C, 6, Offense: true, Credit: DebuffCredit.RemainingTurns));
+
+        Assert.Equal(4, Combat(IdA).DamageEnabledAllies, 6);
+        Assert.Equal(2, Combat(IdB).DamageEnabledAllies, 6);
+        Assert.Equal(0, Combat(IdC).DamageDealt); // the attacker's damage itself comes from DamageDealt events only
+    }
+
+    [Fact]
+    public void Dominate_StrengthRemembersWhoAppliedVulnerable()
+    {
+        Power(B, Enemy, "VULNERABLE_POWER", 2);
+        Power(A, Enemy, "VULNERABLE_POWER", 1);
+        Engine.Handle(new StrengthBorrowed(A, Enemy, "VULNERABLE_POWER", 3));   // A plays Dominate: +3 Strength
+        Engine.Handle(new StrengthUsed(A, Strength: 3, Damage: 3));              // next hit: +3 damage from Strength
+
+        Assert.Equal(2, Combat(IdB).DamageEnabledAllies, 6);
+        Assert.Equal(1, Combat(IdA).DamageEnabledSelf, 6);
+    }
+
+    [Fact]
+    public void Dominate_OwnStrengthDilutesTheBorrowedShare()
+    {
+        Power(B, Enemy, "VULNERABLE_POWER", 2);
+        Engine.Handle(new StrengthBorrowed(A, Enemy, "VULNERABLE_POWER", 2));
+        Engine.Handle(new StrengthUsed(A, Strength: 4, Damage: 4));              // 2 borrowed + 2 own Strength
+
+        Assert.Equal(2, Combat(IdB).DamageEnabledAllies, 6);
     }
 }
 
