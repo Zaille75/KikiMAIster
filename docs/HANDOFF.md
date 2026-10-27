@@ -19,13 +19,16 @@ wrong-order misses, Waterfall Giant invulnerable phase, fights kept across Save 
   1. Update the spec first (`01-metrics.md` for rules; `02-ui.md` for the UI, with a "vX.Y.Z:" change note).
   2. Bump the version in **both** `src/KikiMAIster/KikiMAIster.json` (`"version"`) and `src/KikiMAIster/KikiMAIster.csproj` (`<Version>`).
   3. Run `./build.sh beta`. It runs the build, PatchCheck (each patch must match exactly one game method), and the unit tests. Then commit.
-  4. Give Zaille75 the install command (PowerShell, game closed):
+  4. Give Zaille75 the install command (PowerShell, game closed). The real login and server address are in
+     `docs/HANDOFF.local.md` (git-ignored, this machine only):
      ```powershell
      $m = "<game folder>\mods\KikiMAIster"
      scp "<user>@<server>:projets/KikiMAIster/dist/beta/KikiMAIster/*" "$m"
      ```
 - The mod writes `KikiMAIster.log` next to its DLL, in the game's `mods\KikiMAIster` folder on Windows. Zaille75 copies it from there.
-- **Git:** local only (`main`, no remote yet). Publishing to GitHub needs `gh auth login` by Zaille75 and a public/private choice.
+- **Git:** private GitHub repo `git@github.com:Zaille75/KikiMAIster.git` (`origin`, SSH key `~/.ssh/id_ed25519`).
+  Commits are authored `Zaille75 <52042243+Zaille75@users.noreply.github.com>` (repo-level git config): never put
+  Zaille75's real name, login or server address in tracked files.
 
 - **Names:** talk to Zaille75 with the **French in-game names** of cards, relics, powers, potions. The table is
   `lib/beta/names.txt` (copied from the mod's `KikiMAIster.names.txt`; lines `kind|C# class|ID|name`; game text,
