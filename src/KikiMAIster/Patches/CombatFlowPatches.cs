@@ -64,6 +64,8 @@ public static class CombatFlowPatches
         Capture.Emit(new RunStarted());
         Capture.Safe("run key", () => _runKey = RunStore.KeyOf(runState));
         if (_runKey != null) RunStore.TryRestore(_runKey, _floor, Capture.Engine);
+        // Composition stats are rebuilt from the game's history before this run can end (it would be counted twice).
+        _ = UI.CompositionStore.Data;
     }
 
     // New or continued run, solo or co-op: show the right run totals before the first combat.

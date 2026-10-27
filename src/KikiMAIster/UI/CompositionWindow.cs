@@ -4,6 +4,8 @@ using KikiMAIster.Core;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Nodes.Screens.CharacterSelect;
+using MegaCrit.Sts2.Core.Runs;
+using MegaCrit.Sts2.Core.Saves;
 
 namespace KikiMAIster.UI;
 
@@ -280,6 +282,8 @@ public static class CompositionStore
         }
     }
 
+    /// Rebuilt from the game's run history once per game session (the first time it is needed), then kept up to date
+    /// by the runs that end during the session. The saved file is only a fallback when the history cannot be read.
     public static Compositions Data
     {
         get
@@ -290,8 +294,48 @@ public static class CompositionStore
             {
                 if (FilePath != null && File.Exists(FilePath)) _data = Compositions.Read(File.ReadAllText(FilePath));
             });
+            Capture.Safe("CompositionStore.History", () =>
+            {
+                if (FromHistory() is not { } history) return;
+                _data = history;
+                if (FilePath != null) File.WriteAllText(FilePath, _data.Write());
+            });
             return _data;
         }
+    }
+
+    /// Every finished standard run of the game's history (this profile): its players' characters, ascension and result.
+    /// Daily and custom runs, and abandoned runs, are left out. Null when the history cannot be read.
+    private static Compositions? FromHistory()
+    {
+        var save = SaveManager.Instance;
+        if (save == null) return null;
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var result = new Compositions();
+        int read = 0, counted = 0, failed = 0;
+        foreach (var name in save.GetAllRunHistoryNames())
+        {
+            read++;
+            try
+            {
+                var run = save.LoadRunHistory(name);
+                if (!run.Success || run.SaveData is not { } h)
+                {
+                    failed++;
+                    continue;
+                }
+                if (h.GameMode != GameMode.Standard || h.WasAbandoned || h.Players.Count == 0) continue;
+                result.Add(h.Players.Select(p => p.Character.Entry), h.Ascension, h.Win);
+                counted++;
+            }
+            catch (Exception e)
+            {
+                failed++;
+                ModLog.Error($"run history {name}", e);
+            }
+        }
+        ModLog.Info($"compositions from the run history: {counted} runs counted out of {read} ({failed} unreadable) in {watch.ElapsedMilliseconds} ms");
+        return read > 0 && failed < read ? result : null;
     }
 
     /// A finished run (victory or defeat) counts one game for its composition.
