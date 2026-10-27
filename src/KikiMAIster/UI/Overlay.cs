@@ -60,7 +60,7 @@ public static class Overlay
         new("missed", MissedRow, () => Visible("missed", MissedColumns),
             s => -(s.MissedTotal * 100 + s.MissedByKind.GetValueOrDefault("energy") * 10 + s.WastedBlock)),
         new("taken", TakenRow, () => Visible("taken", Fixed("col.hpLost", "col.fromAllies", "col.blocked", "col.debuffs")), s => -s.HpLost),
-        new("coop", CoopRow, () => Visible("coop", new[] { "col.blockGiven", "col.saved", "col.enabled", "col.friendly", "col.deaths" }),
+        new("coop", CoopRow, () => Visible("coop", new[] { "col.blockGiven", "col.saved", "col.takenForAllies", "col.enabled", "col.energyGiven", "col.cardsGiven", "col.friendly", "col.deaths" }),
             s => s.SavedForAllies + s.DamageEnabledAllies + s.BlockGivenToAllies * 0.01, CoopOnly: true),
         new("other", OtherRow, () => Visible("other", new[] { "col.drawn", "col.played", "col.exhausted", "col.discarded", "col.potions" }),
             s => s.CardsPlayed),
@@ -74,7 +74,7 @@ public static class Overlay
         ("debuffs", new[] { "col.debuffEffect" }),
         ("missed", MissedColumns),
         ("taken", new[] { "col.fromAllies", "col.blocked", "col.debuffs" }),
-        ("coop", new[] { "col.blockGiven", "col.saved", "col.enabled", "col.friendly", "col.deaths" }),
+        ("coop", new[] { "col.blockGiven", "col.saved", "col.takenForAllies", "col.enabled", "col.energyGiven", "col.cardsGiven", "col.friendly", "col.deaths" }),
         ("other", new[] { "col.drawn", "col.played", "col.exhausted", "col.discarded", "col.potions" }),
     };
 
@@ -649,6 +649,9 @@ public static class Overlay
     {
         var tip = Line(("tip.preventedAllies", s.PreventedForAllies, false), ("tip.byDebuffs", s.PreventedByDebuffsAllies, false),
                       ("tip.healAllies", s.HealingAllies, false))
+                  + Block(Line(("tip.orbsGiven", s.OrbsGiven, false)))
+                  + (s.DebuffEffectBySource.Count > 0 ? Block(Loc.T("tip.helpBy") + ": " + string.Join(", ", s.DebuffEffectBySource
+                      .Where(kv => Math.Round(kv.Value) != 0).OrderByDescending(kv => kv.Value).Select(kv => $"{GameNames.Of(kv.Key)} {N(kv.Value)}"))) : "")
                   + (s.FriendlyDamage + s.FriendlyDebuffs.Count > 0
                       ? Block($"{Loc.T("col.friendly")}: {N(s.FriendlyDamage)}" + (s.FriendlyDebuffs.Count > 0 ? "\n" + Powers(s.FriendlyDebuffs) : ""))
                       : "");
@@ -656,7 +659,10 @@ public static class Overlay
         {
             new Cell("col.blockGiven", N(s.BlockGivenToAllies), tip),
             new Cell("col.saved", N(s.SavedForAllies), tip),
+            new Cell("col.takenForAllies", N(s.TakenForAllies), tip),
             new Cell("col.enabled", N(s.DamageEnabledAllies), tip),
+            new Cell("col.energyGiven", N(s.EnergyGiven), tip),
+            new Cell("col.cardsGiven", N(s.CardsGiven), tip),
             new Cell("col.friendly", N(s.FriendlyDamage), tip),
             new Cell("col.deaths", N(s.Deaths), tip)
         };
@@ -679,7 +685,7 @@ public static class Overlay
             $"{kv.Value.HpLost:F1}:{kv.Value.DamageBlocked:F1}:{kv.Value.DebuffsApplied.Values.Sum(t => t.Stacks):F1}:{kv.Value.DebuffsApplied.Values.Sum(t => t.Count)}:" +
             $"{kv.Value.DebuffsReceived.Count}:{kv.Value.FriendlyDamage + kv.Value.SelfDamage:F1}:{kv.Value.FriendlyDebuffs.Count}:" +
             $"{kv.Value.HealingSelf + kv.Value.HealingAllies:F1}:{kv.Value.PetHpGiven:F1}:{kv.Value.WastedPlays.Count}:{kv.Value.Kills}:" +
-            $"{kv.Value.DamageEnabledSelf + kv.Value.DamageEnabledAllies:F1}:{kv.Value.MissedLethals}:{kv.Value.WeakAttacks}:{kv.Value.MissedEntries.Count}:{kv.Value.Deaths}:" +
+            $"{kv.Value.DamageEnabledSelf + kv.Value.DamageEnabledAllies:F1}:{kv.Value.MissedLethals}:{kv.Value.WeakAttacks}:{kv.Value.EnergyGiven + kv.Value.CardsGiven + kv.Value.OrbsGiven + kv.Value.TakenForAllies:F1}:{kv.Value.MissedEntries.Count}:{kv.Value.Deaths}:" +
             $"{kv.Value.CardsDrawn + kv.Value.CardsPlayed + kv.Value.CardsExhausted + kv.Value.CardsDiscarded + kv.Value.PotionsUsed}"));
 
     internal static string N(double v) => Math.Round(v).ToString("0", CultureInfo.InvariantCulture);

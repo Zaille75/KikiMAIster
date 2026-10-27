@@ -15,6 +15,7 @@ public static class Trophies
     {
         new("trophy.damage", s => s.DamageDealt),
         new("trophy.biggestHit", s => s.BiggestHit),
+        new("trophy.combo", s => s.MostCardsInTurn),
         new("trophy.kills", s => s.Kills),
         new("trophy.debuffs", s => s.DebuffsApplied.Values.Sum(t => t.Stacks)),
         new("trophy.prevented", s => s.PreventedTotal),

@@ -186,3 +186,35 @@ public class CoopCreditTests : TestBase
         Assert.Equal(0, Combat(IdB).DamageDealt);
     }
 }
+
+public class HelpTests : TestBase
+{
+    [Fact]
+    public void Concoct_PoisonDamageStaysWithAttacker_EnabledForConcoctPlayer()
+    {
+        Engine.Handle(new PowerChanged(B, Enemy, "POISON_POWER", 3, true, "", A, "CONCOCT_POWER"));
+        Engine.Handle(new DamageDealt(Actor.None, Enemy, 0, 3, 0, false, Source.Dot("POISON_POWER")));
+
+        Assert.Equal(3, Combat(IdB).DamageDealt);
+        Assert.Equal(3, Combat(IdA).DamageEnabledAllies);
+        Assert.Equal(0, Combat(IdA).DamageDealt);
+    }
+
+    [Fact]
+    public void MostCardsInTurn_IsTheBestTurn()
+    {
+        Engine.Handle(new CardEvent(A, CardAction.Played));
+        Engine.Handle(new CardEvent(A, CardAction.Played));
+        Engine.Handle(new RoundStarted(2));
+        Engine.Handle(new CardEvent(A, CardAction.Played));
+        Assert.Equal(2, Combat(IdA).MostCardsInTurn);
+        Assert.Equal(3, Combat(IdA).CardsPlayed);
+    }
+
+    [Fact]
+    public void BiggestHit_IncludesBlockAndOverkill()
+    {
+        Hit(A, Enemy, blocked: 4, hp: 6, overkill: 10, killed: true);
+        Assert.Equal(20, Combat(IdA).BiggestHit);
+    }
+}

@@ -103,6 +103,24 @@ public sealed class StatsEngine
                         case CardAction.Discarded: s.CardsDiscarded++; break;
                     }
                 });
+                if (c.Action == CardAction.Played)
+                {
+                    // Most cards in one turn: the turn scope counts this turn's plays.
+                    var thisTurn = Stats(Scope.Turn, c.Player.PlayerId).CardsPlayed;
+                    Each(c.Player.PlayerId, s => s.MostCardsInTurn = Math.Max(s.MostCardsInTurn, thisTurn));
+                }
+                break;
+            case HelpGiven h when h.Giver.IsPlayerSide && h.Giver.PlayerId != 0 && h.Amount > 0:
+                Each(h.Giver.PlayerId, s =>
+                {
+                    switch (h.Kind)
+                    {
+                        case "energy": s.EnergyGiven += h.Amount; break;
+                        case "cards": s.CardsGiven += h.Amount; break;
+                        case "orbs": s.OrbsGiven += h.Amount; break;
+                        case "taken": s.TakenForAllies += h.Amount; break;
+                    }
+                });
                 break;
             case PotionUsed p when p.Player.IsPlayerSide: Each(p.Player.PlayerId, s => s.PotionsUsed++); break;
             case PlayerDied p when p.Player.Kind == ActorKind.Player: Each(p.Player.PlayerId, s => s.Deaths++); break;
@@ -226,6 +244,13 @@ public sealed class StatsEngine
             // Stacks from a potion (Powdered Demise…) count as potion damage.
             foreach (var (applier, origin, share) in shares)
                 CreditEnemyDamage(applier, d, share, origin != "" ? origin : d.Source.ToString(), isDot: origin == "");
+            // Stacks applied thanks to an ally's buff (Concoct): the damage stays the applier's, the ally enabled it.
+            foreach (var (key, share) in dot.Detailed().Where(x => x.Key.Applier != 0 && x.Key.Enabler != 0))
+                Each(key.Enabler, s =>
+                {
+                    s.DamageEnabledAllies += d.Hp * share;
+                    PlayerStats.Add(s.DebuffEffectBySource, key.EnablerSource, d.Hp * share);
+                });
             if (d.Killed && shares.Count > 0)
                 Each(shares.MaxBy(s => s.Share).ApplierId, s => s.Kills++);
             return;
@@ -392,7 +417,8 @@ public sealed class StatsEngine
     {
         // Who applied each power's stacks, and from what origin: damage-over-time split, potion powers (Thorns…).
         var applierId = p.Applier.IsPlayerSide ? p.Applier.PlayerId : 0;
-        Dot(p.Target.CreatureId, p.PowerId).Apply(applierId, p.Amount, p.Origin);
+        var enabler = p.EnabledBy.IsPlayerSide && p.EnabledBy.PlayerId != applierId ? p.EnabledBy.PlayerId : 0;
+        Dot(p.Target.CreatureId, p.PowerId).Apply(applierId, p.Amount, p.Origin, enabler, p.EnabledSource);
         if (p.IsDebuff) Fifo(p.Target.CreatureId, p.PowerId).Apply(applierId, p.Amount);
         if (p.Amount <= 0 || !p.IsDebuff) return;
 

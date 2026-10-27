@@ -7,15 +7,19 @@ namespace KikiMAIster.Core;
 public sealed class DotLedger
 {
     /// Applier 0 = stacks from a non-player source (enemy, unknown): never credited.
-    private readonly Dictionary<(ulong Applier, string Origin), double> _stacks = new();
+    private readonly Dictionary<Key, double> _stacks = new();
+
+    /// Enabler: an ally whose buff made the applier apply these stacks (Concoct), 0 if none; EnablerSource: that buff.
+    public readonly record struct Key(ulong Applier, string Origin, ulong Enabler = 0, string EnablerSource = "");
 
     public double Total => _stacks.Values.Sum();
 
-    public void Apply(ulong applierId, double amount, string origin = "")
+    public void Apply(ulong applierId, double amount, string origin = "", ulong enabler = 0, string enablerSource = "")
     {
         if (amount > 0)
         {
-            _stacks[(applierId, origin)] = _stacks.GetValueOrDefault((applierId, origin)) + amount;
+            var key = new Key(applierId, origin, enabler, enablerSource);
+            _stacks[key] = _stacks.GetValueOrDefault(key) + amount;
             return;
         }
         // Stacks removed (decay, cleanse): remove proportionally from every applier.
@@ -26,11 +30,15 @@ public sealed class DotLedger
     }
 
     /// Shares of each applier and origin (sum = 1), or empty when no stacks are known.
-    public IEnumerable<(ulong ApplierId, string Origin, double Share)> Shares()
+    public IEnumerable<(ulong ApplierId, string Origin, double Share)> Shares() =>
+        Detailed().Select(d => (d.Key.Applier, d.Key.Origin, d.Share));
+
+    /// Shares with the enabler of each part.
+    public IEnumerable<(Key Key, double Share)> Detailed()
     {
         var total = Total;
         if (total <= 0) yield break;
-        foreach (var ((id, origin), s) in _stacks)
-            if (s > 0) yield return (id, origin, s / total);
+        foreach (var (key, s) in _stacks)
+            if (s > 0) yield return (key, s / total);
     }
 }

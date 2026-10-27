@@ -60,6 +60,9 @@ public static class BlockAlternatives
     private static readonly Dictionary<Player, Dictionary<CardType, int>> TurnPlays = new();
     /// Enemies given their first Vulnerable this turn, and the play that gave it (useless until someone hits them).
     private static readonly Dictionary<Creature, Play> PendingVulnerable = new();
+    /// Growing cards that could be played at the end of some turn of this fight, and those that were played.
+    private static readonly HashSet<CardModel> GrowingAffordable = new(ReferenceEqualityComparer.Instance);
+    private static readonly HashSet<CardModel> GrowingPlayed = new(ReferenceEqualityComparer.Instance);
 
     public static void Reset()
     {
@@ -68,6 +71,8 @@ public static class BlockAlternatives
         FrontHand.Clear();
         TurnPlays.Clear();
         PendingVulnerable.Clear();
+        GrowingAffordable.Clear();
+        GrowingPlayed.Clear();
     }
 
     /// Something other than block happened (power applied, damage, heal, draw, orb, card created…):
@@ -144,6 +149,7 @@ public static class BlockAlternatives
     /// Card play starts: remember the useful cards in the player's hand. Auto-played cards were not a choice.
     public static void OnPlayStarted(CardPlay cardPlay)
     {
+        if (IsGrowing(cardPlay.Card)) GrowingPlayed.Add(cardPlay.Card);
         if (!TurnPlays.TryGetValue(cardPlay.Player, out var counts)) TurnPlays[cardPlay.Player] = counts = new();
         counts[cardPlay.Card.Type] = counts.GetValueOrDefault(cardPlay.Card.Type) + 1;
         var hand = cardPlay.Player.PlayerCombatState?.Hand.Cards;
@@ -187,6 +193,16 @@ public static class BlockAlternatives
         if (!Plays.TryGetValue(cardPlay, out var play)) return 0;
         play.GaveBlock = true;
         return play.Id;
+    }
+
+    /// End of the fight: a growing card that could have been played but never was, and is still in the deck, did not
+    /// grow (spec §E0, counted once per card and fight).
+    public static void ResolveCombat()
+    {
+        foreach (var card in GrowingAffordable.Where(c => !GrowingPlayed.Contains(c) && c.Pile?.Type is PileType.Hand or PileType.Draw or PileType.Discard))
+            Capture.Emit(new MissedChance(Capture.ToActor(card.Owner), "growth", new[] { Key(card) }));
+        GrowingAffordable.Clear();
+        GrowingPlayed.Clear();
     }
 
     /// The player's hand is drawn: check the front hand for a lethal combination.
@@ -255,6 +271,8 @@ public static class BlockAlternatives
             Capture.Safe("end of turn checks", () => EndOfTurnChecks(combat, player));
         TurnPlays.Clear();
         PendingVulnerable.Clear();
+        GrowingAffordable.Clear();
+        GrowingPlayed.Clear();
     }
 
     private static string Key(CardModel card) => $"Card:{Capture.IdOf(card)}";
@@ -286,8 +304,7 @@ public static class BlockAlternatives
                 Capture.Emit(new MissedChance(actor, "paelsTears", new[] { $"Relic:{Capture.IdOf(tears)}", Key(useless.Card) }));
         }
 
-        foreach (var growing in hand.Where(c => IsGrowing(c) && Affordable(c)))
-            Capture.Emit(new MissedChance(actor, "growth", new[] { Key(growing) }));
+        foreach (var growing in hand.Where(c => IsGrowing(c) && Affordable(c))) GrowingAffordable.Add(growing);
 
         var kept = hand.Where(c => c.GainsBlock && Affordable(c)).Select(c => (Card: c, Block: EstimateBlock(c)))
             .Where(x => x.Block > 0).OrderByDescending(x => x.Block).FirstOrDefault();

@@ -10,6 +10,7 @@ using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.Potions;
 using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Cards;
 using MegaCrit.Sts2.Core.Runs;
 
 namespace KikiMAIster.Patches;
@@ -28,6 +29,7 @@ public static class CombatFlowPatches
         if (!_combatOpen) return;
         _combatOpen = false;
         DamagePatches.FlushPending();
+        BlockAlternatives.ResolveCombat();
         Capture.Emit(new CombatEnded(victory));
         Summary.LogCombat(Capture.Engine);
         if (_runKey != null) RunStore.Save(_runKey, _floor, Capture.Engine);
@@ -210,9 +212,12 @@ public static class CombatFlowPatches
     [HarmonyPatch(typeof(Hook), nameof(Hook.AfterCardDrawn))]
     public static class CardDrawn
     {
-        public static void Prefix(CardModel card) => Capture.Safe("AfterCardDrawn", () =>
+        public static void Prefix(CardModel card, bool fromHandDraw) => Capture.Safe("AfterCardDrawn", () =>
         {
             BlockAlternatives.OnEffect();
+            // Drawn for an ally (Huddle Up…): help given by the player acting.
+            if (!fromHandDraw && Capture.CurrentActingPlayer is { } giver && card.Owner != giver)
+                Capture.Emit(new HelpGiven(Capture.ToActor(giver), "cards", 1));
             Capture.Emit(new CardEvent(Capture.ToActor(card.Owner), CardAction.Drawn));
         });
     }
@@ -240,7 +245,11 @@ public static class CombatFlowPatches
     [HarmonyPatch(typeof(Hook), nameof(Hook.AfterOrbChanneled))]
     public static class OrbChanneled
     {
-        public static void Prefix() => Capture.Safe("AfterOrbChanneled", () => BlockAlternatives.OnEffect());
+        public static void Prefix(Player player) => Capture.Safe("AfterOrbChanneled", () =>
+        {
+            BlockAlternatives.OnEffect();
+            if (Capture.CurrentActingPlayer is { } giver && giver != player) Capture.Emit(new HelpGiven(Capture.ToActor(giver), "orbs", 1));
+        });
     }
 
     [HarmonyPatch(typeof(Hook), nameof(Hook.AfterCardGeneratedForCombat))]
@@ -251,7 +260,11 @@ public static class CombatFlowPatches
             BlockAlternatives.OnEffect();
             // A card created in another player's piles (Blade Symphony passes no creator: the player acting made it).
             var giver = creator ?? Capture.CurrentActingPlayer;
-            if (giver != null && card.Owner != giver) DamagePatches.GiftedCards.AddOrUpdate(card, giver);
+            if (giver != null && card.Owner != giver)
+            {
+                DamagePatches.GiftedCards.AddOrUpdate(card, giver);
+                Capture.Emit(new HelpGiven(Capture.ToActor(giver), "cards", 1));
+            }
         });
     }
 
@@ -267,13 +280,24 @@ public static class CombatFlowPatches
     [HarmonyPatch(typeof(Hook), nameof(Hook.AfterCardChangedPiles))]
     public static class CardMoved
     {
-        public static void Prefix(CardModel card) => Capture.Safe("AfterCardChangedPiles", () => BlockAlternatives.OnCardEffect(card));
+        public static void Prefix(CardModel card, PileType oldPile) => Capture.Safe("AfterCardChangedPiles", () =>
+        {
+            BlockAlternatives.OnCardEffect(card);
+            // A card brought back to an ally's hand (Tutor…); draws and created cards are counted by their own hooks.
+            if (card.Pile?.Type == PileType.Hand && Capture.CurrentActingPlayer is { } giver && card.Owner != giver &&
+                (oldPile is PileType.Discard or PileType.Exhaust || (oldPile == PileType.Draw && Capture.CardPlays.TryPeek(out var play) && play.Card is Tutor)))
+                Capture.Emit(new HelpGiven(Capture.ToActor(giver), "cards", 1));
+        });
     }
 
     [HarmonyPatch(typeof(PlayerCmd), nameof(PlayerCmd.GainEnergy))]
     public static class EnergyGained
     {
-        public static void Prefix() => Capture.Safe("PlayerCmd.GainEnergy", () => BlockAlternatives.OnEffect());
+        public static void Prefix(decimal amount, Player player) => Capture.Safe("PlayerCmd.GainEnergy", () =>
+        {
+            BlockAlternatives.OnEffect();
+            if (Capture.CurrentActingPlayer is { } giver && giver != player) Capture.Emit(new HelpGiven(Capture.ToActor(giver), "energy", (double)amount));
+        });
     }
 
     [HarmonyPatch(typeof(Hook), nameof(Hook.AfterForge))]

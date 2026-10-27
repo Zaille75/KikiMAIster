@@ -93,7 +93,14 @@ public static class DebuffEffectPatches
                             break;
                         // Any other power that remembers which player applied it: a debuff on the enemy hit (Flanking,
                         // Knockdown), a buff an ally gave the attacker (One for All), or a debuff on the attacking enemy.
-                        case PowerModel p when p is not (VulnerablePower or WeakPower or StrengthPower or TemporaryStrengthPower) &&
+                        // Intercept: the interceptor takes its allies' hits (multiplier = 1 + covered allies).
+                        case InterceptPower ip when ip.Owner == target && dealer.IsEnemy:
+                        {
+                            var factor = (double)ip.ModifyDamageMultiplicative(target, __result, props, dealer, cardSource, cardPlay);
+                            if (factor > 1) effects.Add(new HelpGiven(Capture.ToActor(target), "taken", damage - damage / factor));
+                            break;
+                        }
+                        case PowerModel p when p is not (VulnerablePower or WeakPower or StrengthPower or TemporaryStrengthPower or InterceptPower) &&
                                                p.Applier is { IsPlayer: true } applier:
                             AddApplied(effects, p, applier, target, dealer, props, cardSource, cardPlay, __result, vulnFactor);
                             break;

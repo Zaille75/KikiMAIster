@@ -93,6 +93,14 @@ public sealed class PlayerStats
     /// HP this player saved for allies: block given that absorbed damage + their debuffs' prevented damage + healing.
     public double SavedForAllies => PreventedForAllies + PreventedByDebuffsAllies + HealingAllies;
     public double Deaths { get; set; }
+    /// Help that is not damage or block: energy, cards (drawn, created, brought to hand), orbs given to allies, and
+    /// damage taken instead of allies (Intercept).
+    public double EnergyGiven { get; set; }
+    public double CardsGiven { get; set; }
+    public double OrbsGiven { get; set; }
+    public double TakenForAllies { get; set; }
+    /// Most cards played in one turn (record of the scope).
+    public double MostCardsInTurn { get; set; }
 
     // Other
     public double CardsDrawn { get; set; }

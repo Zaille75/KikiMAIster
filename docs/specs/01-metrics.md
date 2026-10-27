@@ -56,17 +56,21 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
     The extra damage (or damage avoided, for a debuff on an attacking enemy) is credited to the applier directly.
   - **Strength given by an ally:** permanent (**Blaze**) — those points count for the giver for the rest of the combat,
     like Dominate; temporary (**Coordinate**) — read at each hit from the temporary power, which keeps its applier.
-  - **Concoct:** the Poison the ally applies when they hit counts for the Concoct player (an effect triggered by a buff an
-    ally gave you counts for that ally).
+  - **Concoct (v0.13.0, corrected):** the Poison the ally applies when they hit is theirs (its damage counts for them,
+    the attacker); its damage is also "enabled" by the Concoct player.
   - **Cards created for an ally** (Blade Symphony's Shivs, Largesse, Glimpse Beyond, Outrage's copies…): their damage is
     enabled for the creator.
   - **Tag Team:** the damage of the extra plays it gives an ally's attack is enabled for the Tag Team player.
-  - **Strangle** (one instance per player): each player's instance damage counts only for that player, not shared by
-    stacks.
-  - **Growing cards** (never wasted, "not played" is a missed choice): Genetic Algorithm, The Scythe, The Ball, Claw,
-    Maul, Rampage. (Kingly Punch grows when drawn, not played: not in the list.)
+  - **Strangle** (one instance per player, triggered by its own player's cards): each instance's damage counts only for
+    the player who applied it.
+  - **Growing cards** (never wasted as block / weak attack): Genetic Algorithm, The Scythe, The Ball, Claw, Maul,
+    Rampage. (Kingly Punch grows when drawn, not played: not in the list.) **Missed (v0.13.0):** once per card and fight,
+    when the card could have been played at the end of at least one turn, was never played, and is still in the deck
+    (hand, draw or discard pile) when the fight ends.
   - Already right, no change: Oblivion (Doom credited to its applier), Magic Bomb and Constrict (by stacks), Sic 'Em,
     Legion of Bone (pet HP), Rally / Lift / Demonic Shield (block given), Intercept / Covered (block).
+- **General rule (confirmed by Zaille75, v0.13.0): every damage, base and extra, counts for the attacker** (Dégâts); the
+  extra part caused by another player's effect is tracked in addition as "Permis" for that player (co-op section).
 - **The damage itself always counts in full for the attacker** (Dégâts). "Damage enabled" is an extra credit shown in
   the co-op section ("Permis") for allies, and in the debuff details for self; nothing is taken from the attacker.
 - Stacks an enemy put on itself credit nobody.
@@ -115,6 +119,10 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
 | Damage enabled for allies | Extra damage allies dealt thanks to this player's Vulnerable (§B2). |
 | Friendly fire | Damage dealt to allies (details: debuffs and status cards put on allies or self). |
 | Deaths | Times this player died. |
+| Took for allies (v0.13.0) | Damage the player took instead of allies (Intercept: the extra share of each hit, 1 − 1/multiplier). |
+| Energy given (v0.13.0) | Energy given to other players (Believe in You, Energy Surge…). |
+| Cards given (v0.13.0) | Cards drawn for, created for, or brought back to the hand of other players (Huddle Up, Plot, Blade Symphony, Largesse, Glimpse Beyond, Outrage, Tutor…). Orbs channeled for allies (Ignition) are in the details. |
+| Most cards in a turn (v0.13.0) | The most cards this player played in one turn (trophy "Roi du combo"). |
 
 ## C3. Other stats (v0.9.0)
 Cards drawn, played, exhausted, discarded; potions used.

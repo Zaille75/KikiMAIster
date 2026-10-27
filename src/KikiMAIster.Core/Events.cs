@@ -92,7 +92,10 @@ public sealed record BlockRemoved(Actor Creature, int Amount, bool SpentByCard) 
 
 /// A power's amount changed on Target (Amount < 0 = stacks removed, e.g. decay). IsDebuff from the game.
 /// Origin: "Potion:<ID>" when a potion applied it (its damage then counts as potion damage), else "".
-public sealed record PowerChanged(Actor Applier, Actor Target, string PowerId, double Amount, bool IsDebuff, string Origin = "") : StatEvent;
+/// EnabledBy: an ally whose buff made the applier apply it (Concoct: Poison when the holder hits); the damage stays the
+/// applier's, the ally gets it as damage enabled. EnabledSource: that buff ("CONCOCT_POWER").
+public sealed record PowerChanged(Actor Applier, Actor Target, string PowerId, double Amount, bool IsDebuff, string Origin = "",
+    Actor EnabledBy = default, string EnabledSource = "") : StatEvent;
 
 public sealed record Healed(Actor Healer, Actor Target, int Amount) : StatEvent;
 
@@ -157,3 +160,7 @@ public sealed record BlockCardKept(Actor Player, string Card, int Block) : StatE
 
 /// A missed opportunity kept for its explanation (not saved with the run).
 public sealed record MissedEntry(int Round, string Kind, IReadOnlyList<string> Args, double Amount);
+
+/// Help that is not damage or block (spec 01-metrics §C2): Kind "energy" (energy given), "cards" (cards drawn, created
+/// or brought to an ally's hand), "orbs" (orbs channeled for an ally), "taken" (damage taken instead of allies: Intercept).
+public sealed record HelpGiven(Actor Giver, string Kind, double Amount) : StatEvent;
