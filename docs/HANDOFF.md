@@ -1,4 +1,4 @@
-# Handoff — state of the project (2026-10-27, v0.15.1)
+# Handoff — state of the project (2026-10-27, v0.15.2)
 
 Read this first in a new conversation, then `CLAUDE.md`, `docs/specs/01-metrics.md` and `docs/specs/02-ui.md`.
 The conversation of 2026-10-27 turned the 27 feedback points of the first co-op games into v0.8.0 → v0.13.4, then

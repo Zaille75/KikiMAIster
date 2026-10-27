@@ -158,6 +158,7 @@ public static class RunSummary
         }
 
         var book = RecordStore.Book;
+        var coop = run.Count > 1;
         foreach (var c in Trophies.All.OrderBy(c => c.Fun))
         {
             if (c.CoopOnly && run.Count < 2) continue;
@@ -179,21 +180,21 @@ public static class RunSummary
                     Overlay.PlayerColor(w.Id)));
                 grid.AddChild(Overlay.MakeLabel(Overlay.N(w.Value), Overlay.Text, HorizontalAlignment.Right));
             }
-            var best = book.Best(c.Key);
+            var best = book.Best(c.Key, coop);
             var newRecord = update?.NewRecords.Contains(c.Key) == true;
             grid.AddChild(Overlay.MakeLabel(best == null ? "-" : $"{(newRecord ? "★ " : "")}{Overlay.N(best.Value)} ({best.Name}, {best.Date})",
                 newRecord ? Overlay.Accent : Overlay.Muted));
-            var personal = winner is { } pw ? book.Personal(c.Key, pw.Id) : null;
+            var personal = winner is { } pw ? book.Personal(c.Key, pw.Id, coop) : null;
             var newPersonal = winner is { } nw && update?.NewPersonal.Contains((c.Key, nw.Id)) == true;
             grid.AddChild(Overlay.MakeLabel(personal == null ? "-" : $"{(newPersonal ? "★ " : "")}{Overlay.N(personal.Value)}",
                 newPersonal ? Overlay.Accent : Overlay.Muted));
             // The best of the winner's character (in solo: the character played); the tooltip lists every character.
             var character = winner is { } cw ? engine.Players.GetValueOrDefault(cw.Id)?.Character ?? "" : "";
-            var ofCharacter = character == "" ? null : book.OfCharacter(c.Key, character);
+            var ofCharacter = character == "" ? null : book.OfCharacter(c.Key, character, coop);
             var newCharacter = update?.NewCharacter.Contains((c.Key, character)) == true;
             var cell = Overlay.MakeLabel(ofCharacter == null ? "-" : $"{(newCharacter ? "★ " : "")}{Overlay.N(ofCharacter.Value)} ({ofCharacter.Name}, {ofCharacter.Date})",
                 newCharacter ? Overlay.Accent : Overlay.Muted);
-            var all = book.Characters(c.Key).ToList();
+            var all = book.Characters(c.Key, coop).ToList();
             if (all.Count > 0)
             {
                 cell.TooltipText = string.Join('\n', all.Select(x =>
@@ -203,7 +204,8 @@ public static class RunSummary
             grid.AddChild(cell);
         }
         _content.AddChild(grid);
-        _content.AddChild(Overlay.MakeLabel(Loc.T(ended ? "run.recordsNote" : "run.inProgressNote"), Overlay.Muted));
+        _content.AddChild(Overlay.MakeLabel(Loc.T(coop ? "run.coopRecords" : "run.soloRecords") + " · " +
+            Loc.T(ended ? "run.recordsNote" : "run.inProgressNote"), Overlay.Muted));
         _panel!.CallDeferred(Control.MethodName.ResetSize);
     }
 }

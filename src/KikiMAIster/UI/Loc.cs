@@ -175,6 +175,8 @@ public static class Loc
         ["run.personal"] = ("Personal best", "Record perso"),
         ["run.character"] = ("Character record", "Record personnage"),
         ["run.character.tip"] = ("Best of the winner's character, any player (hover a value: every character)", "Meilleur score du personnage du gagnant, tous joueurs confondus (survoler une valeur : tous les personnages)"),
+        ["run.soloRecords"] = ("Solo records", "Records solo"),
+        ["run.coopRecords"] = ("Co-op records", "Records coop"),
         ["run.recordsNote"] = ("★ = new record", "★ = nouveau record"),
         ["run.inProgressNote"] = ("Run in progress: records are updated when the run ends", "Partie en cours : les records sont mis à jour à la fin de la partie"),
         ["trophy.damage"] = ("Heavy hitter", "Gros bras"),

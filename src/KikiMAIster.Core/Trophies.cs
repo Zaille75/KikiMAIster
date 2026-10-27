@@ -46,6 +46,7 @@ public static class Trophies
 /// All-time records, personal bests and records per character, per category; one run = one value per player.
 /// Saved as "key=value|name|date" lines: "<category>.all" for the all-time record, "<category>.<playerId>" for
 /// each player's personal best, "<category>.char.<CHARACTER>" for the best of each character (any player).
+/// Solo and co-op runs keep separate records: co-op keys start with "coop." (v0.15.2).
 public sealed class RecordBook
 {
     public sealed record Entry(double Value, string Name, string Date);
@@ -53,14 +54,17 @@ public sealed class RecordBook
     private readonly Dictionary<string, Entry> _entries = new();
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
-    public Entry? Best(string category) => _entries.GetValueOrDefault($"{category}.all");
-    public Entry? Personal(string category, ulong playerId) => _entries.GetValueOrDefault($"{category}.{playerId}");
-    public Entry? OfCharacter(string category, string character) => _entries.GetValueOrDefault($"{category}.char.{character}");
+    private static string Mode(bool coop) => coop ? "coop." : "";
+
+    public Entry? Best(string category, bool coop = false) => _entries.GetValueOrDefault($"{Mode(coop)}{category}.all");
+    public Entry? Personal(string category, ulong playerId, bool coop = false) => _entries.GetValueOrDefault($"{Mode(coop)}{category}.{playerId}");
+    public Entry? OfCharacter(string category, string character, bool coop = false) =>
+        _entries.GetValueOrDefault($"{Mode(coop)}{category}.char.{character}");
 
     /// Every character's record in a category ("IRONCLAD" → entry).
-    public IEnumerable<(string Character, Entry Entry)> Characters(string category)
+    public IEnumerable<(string Character, Entry Entry)> Characters(string category, bool coop = false)
     {
-        var prefix = $"{category}.char.";
+        var prefix = $"{Mode(coop)}{category}.char.";
         return _entries.Where(kv => kv.Key.StartsWith(prefix, StringComparison.Ordinal))
             .Select(kv => (kv.Key[prefix.Length..], kv.Value)).OrderBy(x => x.Item1, StringComparer.Ordinal);
     }
@@ -69,12 +73,14 @@ public sealed class RecordBook
     public sealed record Update(HashSet<string> NewRecords, HashSet<(string Category, ulong Player)> NewPersonal,
         HashSet<(string Category, string Character)> NewCharacter);
 
-    /// Adds a finished run. Lower-is-better categories only count a victory. Zero values never make a record.
+    /// Adds a finished run (co-op when it has 2+ players). Lower-is-better categories only count a victory. Zero values never make a record.
     /// Characters: each player's character ("IRONCLAD"…); players without one get no character record.
     public Update Add(IReadOnlyDictionary<ulong, PlayerStats> run, IReadOnlyDictionary<ulong, string> names, bool victory, string date,
         IReadOnlyDictionary<ulong, string>? characters = null)
     {
         var update = new Update(new(), new(), new());
+        var coop = run.Count > 1;
+        var mode = Mode(coop);
         foreach (var c in Trophies.All)
         {
             if (c.LowerIsBetter && !victory) continue;
@@ -84,20 +90,20 @@ public sealed class RecordBook
                 var v = c.Value(s);
                 if (!c.LowerIsBetter && v <= 0) continue;
                 var entry = new Entry(v, names.GetValueOrDefault(id, id.ToString(Inv)), date);
-                if (Beats(c, v, Personal(c.Key, id)))
+                if (Beats(c, v, Personal(c.Key, id, coop)))
                 {
-                    _entries[$"{c.Key}.{id}"] = entry;
+                    _entries[$"{mode}{c.Key}.{id}"] = entry;
                     update.NewPersonal.Add((c.Key, id));
                 }
                 var character = characters?.GetValueOrDefault(id) ?? "";
-                if (character != "" && Beats(c, v, OfCharacter(c.Key, character)))
+                if (character != "" && Beats(c, v, OfCharacter(c.Key, character, coop)))
                 {
-                    _entries[$"{c.Key}.char.{character}"] = entry;
+                    _entries[$"{mode}{c.Key}.char.{character}"] = entry;
                     update.NewCharacter.Add((c.Key, character));
                 }
-                if (Beats(c, v, Best(c.Key)))
+                if (Beats(c, v, Best(c.Key, coop)))
                 {
-                    _entries[$"{c.Key}.all"] = entry;
+                    _entries[$"{mode}{c.Key}.all"] = entry;
                     update.NewRecords.Add(c.Key);
                 }
             }
