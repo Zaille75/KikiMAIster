@@ -101,6 +101,9 @@ public sealed class PlayerStats
 
     // Co-op
     /// HP this player saved for allies: block given that absorbed damage + their debuffs' prevented damage + healing.
+    /// The same help per ally (key: the ally's player id): HP saved for them, extra damage they dealt thanks to this player.
+    public Dictionary<string, double> SavedPerAlly { get; } = new();
+    public Dictionary<string, double> EnabledPerAlly { get; } = new();
     public double SavedForAllies => PreventedForAllies + PreventedByDebuffsAllies + HealingAllies + PetAbsorbedForAllies;
     public double Deaths { get; set; }
     /// Help that is not damage or block: energy, cards (drawn, created, brought to hand), orbs given to allies, and

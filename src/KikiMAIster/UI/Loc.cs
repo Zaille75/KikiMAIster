@@ -101,6 +101,7 @@ public static class Loc
         ["col.energyGiven"] = ("Energy", "Énergie"),
         ["col.cardsGiven"] = ("Cards", "Cartes"),
         ["tip.col.takenForAllies"] = ("Damage you took instead of allies (Intercept, Tank)", "Dégâts encaissés à la place des alliés (Interposition, Tank)"),
+        ["tip.forAlly"] = ("For {0}:", "Pour {0} :"),
         ["tip.petOfAllies"] = ("allies' pets", "familiers des alliés"),
         ["tip.col.energyGiven"] = ("Energy given to allies", "Énergie donnée aux alliés"),
         ["tip.col.cardsGiven"] = ("Cards given to allies: drawn, created or brought back to their hand", "Cartes données aux alliés : piochées, créées ou ramenées en main"),

@@ -281,6 +281,7 @@ public sealed class StatsEngine
                 Each(key.Enabler, s =>
                 {
                     s.DamageEnabledAllies += d.Hp * share;
+                    PlayerStats.Add(s.EnabledPerAlly, AllyKey(key.Applier), d.Hp * share);
                     PlayerStats.Add(s.DebuffEffectBySource, key.EnablerSource, d.Hp * share);
                 });
             if (d.Killed && shares.Count > 0)
@@ -332,7 +333,11 @@ public sealed class StatsEngine
                 Each(layer.GiverId, s =>
                 {
                     if (layer.GiverId == owner) s.PreventedOwnBlock += taken;
-                    else s.PreventedForAllies += taken;
+                    else
+                    {
+                        s.PreventedForAllies += taken;
+                        PlayerStats.Add(s.SavedPerAlly, AllyKey(owner), taken);
+                    }
                 }));
             Each(owner, s => s.DamageBlocked += d.Blocked);
         }
@@ -349,7 +354,11 @@ public sealed class StatsEngine
                 {
                     var part = d.Hp * hp / total;
                     own -= part;
-                    Each(giver, s => s.PetAbsorbedForAllies += part);
+                    Each(giver, s =>
+                    {
+                        s.PetAbsorbedForAllies += part;
+                        PlayerStats.Add(s.SavedPerAlly, AllyKey(owner), part);
+                    });
                 }
             Each(owner, s =>
             {
@@ -519,9 +528,17 @@ public sealed class StatsEngine
             Each(id, s =>
             {
                 if (x.Offense && id == beneficiary) s.DamageEnabledSelf += amount;
-                else if (x.Offense) s.DamageEnabledAllies += amount;
+                else if (x.Offense)
+                {
+                    s.DamageEnabledAllies += amount;
+                    PlayerStats.Add(s.EnabledPerAlly, AllyKey(beneficiary), amount);
+                }
                 else if (id == beneficiary) s.PreventedByDebuffsSelf += amount;
-                else s.PreventedByDebuffsAllies += amount;
+                else
+                {
+                    s.PreventedByDebuffsAllies += amount;
+                    PlayerStats.Add(s.SavedPerAlly, AllyKey(beneficiary), amount);
+                }
                 PlayerStats.Add(s.DebuffEffectBySource, x.PowerId, amount);
             });
         }
@@ -555,7 +572,11 @@ public sealed class StatsEngine
             Each(id, s =>
             {
                 if (id == u.Player.PlayerId) s.DamageEnabledSelf += extra;
-                else s.DamageEnabledAllies += extra;
+                else
+                {
+                    s.DamageEnabledAllies += extra;
+                    PlayerStats.Add(s.EnabledPerAlly, AllyKey(u.Player.PlayerId), extra);
+                }
                 PlayerStats.Add(s.DebuffEffectBySource, "STRENGTH_POWER", extra);
             });
         }
@@ -569,7 +590,11 @@ public sealed class StatsEngine
         Each(healer, s =>
         {
             if (healer == target) s.HealingSelf += h.Amount;
-            else s.HealingAllies += h.Amount;
+            else
+            {
+                s.HealingAllies += h.Amount;
+                PlayerStats.Add(s.SavedPerAlly, AllyKey(target), h.Amount);
+            }
         });
     }
 
@@ -602,6 +627,8 @@ public sealed class StatsEngine
     }
 
     // ---------- Helpers ----------
+
+    private static string AllyKey(ulong playerId) => playerId.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     private void Each(ulong playerId, Action<PlayerStats> update)
     {

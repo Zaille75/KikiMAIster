@@ -259,4 +259,17 @@ public class DamageTests : TestBase
         Assert.Equal(8, Combat(IdA).AvoidableHp);
         Assert.Equal(8, Trophies.All.First(c => c.Key == "trophy.friendly").Value(Combat(IdA)));
     }
+
+    [Fact]
+    public void HelpIsKeptPerAlly()
+    {
+        Block(B, A, 6);
+        EnemyHits(B, 6, 0);
+        Engine.Handle(new Healed(A, C, 4));
+        Power(A, Enemy, "VULNERABLE_POWER", 2);
+        Engine.Handle(new DebuffEffect(Enemy, "VULNERABLE_POWER", C, 5, Offense: true, Credit: DebuffCredit.CurrentTurn));
+        Assert.Equal(6, Combat(IdA).SavedPerAlly["2"]);
+        Assert.Equal(4, Combat(IdA).SavedPerAlly["3"]);
+        Assert.Equal(5, Combat(IdA).EnabledPerAlly["3"]);
+    }
 }

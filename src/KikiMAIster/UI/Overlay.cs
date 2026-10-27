@@ -693,6 +693,7 @@ public static class Overlay
     {
         var tip = Line(("tip.preventedAllies", s.PreventedForAllies, false), ("tip.byDebuffs", s.PreventedByDebuffsAllies, false),
                       ("tip.healAllies", s.HealingAllies, false), ("tip.pet", s.PetAbsorbedForAllies, false))
+                  + Block(PerAlly(s))
                   + Block(Line(("tip.orbsGiven", s.OrbsGiven, false)))
                   + (s.DebuffEffectBySource.Count > 0 ? Block(Loc.T("tip.helpBy") + ": " + string.Join(", ", s.DebuffEffectBySource
                       .Where(kv => Math.Round(kv.Value) != 0).OrderByDescending(kv => kv.Value).Select(kv => $"{GameNames.Of(kv.Key)} {N(kv.Value)}"))) : "")
@@ -711,6 +712,16 @@ public static class Overlay
             new Cell("col.deaths", N(s.Deaths), tip)
         };
     }
+
+    /// "For Max: HP saved 12 · Enabled 8", one line per ally helped (biggest help first).
+    private static string PerAlly(PlayerStats s) =>
+        string.Join('\n', s.SavedPerAlly.Keys.Union(s.EnabledPerAlly.Keys)
+            .Select(k => (Key: k, Saved: s.SavedPerAlly.GetValueOrDefault(k), Enabled: s.EnabledPerAlly.GetValueOrDefault(k)))
+            .Where(x => Math.Round(x.Saved) + Math.Round(x.Enabled) > 0).OrderByDescending(x => x.Saved + x.Enabled)
+            .Select(x => string.Format(Loc.T("tip.forAlly"), AllyName(x.Key)) + " " + Line(("col.saved", x.Saved, false), ("col.enabled", x.Enabled, false))));
+
+    private static string AllyName(string key) =>
+        ulong.TryParse(key, NumberStyles.None, CultureInfo.InvariantCulture, out var id) && Capture.Engine.Players.TryGetValue(id, out var p) ? p.Name : key;
 
     private static IReadOnlyList<Cell> OtherRow(ulong id, PlayerStats s) => new[]
     {
