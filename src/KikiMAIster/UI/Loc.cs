@@ -70,6 +70,7 @@ public static class Loc
         ["why.orichalcum"] = ("block {1} ≤ {0} ({2}): the card played was useless", "armure {1} ≤ {0} ({2}) : la carte jouée était inutile"),
         ["why.growth"] = ("{0} could have been played but never was in this fight", "{0} jouable mais jamais jouée de tout le combat"),
         ["why.energy"] = ("{0} energy left unused", "{0} énergie non utilisée"),
+        ["why.energyCards"] = ("{0} energy left unused, playable: {1}", "{0} énergie non utilisée, jouable : {1}"),
         ["why.blockKept"] = ("{0} (+{1}) kept in hand, {2} HP lost", "{0} (+{1}) gardée en main, {2} PV perdus"),
         ["why.allyBlockKept"] = ("{0} (+{1}) kept in hand, allies lost {2} HP it could have stopped", "{0} (+{1}) gardée en main, les alliés ont perdu {2} PV qu'elle aurait arrêtés"),
         ["why.relic"] = ("{0}: one card short", "{0} : à une carte près"),

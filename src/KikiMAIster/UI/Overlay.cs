@@ -704,7 +704,10 @@ public static class Overlay
             lines.Add(string.Format(Loc.T("why.weak"), At(w.Combat, w.Round), GameNames.Of(w.Played), w.PlayedDamage, GameNames.Of(w.Better), w.BetterDamage));
         // Other kinds: the 6 most recent ("T3 · 2 energy left unused"…).
         foreach (var m in s.MissedEntries.AsEnumerable().Reverse().Take(6))
-            lines.Add($"{At(m.Combat, m.Round)} · " + string.Format(Loc.T($"why.{m.Kind}"), m.Args.Select(a => (object)(a.Contains(':') ? GameNames.Of(a) : a)).ToArray()));
+            lines.Add($"{At(m.Combat, m.Round)} · " + (m.Kind == "energy" && m.Args.Count > 1
+                // Unused energy: "2 energy left unused (Strike, Bash could be played)".
+                ? string.Format(Loc.T("why.energyCards"), m.Args[0], string.Join(", ", m.Args.Skip(1).Select(GameNames.Of)))
+                : string.Format(Loc.T($"why.{m.Kind}"), m.Args.Select(a => (object)(a.Contains(':') ? GameNames.Of(a) : a)).ToArray())));
         var tip = lines.Count == 0 ? (s.MissedTotal > 0 ? "" : Loc.T("tip.none")) : string.Join('\n', lines);
         double K(string kind) => s.MissedByKind.GetValueOrDefault(kind);
         return new[]

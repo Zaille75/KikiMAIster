@@ -394,7 +394,12 @@ public static class BlockAlternatives
 
         // Unused energy: lost at the end of the turn (not kept by Ice Cream & co., not wanted by Pael's Tears).
         if (energy > 0 && !nothingToKill && hand.Any(Affordable) && Hook.ShouldPlayerResetEnergy(combat, player) && player.GetRelic<PaelsTears>() == null)
-            Capture.Emit(new MissedChance(actor, "energy", new[] { N(energy) }, energy));
+        {
+            // Args: the energy, then the cards that energy could have paid (most expensive first, at most 3).
+            var playable = hand.Where(Affordable).GroupBy(c => Capture.IdOf(c)).Select(g => g.First())
+                .OrderByDescending(c => c.EnergyCost.CostsX ? energy : Cost(c)).Take(3).Select(Key);
+            Capture.Emit(new MissedChance(actor, "energy", new[] { N(energy) }.Concat(playable).ToArray(), energy));
+        }
 
         // Pael's Tears gives energy next turn for energy left: energy spent on a useless card (at any time in the turn)
         // would have been left.
