@@ -54,7 +54,7 @@ public static class Overlay
         { "col.lethal", "col.wastedBlock", "col.choices", "col.unusedEnergy", "col.hpAvoidable", "col.relicTrigger", "col.potionsLeft" };
 
     /// Damage taken, shown after the damage dealt in the same section (v0.14.0).
-    private static readonly string[] TakenColumns = { "col.hpLost", "col.fromAllies", "col.maxHp" };
+    private static readonly string[] TakenColumns = { "col.hpLost", "col.fromSelf", "col.fromAllies", "col.maxHp" };
 
     private static readonly Section[] Sections =
     {
@@ -77,7 +77,7 @@ public static class Overlay
     /// What the settings menu can hide: every section, and its fixed columns (damage kinds and debuff effect included).
     internal static readonly (string Section, string[] Columns)[] Hideable =
     {
-        ("damage", new[] { "cat.cards", "cat.dot", "cat.powers", "cat.pet", "cat.orbs", "cat.relics", "cat.potions", "cat.other", "col.hpLost", "col.fromAllies", "col.maxHp" }),
+        ("damage", new[] { "cat.cards", "cat.dot", "cat.powers", "cat.pet", "cat.orbs", "cat.relics", "cat.potions", "cat.other", "col.hpLost", "col.fromSelf", "col.fromAllies", "col.maxHp" }),
         ("protection", new[] { "col.byBlock", "col.byPet", "col.useless", "col.petHp" }),
         ("debuffs", new[] { "col.extraDamage", "col.avoided" }),
         ("missed", MissedColumns),
@@ -711,7 +711,8 @@ public static class Overlay
                       ("tip.kills", s.Kills, false), ("tip.biggestHit", s.BiggestHit, false), ("tip.bestCard", s.BestCardPlay, false))
                   + Block(Lines(s.DamageBySource))
                   + Block(taken == "" ? "" : $"{Loc.T("col.hpLost")} {N(s.HpLost)}: {taken}")
-                  + (s.DebuffsReceived.Count == 0 ? "" : Block($"{Loc.T("tip.debuffsReceived")}:\n{Powers(s.DebuffsReceived)}"));
+                  + (s.DebuffsReceived.Count == 0 ? "" : Block($"{Loc.T("tip.debuffsReceived")}:\n{Powers(s.DebuffsReceived)}"))
+                  + (s.SelfDebuffs.Count == 0 ? "" : Block($"{Loc.T("tip.selfDebuffs")}:\n{Powers(s.SelfDebuffs)}"));
         var byColumn = s.DamageBySource.GroupBy(kv => DamageColumn(kv.Key)).ToDictionary(g => g.Key, g => g.Sum(kv => kv.Value));
         var totalText = _solo ? N(s.DamageDealt) : $"{N(s.DamageDealt)} ({share:P0})";
         // Max HP over the run (v0.17.0): net change, gained and lost in the details.
@@ -721,6 +722,7 @@ public static class Overlay
         return new[] { new Cell("col.total", totalText, tip) }
             .Concat(_damageColumns.Select(c => new Cell(c, N(byColumn.GetValueOrDefault(c)), tip)))
             .Append(new Cell("col.hpLost", N(s.HpLost), tip))
+            .Append(new Cell("col.fromSelf", N(s.HpLostFromSelf), tip))
             .Append(new Cell("col.fromAllies", N(s.HpLostFromAllies), tip))
             .Append(new Cell("col.maxHp", maxHp > 0 ? $"+{N(maxHp)}" : N(maxHp), tip)).ToArray();
     }
@@ -910,7 +912,7 @@ public static class Overlay
             $"{kv.Key}:{kv.Value.DamageDealt:F1}:{kv.Value.TotalRawDamage:F1}:{kv.Value.PreventedTotal:F1}:" +
             $"{kv.Value.WastedBlock:F1}:{kv.Value.UselessBlock + kv.Value.BlockSpent:F1}:{kv.Value.BlockGainedSelf + kv.Value.BlockGivenToAllies:F1}:" +
             $"{kv.Value.HpLost:F1}:{kv.Value.DamageBlocked:F1}:{kv.Value.DebuffsApplied.Values.Sum(t => t.Stacks):F1}:{kv.Value.DebuffsApplied.Values.Sum(t => t.Count)}:" +
-            $"{kv.Value.DebuffsReceived.Count}:{kv.Value.FriendlyDamage + kv.Value.SelfDamage:F1}:{kv.Value.FriendlyDebuffs.Count}:" +
+            $"{kv.Value.DebuffsReceived.Count}:{kv.Value.FriendlyDamage + kv.Value.SelfDamage:F1}:{kv.Value.FriendlyDebuffs.Count}:{kv.Value.SelfDebuffs.Count}:" +
             $"{kv.Value.HealingSelf + kv.Value.HealingAllies:F1}:{kv.Value.PetHpGiven:F1}:{kv.Value.WastedPlays.Count}:{kv.Value.Kills}:" +
             $"{kv.Value.DamageEnabledSelf + kv.Value.DamageEnabledAllies:F1}:{kv.Value.MissedLethals}:{kv.Value.WeakAttacks}:{kv.Value.EnergyGiven + kv.Value.CardsGiven + kv.Value.OrbsGiven + kv.Value.TakenForAllies:F1}:{kv.Value.MissedEntries.Count}:{kv.Value.Deaths}:" +
             $"{kv.Value.CardsDrawn + kv.Value.CardsPlayed + kv.Value.CardsExhausted + kv.Value.CardsDiscarded + kv.Value.PotionsUsed}:" +

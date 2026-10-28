@@ -230,6 +230,9 @@ public static class DamagePatches
         Creature? applier = null;
         if (power.InstanceType == PowerInstanceType.InstancedPerApplier && Capture.CurrentActingPlayer?.Creature is { } acting)
             applier = powers.FirstOrDefault(p => p.Applier == acting)?.Applier;
+        // On a player or pet (Fatalité from Influx neuronal, an enemy's Poison…): whoever applied it is the dealer, so the
+        // HP lost count as self-inflicted, from allies or from enemies (v0.17.7).
+        else if (!target.IsEnemy && power.Applier != null) applier = power.Applier;
         return call with { DotPowerId = Capture.IdOf(power), DotApplier = applier };
     }
 }

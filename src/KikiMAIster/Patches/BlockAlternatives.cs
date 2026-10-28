@@ -430,16 +430,15 @@ public static class BlockAlternatives
 
         // Pael's Tears gives energy next turn for energy left: energy spent on a useless card (at any time in the turn)
         // would have been left.
-        if (energy == 0 && player.GetRelic<PaelsTears>() is { } tears)
-        {
-            var incoming = IncomingDamage(player.Creature);
-            var useless = ThisTurn.FirstOrDefault(p => p.Owner == player && p.EnergySpent > 0 && !p.HadOtherEffect &&
-                ((p.GaveBlock && !p.Ethereal && player.Creature.Block - p.BlockAmount >= incoming) || (p.UselessDebuff && !p.GaveBlock)));
-            if (useless != null)
-                Capture.Emit(new MissedChance(actor, "paelsTears", new[] { $"Relic:{Capture.IdOf(tears)}", Key(useless.Card) }));
-        }
+        var uselessPlays = UselessPlays(player);
+        if (energy == 0 && player.GetRelic<PaelsTears>() is { } tears && uselessPlays.FirstOrDefault() is { } useless)
+            Capture.Emit(new MissedChance(actor, "paelsTears", new[] { $"Relic:{Capture.IdOf(tears)}", Key(useless.Card) }));
 
-        foreach (var growing in hand.Where(c => IsGrowing(c) && Affordable(c))) GrowingAffordable.Add(growing);
+        // A growing card could have been played this turn with the energy left, or instead of a useless card (v0.17.7).
+        var spareEnergy = energy + uselessPlays.Select(p => p.EnergySpent).DefaultIfEmpty(0).Max();
+        foreach (var growing in hand.Where(c => IsGrowing(c) && !IsStatusOrCurse(c) && PlayableExceptEnergy(c) && !c.EnergyCost.CostsX &&
+                                                Cost(c) <= spareEnergy))
+            GrowingAffordable.Add(growing);
 
         // Block for one ally (Lift…) does not protect the player: only the ally check below.
         var kept = hand.Where(c => c.GainsBlock && Affordable(c) && (c.TargetType != TargetType.AnyAlly || c is Mimic)).Select(c => (Card: c, Block: EstimateBlock(c)))
@@ -485,6 +484,16 @@ public static class BlockAlternatives
             if (MissedRelicTrigger(relic, plays, hand, energy, WorthPlaying))
                 Capture.Emit(new MissedChance(actor, "relic", new[] { $"Relic:{Capture.IdOf(relic)}" }));
         }
+    }
+
+    /// Cards the player paid energy for this turn that did nothing useful: a block card with no other effect whose block
+    /// was not needed (block at the end of the turn minus its block still covers the incoming attack), or a card whose
+    /// only effect was a useless debuff (F8).
+    private static List<Play> UselessPlays(Player player)
+    {
+        var incoming = IncomingDamage(player.Creature);
+        return ThisTurn.Where(p => p.Owner == player && p.EnergySpent > 0 && !p.HadOtherEffect &&
+            ((p.GaveBlock && !p.Ethereal && player.Creature.Block - p.BlockAmount >= incoming) || (p.UselessDebuff && !p.GaveBlock))).ToList();
     }
 
     /// One more card would have triggered the relic this turn, and a playable one was in hand.

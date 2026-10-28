@@ -23,7 +23,7 @@ public static class Summary
                         $"pet={F(s.AbsorbedByPet)} byEffects={F(s.PreventedByEffects)} petHp={F(s.PetHpGiven)} petDeaths={F(s.PetDeaths)} healSelf={F(s.HealingSelf)} healAllies={F(s.HealingAllies)}");
             ModLog.Info($"  Taken: hpLost={F(s.HpLost)} (enemies={F(s.HpLostFromEnemies)} allies={F(s.HpLostFromAllies)} " +
                         $"self={F(s.HpLostFromSelf)} other={F(s.HpLostOther)}) blocked={F(s.DamageBlocked)} debuffs={Powers(s.DebuffsReceived)}");
-            ModLog.Info($"  Friendly fire: damage={F(s.FriendlyDamage)} self={F(s.SelfDamage)} debuffs={Powers(s.FriendlyDebuffs)}");
+            ModLog.Info($"  Friendly fire: damage={F(s.FriendlyDamage)} self={F(s.SelfDamage)} debuffs={Powers(s.FriendlyDebuffs)} onSelf={Powers(s.SelfDebuffs)}");
             ModLog.Info($"  Debuff effects: enabledSelf={F(s.DamageEnabledSelf)} enabledAllies={F(s.DamageEnabledAllies)} " +
                         $"preventedSelf={F(s.PreventedByDebuffsSelf)} preventedAllies={F(s.PreventedByDebuffsAllies)} ({Map(s.DebuffEffectBySource)})");
             ModLog.Info($"  Missed: lethal={F(s.MissedLethals)} weakAttacks={F(s.WeakAttacks)} wasted={F(s.WastedBlock)} {Map(s.MissedByKind)}");

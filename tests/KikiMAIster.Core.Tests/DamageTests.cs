@@ -114,7 +114,8 @@ public class DamageTests : TestBase
 
         var f = Combat(IdA).FriendlyDebuffs;
         Assert.Equal(1, f["VULNERABLE_POWER"].Count);
-        Assert.Equal(1, f["NO_DRAW_POWER"].Count);
+        Assert.False(f.ContainsKey("NO_DRAW_POWER")); // on self: self-inflicted, not friendly fire (v0.17.7)
+        Assert.Equal(1, Combat(IdA).SelfDebuffs["NO_DRAW_POWER"].Count);
         Assert.False(f.ContainsKey("STRENGTH_POWER"));
     }
 

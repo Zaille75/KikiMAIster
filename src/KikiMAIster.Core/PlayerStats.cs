@@ -40,6 +40,8 @@ public sealed class PlayerStats
 
     // B. Friendly fire
     public Dictionary<string, PowerTally> FriendlyDebuffs { get; } = new();
+    /// Debuffs a player put on themself (Influx neuronal's Fatalité, boss-forced curses…): Damage section (v0.17.7).
+    public Dictionary<string, PowerTally> SelfDebuffs { get; } = new();
     public double FriendlyDamage { get; set; }
     public double SelfDamage { get; set; }
 
@@ -87,11 +89,11 @@ public sealed class PlayerStats
     public Dictionary<string, double> MissedByKind { get; } = new();
     public List<MissedEntry> MissedEntries { get; } = new();
     /// Worse choices: weak attacks + smaller block, Pen Nib on a weak attack, block below Orichalcum, growing card not played.
-    public double MissedChoices => WeakAttacks + new[] { "smallBlock", "penNib", "orichalcum", "order", "orderBlock", "orderSlow" }.Sum(k => MissedByKind.GetValueOrDefault(k));
+    public double MissedChoices => WeakAttacks + new[] { "smallBlock", "penNib", "orichalcum", "order", "orderBlock", "orderSlow", "growth" }.Sum(k => MissedByKind.GetValueOrDefault(k));
     /// Block card plays whose block was wasted (gâché, rule F3), counted once per play (saved with the run).
     public double WastedPlayCount { get; set; }
-    /// "Gâché" misplays (v0.13.1): wasted block card plays + growing cards never played in a fight.
-    public double MissedWasted => WastedPlayCount + MissedByKind.GetValueOrDefault("growth");
+    /// "Gâché" misplays: wasted block card plays (growing cards never played moved to Choix in v0.17.7).
+    public double MissedWasted => WastedPlayCount;
     /// Every missed opportunity counted once (trophies).
     public double MissedTotal => MissedLethals + MissedWasted + MissedChoices + MissedByKind.GetValueOrDefault("relic") + MissedByKind.GetValueOrDefault("paelsTears") +
                                  MissedByKind.GetValueOrDefault("potion") + (MissedByKind.GetValueOrDefault("blockKept") > 0 ? 1 : 0) +

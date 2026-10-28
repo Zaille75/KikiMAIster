@@ -546,6 +546,8 @@ public sealed class StatsEngine
 
         if (p.Applier.IsPlayerSide && p.Target.IsEnemy)
             Each(p.Applier.PlayerId, s => PlayerStats.AddPower(s.DebuffsApplied, p.PowerId, p.Amount));
+        else if (p.Applier.IsPlayerSide && p.Target.IsPlayerSide && p.Applier.PlayerId == p.Target.PlayerId)
+            Each(p.Applier.PlayerId, s => PlayerStats.AddPower(s.SelfDebuffs, p.PowerId, p.Amount));
         else if (p.Applier.IsPlayerSide && p.Target.IsPlayerSide)
             Each(p.Applier.PlayerId, s => PlayerStats.AddPower(s.FriendlyDebuffs, p.PowerId, p.Amount));
         else if (p.Target.IsPlayerSide && p.Target.Kind == ActorKind.Player)

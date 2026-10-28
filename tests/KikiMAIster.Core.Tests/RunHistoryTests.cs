@@ -95,4 +95,21 @@ public class RunHistoryTests : TestBase
         Assert.Equal(new Compositions.Tally(2, 1), group.Get("IRONCLAD+SILENT"));
         Assert.Equal(0, group.Get("DEFECT+SILENT").Played);
     }
+
+    [Fact]
+    public void Grid_MyCharacterTimesMyPartners()
+    {
+        var runs = new[]
+        {
+            new Compositions.Run(new ulong[] { 1, 2 }, new[] { "IRONCLAD", "SILENT" }, 0, true),
+            new Compositions.Run(new ulong[] { 2, 1 }, new[] { "IRONCLAD", "SILENT" }, 0, false), // I played Silent
+            new Compositions.Run(new ulong[] { 1, 3 }, new[] { "IRONCLAD", "SILENT" }, 0, false),
+            new Compositions.Run(new ulong[] { 1, 2, 3 }, new[] { "IRONCLAD", "SILENT", "DEFECT" }, 0, true),
+        };
+        var any = Compositions.Grid(runs, 1, null, null);
+        Assert.Equal(new Compositions.Tally(2, 1), any[("IRONCLAD", "SILENT")]);
+        Assert.Equal(new Compositions.Tally(1, 0), any[("SILENT", "IRONCLAD")]);
+        var withTwo = Compositions.Grid(runs, 1, 2, null);
+        Assert.Equal(new Compositions.Tally(1, 1), withTwo[("IRONCLAD", "SILENT")]);
+    }
 }

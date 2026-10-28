@@ -147,15 +147,13 @@ hotkey settings, chart history across Save & Quit.
 - New trophy names (Culturiste, Peau sur les os) are proposals.
 - v0.17.4–0.17.6 (pet rules, Zaille75): debuff-saved pet HP count once the pet died and the owner lost HP; Déchaînement /
   Protecteur damage from Osty HP saved/given by an ally is Permis; Sacrifice block from ally-given Osty HP is "Armure
-  permise" and what it stops is PV sauvés. **Asked, not answered:** should block that stops a hit on the pet also wait
-  for the pet's death (like debuffs)? Ralenti wrong order in Choix or Gâché? What did Kiki see when the game waited for
-  his end of turn (Mante Chapardeuse)? Boss-forced self-debuffs (Démon de la Connaissance: Mind Rot, Sloth…) show as
-  friendly fire on oneself: keep or leave out?
+  permise" and what it stops is PV sauvés. Answered (v0.17.7): Ralenti stays in Choix; trophy names OK; self-debuffs
+  go to Dégâts "Auto-infligés"; growing cards to Choix; "Évités" chart removal confirmed; v1.0 prep later. The Mante
+  freeze: the game just stopped (frequent beta crashes). **Still open:** block on the pet waiting for its death (question
+  re-explained); Agression (re-explained); proposal for 3–4 player composition views (per-player × character grid).
 - Zaille75 tests v0.16.8 in co-op and sends the log ("log transferred"), see "Path to v1.0" step 1.
 - **Trophy list:** v0.15.0 co-op additions validated by Zaille75 (Bouclier humain, Dynamo, Croupier; Forteresse = own only;
   Traître includes ally HP that a kept ally block card could have saved; Tank and pets given to allies credited). Not tested in game.
-- Chart: "remove the blocked stats" was read as removing the "Évités" chart; Zaille75 said he would check.
-- Growing cards were moved from "Choix" to "Gâché" (v0.13.1); Zaille75 may prefer "Choix".
 - Previous fights are kept across Save & Quit since v0.14.0 (run file `combat.N.*` lines); not the explanations of misses.
 - **Asked Zaille75 (v0.14.0):** the "Agression" feedback. The log showed the only flagged play (Mante Chapardeuse T4: Frappe
   instead of Incendie) with Incendie in hand since the start of the turn (Agression adds it before the draw). Waiting

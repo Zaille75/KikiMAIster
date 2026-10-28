@@ -71,6 +71,24 @@ public sealed class Compositions
         return c;
     }
 
+    /// Two-player runs as a grid (spec 02-ui v0.17.7): my character × my partner's character (the order matters:
+    /// I play Ironclad and he plays Silent is another cell than the reverse). Partner null = any partner.
+    /// Ascension null = every level.
+    public static Dictionary<(string Mine, string Theirs), Tally> Grid(IEnumerable<Run> runs, ulong me, ulong? partner, int? ascension)
+    {
+        var grid = new Dictionary<(string, string), Tally>();
+        foreach (var run in runs)
+        {
+            if (run.Players.Count != 2 || (ascension != null && run.Ascension != ascension)) continue;
+            var i = run.Players.ToList().IndexOf(me);
+            if (i < 0 || (partner != null && run.Players[1 - i] != partner)) continue;
+            var key = (run.Characters[i], run.Characters[1 - i]);
+            var t = grid.GetValueOrDefault(key) ?? new Tally(0, 0);
+            grid[key] = new Tally(t.Played + 1, t.Won + (run.Victory ? 1 : 0));
+        }
+        return grid;
+    }
+
     /// The tallies of every run.
     public static Compositions Of(IEnumerable<Run> runs)
     {

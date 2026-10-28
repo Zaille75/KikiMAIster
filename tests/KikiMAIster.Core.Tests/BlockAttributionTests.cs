@@ -263,7 +263,8 @@ public class BlockAttributionTests : TestBase
 
         Assert.Equal(2, Combat(IdA).WastedPlayCount);
         Assert.Equal(10, Combat(IdA).WastedBlock);
-        Assert.Equal(3, Engine.Get(Scope.Run, IdA).MissedWasted);
+        Assert.Equal(2, Engine.Get(Scope.Run, IdA).MissedWasted);
+        Assert.Equal(1, Engine.Get(Scope.Run, IdA).MissedChoices); // growing card: Choix since v0.17.7
     }
 
     [Fact]
