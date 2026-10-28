@@ -442,7 +442,9 @@ public static class Overlay
                 // Solo: the table is always shown, without the name column; opening the section adds its details.
                 var id = players[0];
                 var cells = section.Row(id, stats[id]);
-                target.AddChild(BuildSoloTable(section, header, ShownColumns(section, stats), cells, Fold));
+                var soloColumns = ShownColumns(section, stats);
+                // Every column at 0 (and hidden): only the section's title.
+                target.AddChild(soloColumns.Count == 0 ? header : BuildSoloTable(section, header, soloColumns, cells, Fold));
                 var detail = cells.FirstOrDefault(c => c.Tooltip != "")?.Tooltip ?? "";
                 if (open && detail != "") target.AddChild(BuildDetail(Accent, detail, 320));
                 continue;
@@ -453,22 +455,23 @@ public static class Overlay
                 continue;
             }
             var ranked = players.OrderByDescending(id => section.Rank(stats[id])).ThenBy(id => id).ToList();
-            target.AddChild(BuildTable(section, header, ShownColumns(section, stats), engine, stats, ranked));
+            var shown = ShownColumns(section, stats);
+            target.AddChild(shown.Count == 0 ? header : BuildTable(section, header, shown, engine, stats, ranked));
         }
         HideEmptyDetached();
     }
 
-    /// The section's columns, without those where every player shows 0 (setting, on by default; v0.17.0).
+    /// The section's columns, without those where every player shows 0 (setting, on by default; v0.17.0). When every
+    /// column is at 0, none is left (v0.17.16: the first one used to stay, e.g. "Dégâts +" or "Létal" at 0).
     private static IReadOnlyList<string> ShownColumns(Section section, IReadOnlyDictionary<ulong, PlayerStats> stats)
     {
         var columns = section.Columns();
-        if (!Cfg.HideZeroColumns || columns.Count <= 1) return columns;
+        if (!Cfg.HideZeroColumns) return columns;
         var rows = stats.Select(kv => section.Row(kv.Key, kv.Value)).ToList();
-        var kept = columns.Where(col => col == "col.total" || rows.Any(cells => !IsZero(CellFor(cells, col).Text))).ToList();
-        return kept.Count > 0 ? kept : columns.Take(1).ToList();
+        return columns.Where(col => col == "col.total" || rows.Any(cells => !IsZero(CellFor(cells, col).Text))).ToList();
     }
 
-    private static bool IsZero(string text) => text is "0" or "-" or "0/0" or "+0" or "" || text.StartsWith("0 (");
+    private static bool IsZero(string text) => text is "0" or "-0" or "-" or "0/0" or "+0" or "" || text.StartsWith("0 (");
 
     // ---------- Detached sections (v0.17.0) ----------
 
@@ -945,7 +948,8 @@ public static class Overlay
             $"{kv.Value.MaxHpGained}:{kv.Value.MaxHpLost}:{kv.Value.RestSiteChoices.Values.Sum()}:{kv.Value.RestSiteChoices.Count}:{kv.Value.ChifumiWon}:{kv.Value.ChifumiPlayed}:{kv.Value.BlockEnabledForAllies:F1}:{kv.Value.SavedForAllies:F1}")) +
         $"|{Cfg.HideZeroColumns}|{Cfg.ShowGroupLine}|{string.Join(',', Cfg.Detached)}";
 
-    internal static string N(double v) => Math.Round(v).ToString("0", CultureInfo.InvariantCulture);
+    /// Rounded, never "-0" (a tiny negative rounding error).
+    internal static string N(double v) => (Math.Round(v) + 0.0 == 0 ? 0 : Math.Round(v)).ToString("0", CultureInfo.InvariantCulture);
 
     /// "Label 3 · Label 5" on one line, leaving out zero values (and ally values in solo).
     private static string Line(params (string LabelKey, double Value, bool Ally)[] parts) =>
