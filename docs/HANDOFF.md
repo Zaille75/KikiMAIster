@@ -131,6 +131,12 @@ Optional roadmap items (only if asked): JSON export, end-of-run Totals / Per act
 hotkey settings, chart history across Save & Quit.
 
 ## Open topics for the next conversation
+- **v0.17.1:** the log (`logs/2026-10-27_v0.16.8_coop_regent_necrobinder_after_crash.log`) only covers the session
+  after the crash (fights 9–15: it was overwritten at the restart). Fixed from it: 10, 15, 22, 23, 27. Answered 13:
+  run totals were restored from the file saved after fight 8, so the crashed attempt never reached the Partie stats.
+  **Still open: 14 and 24** (fights 1 and 4): asked Zaille75 for the game's own godot logs of that night
+  (`%APPDATA%\SlayTheSpire2\logs`, if the folder is there) or screenshots. Since v0.17.1 the mod keeps
+  `KikiMAIster.previous.log`.
 - **First co-op run with v0.16.8 (2026-10-28): 27 feedback points.** v0.17.0 did the ones that did not need the log
   (1–9, 11, 12, 16–21, 25, 26: see 02-ui v0.17.0). **Waiting for the log** ("log transferred") for: 10 (Âme sœur cards
   created in the other player's deck not in Coop), 13 (crash mid-fight: did the Run stats keep the first attempt?),

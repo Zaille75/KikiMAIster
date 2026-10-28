@@ -301,6 +301,13 @@ public static class RecordStore
             Capture.Safe("RecordStore.Load", () =>
             {
                 if (FilePath != null && File.Exists(FilePath)) _book = RecordBook.Read(File.ReadAllText(FilePath));
+                // Once (v0.17.1): "Maître des malus" counted À l'attaque !, which is no debuff: its records start over.
+                if (ModConfig.Current.DebuffRecordsCleared) return;
+                _book.Clear("trophy.debuffs");
+                if (FilePath != null && File.Exists(FilePath)) File.WriteAllText(FilePath, _book.Write());
+                ModConfig.Current.DebuffRecordsCleared = true;
+                ModConfig.Current.Save();
+                ModLog.Info("Maître des malus records cleared (À l'attaque ! is no longer a debuff)");
             });
             return _book;
         }

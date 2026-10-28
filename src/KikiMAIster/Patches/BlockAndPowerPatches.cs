@@ -91,9 +91,16 @@ public static class BlockAndPowerPatches
             if (power is StrengthPower && amount > 0 && power.Owner.IsPlayer && Capture.CardPlays.TryPeek(out var play) &&
                 play.Card is Dominate && play.Target is { IsEnemy: true } target)
                 Capture.Emit(new StrengthBorrowed(Capture.ToActor(power.Owner), Capture.ToActor(target), ModelDb.GetId<VulnerablePower>().Entry, (double)amount));
+            // Esquisse & co.: cards or energy promised to an ally for their next turn are help given now (v0.17.1); the
+            // draw or energy itself, next turn, has no acting player and is not counted again.
+            if (amount > 0 && power is DrawCardsNextTurnPower or EnergyNextTurnPower && power.Owner.IsPlayer &&
+                applier is { IsPlayer: true } helper && helper != power.Owner)
+                Capture.Emit(new HelpGiven(Capture.ToActor(helper), power is DrawCardsNextTurnPower ? "cards" : "energy", (double)amount));
             var id = Capture.IdOf(power);
             var value = (double)amount;
-            var debuff = power.Type == PowerType.Debuff;
+            // À l'attaque ! marks an enemy so that Osty's hits summon: the game calls it a debuff, but it does nothing
+            // against the enemy (v0.17.1: not an Affaiblissement).
+            var debuff = power.Type == PowerType.Debuff && power is not SicEmPower;
             // A buff given a negative amount (Strength down, Dexterity down…) is a debuff: recorded as "<ID>~DOWN".
             if (!debuff && power.GetTypeForAmount(amount) == PowerType.Debuff)
             {

@@ -243,11 +243,14 @@ public static class BlockAlternatives
         play.BlockGains++;
     }
 
-    /// Another card discarded or exhausted by the play in progress (Survivor…). The played card itself going to
-    /// its pile is not an effect.
+    /// Another card discarded, exhausted or moved by the play in progress (Survivor, Graveblast bringing a card back to
+    /// the hand…). The played card itself going to its pile is not an effect. Not damage: an attack doing this was a real
+    /// choice, never a weak attack (v0.17.1).
     public static void OnCardEffect(CardModel card)
     {
-        if (InProgress.TryPeek(out var play) && play != null && play.Card != card) play.HadOtherEffect = true;
+        if (!InProgress.TryPeek(out var play) || play == null || play.Card == card) return;
+        play.HadOtherEffect = true;
+        play.HadNonDamageEffect = true;
     }
 
     public static void OnPlayFinished()
@@ -410,11 +413,14 @@ public static class BlockAlternatives
 
         // Unused energy: lost at the end of the turn (not kept by Ice Cream & co., not wanted by Pael's Tears).
         // Cards kept on purpose (Retain, Star cost) are left out: not playing them is a choice (spec §E0, v0.17.0).
-        if (energy > 0 && !nothingToKill && hand.Any(c => Affordable(c) && !KeptOnPurpose(c, combat)) && Hook.ShouldPlayerResetEnergy(combat, player) &&
+        // So is a block card when the block already covers the incoming attack (v0.17.1).
+        var blockCovered = player.Creature.Block >= IncomingDamage(player.Creature);
+        bool WouldHelp(CardModel c) => Affordable(c) && !KeptOnPurpose(c, combat) && !(blockCovered && c.GainsBlock && c.Type == CardType.Skill);
+        if (energy > 0 && !nothingToKill && hand.Any(WouldHelp) && Hook.ShouldPlayerResetEnergy(combat, player) &&
             player.GetRelic<PaelsTears>() == null)
         {
             // Args: the energy, then the cards that energy could have paid (most expensive first, at most 3).
-            var playable = hand.Where(c => Affordable(c) && !KeptOnPurpose(c, combat)).GroupBy(c => Capture.IdOf(c)).Select(g => g.First())
+            var playable = hand.Where(WouldHelp).GroupBy(c => Capture.IdOf(c)).Select(g => g.First())
                 .OrderByDescending(c => c.EnergyCost.CostsX ? energy : Cost(c)).Take(3).Select(Key);
             Capture.Emit(new MissedChance(actor, "energy", new[] { N(energy) }.Concat(playable).ToArray(), energy));
         }

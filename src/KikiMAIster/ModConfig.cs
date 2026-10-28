@@ -35,6 +35,8 @@ public sealed class ModConfig
     /// Sections shown in their own window (v0.17.0), and each window's position ("section" → x, y).
     public HashSet<string> Detached { get; set; } = new();
     public Dictionary<string, (float X, float Y)> DetachedPositions { get; set; } = new();
+    /// The "Maître des malus" records were cleared once (v0.17.1: they counted À l'attaque !, which is no debuff).
+    public bool DebuffRecordsCleared { get; set; }
     /// Not saved: every section starts folded when the game starts.
     public List<string> OpenSections { get; set; } = new();
 
@@ -79,6 +81,7 @@ public sealed class ModConfig
                     case "compoOrder": c.CompoOrder = v; break;
                     case "compoDescending": c.CompoDescending = v == "true"; break;
                     case "compoGroupOnly": c.CompoGroupOnly = v == "true"; break;
+                    case "debuffRecordsCleared": c.DebuffRecordsCleared = v == "true"; break;
                     case "detached": c.Detached = v.Split(',', StringSplitOptions.RemoveEmptyEntries).ToHashSet(); break;
                     default:
                         // "pos.<section>=x;y": a detached section's window.
@@ -113,7 +116,8 @@ public sealed class ModConfig
                 $"hidden={string.Join(',', Hidden)}", $"chartPerRound={(ChartPerRound ? "true" : "false")}",
                 $"hideZeroColumns={(HideZeroColumns ? "true" : "false")}", $"showGroupLine={(ShowGroupLine ? "true" : "false")}",
                 $"compoOrder={CompoOrder}", $"compoDescending={(CompoDescending ? "true" : "false")}",
-                $"compoGroupOnly={(CompoGroupOnly ? "true" : "false")}", $"detached={string.Join(',', Detached)}"
+                $"compoGroupOnly={(CompoGroupOnly ? "true" : "false")}", $"detached={string.Join(',', Detached)}",
+                $"debuffRecordsCleared={(DebuffRecordsCleared ? "true" : "false")}"
             }.Concat(DetachedPositions.Select(kv => $"pos.{kv.Key}={kv.Value.X.ToString(ci)};{kv.Value.Y.ToString(ci)}")));
         }
         catch (Exception e)

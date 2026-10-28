@@ -36,7 +36,8 @@ public static class Capture
         try
         {
             Engine.Handle(e);
-            if (Settings.LogEvents) ModLog.Info($"EVENT {e}");
+            if (Settings.LogEvents)
+                ModLog.Info(e is MissedChance m ? $"EVENT MissedChance {m.Player.PlayerId} {m.Kind} [{string.Join(", ", m.Args)}] {m.Amount}" : $"EVENT {e}");
         }
         catch (Exception ex)
         {

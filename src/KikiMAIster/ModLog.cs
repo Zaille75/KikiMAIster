@@ -15,6 +15,8 @@ public static class ModLog
             var dir = Path.GetDirectoryName(typeof(ModLog).Assembly.Location);
             if (string.IsNullOrEmpty(dir)) return null;
             var path = Path.Combine(dir, "KikiMAIster.log");
+            // The previous session's log is kept (a crash or a restart no longer loses it, v0.17.1).
+            if (File.Exists(path)) File.Copy(path, Path.Combine(dir, "KikiMAIster.previous.log"), overwrite: true);
             File.WriteAllText(path, $"=== KikiMAIster log started {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n");
             return path;
         }

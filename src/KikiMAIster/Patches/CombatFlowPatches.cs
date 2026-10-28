@@ -11,6 +11,7 @@ using MegaCrit.Sts2.Core.Entities.Potions;
 using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Cards;
+using MegaCrit.Sts2.Core.Models.Powers;
 using MegaCrit.Sts2.Core.Runs;
 
 namespace KikiMAIster.Patches;
@@ -280,6 +281,11 @@ public static class CombatFlowPatches
             BlockAlternatives.OnEffect();
             // A card created in another player's piles (Blade Symphony passes no creator: the player acting made it).
             var giver = creator ?? Capture.CurrentActingPlayer;
+            // Âme sœur: the Soul copied into the ally's draw pile is "created" by that ally; it is the Soulbound
+            // applier's gift (v0.17.1).
+            if (card is Soul && card.Owner.Creature.GetPower<SoulboundPower>() is { } soulbound && soulbound.Applier?.Player is { } binder &&
+                binder != card.Owner && Traverse.Create(soulbound).Property("IsAddingSoul").GetValue<bool>())
+                giver = binder;
             if (giver != null && card.Owner != giver)
             {
                 DamagePatches.GiftedCards.AddOrUpdate(card, giver);
