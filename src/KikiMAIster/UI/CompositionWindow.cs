@@ -131,14 +131,41 @@ public static class CompositionWindow
         layer.AddChild(timer);
     }
 
+    /// F8 or the panel's button: in the lobby, the choice is remembered for the next time (v0.17.10).
     public static void Toggle()
     {
         if (_panel == null) return;
-        if (_panel.Visible)
+        if (_panel.Visible) Close();
+        else
         {
-            _panel.Visible = false;
-            return;
+            Open();
+            Remember(true);
         }
+    }
+
+    /// The lobby just opened: show the window (remembered as open).
+    public static void OpenInLobby()
+    {
+        if (_panel is { Visible: false }) Open();
+    }
+
+    private static void Close()
+    {
+        if (_panel == null) return;
+        _panel.Visible = false;
+        Remember(false);
+    }
+
+    private static void Remember(bool open)
+    {
+        if (!InLobby || Overlay.InRun || ModConfig.Current.CompoLobbyOpen == open) return;
+        ModConfig.Current.CompoLobbyOpen = open;
+        ModConfig.Current.Save();
+    }
+
+    private static void Open()
+    {
+        if (_panel == null) return;
         var context = Current();
         _contextSignature = Signature(context);
         _openedInLobby = InLobby && !Overlay.InRun;
@@ -224,10 +251,22 @@ public static class CompositionWindow
         var title = Overlay.MakeLabel(Loc.T("compo.title"), Overlay.Accent);
         title.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         header.AddChild(title);
+        // Fold to the title only (remembered, v0.17.10).
+        var cfgFold = ModConfig.Current;
+        var fold = Overlay.MakeButton(cfgFold.CompoFolded ? "▸" : "▾");
+        fold.AddThemeColorOverride("font_color", Overlay.Accent);
+        fold.Pressed += () => Capture.Safe("CompositionWindow.Fold", () =>
+        {
+            cfgFold.CompoFolded = !cfgFold.CompoFolded;
+            cfgFold.Save();
+            _rebuildPending = true;
+        });
+        header.AddChild(fold);
         var close = Overlay.MakeButton("✕");
-        close.Pressed += () => Capture.Safe("CompositionWindow.Close", () => _panel!.Visible = false);
+        close.Pressed += () => Capture.Safe("CompositionWindow.Close", Close);
         header.AddChild(close);
         _content.AddChild(header);
+        if (cfgFold.CompoFolded) return;
 
         // Whose stats: every run of this profile, or only this group of players (co-op, v0.17.0).
         if (HasGroup(context))

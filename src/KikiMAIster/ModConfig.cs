@@ -32,6 +32,11 @@ public sealed class ModConfig
     public string CompoOrder { get; set; } = "games";
     public bool CompoDescending { get; set; } = true;
     public bool CompoGroupOnly { get; set; }
+    /// Lobby (v0.17.10): the KikiMAIster panel is hidden by default there (F7 shows it); the Compositions window opens
+    /// by itself, and can be folded to its title. All remembered.
+    public bool LobbyPanelVisible { get; set; }
+    public bool CompoLobbyOpen { get; set; } = true;
+    public bool CompoFolded { get; set; }
     /// 2 players: grid (my character × my partner's) instead of the list.
     public bool CompoGrid { get; set; }
     /// Sections shown in their own window (v0.17.0), and each window's position ("section" → x, y).
@@ -84,6 +89,9 @@ public sealed class ModConfig
                     case "compoDescending": c.CompoDescending = v == "true"; break;
                     case "compoGroupOnly": c.CompoGroupOnly = v == "true"; break;
                     case "compoGrid": c.CompoGrid = v == "true"; break;
+                    case "lobbyPanelVisible": c.LobbyPanelVisible = v == "true"; break;
+                    case "compoLobbyOpen": c.CompoLobbyOpen = v == "true"; break;
+                    case "compoFolded": c.CompoFolded = v == "true"; break;
                     case "debuffRecordsCleared": c.DebuffRecordsCleared = v == "true"; break;
                     case "detached": c.Detached = v.Split(',', StringSplitOptions.RemoveEmptyEntries).ToHashSet(); break;
                     default:
@@ -119,7 +127,9 @@ public sealed class ModConfig
                 $"hidden={string.Join(',', Hidden)}", $"chartPerRound={(ChartPerRound ? "true" : "false")}",
                 $"hideZeroColumns={(HideZeroColumns ? "true" : "false")}", $"showGroupLine={(ShowGroupLine ? "true" : "false")}",
                 $"compoOrder={CompoOrder}", $"compoDescending={(CompoDescending ? "true" : "false")}",
-                $"compoGroupOnly={(CompoGroupOnly ? "true" : "false")}", $"compoGrid={(CompoGrid ? "true" : "false")}", $"detached={string.Join(',', Detached)}",
+                $"compoGroupOnly={(CompoGroupOnly ? "true" : "false")}", $"compoGrid={(CompoGrid ? "true" : "false")}",
+                $"lobbyPanelVisible={(LobbyPanelVisible ? "true" : "false")}", $"compoLobbyOpen={(CompoLobbyOpen ? "true" : "false")}",
+                $"compoFolded={(CompoFolded ? "true" : "false")}", $"detached={string.Join(',', Detached)}",
                 $"debuffRecordsCleared={(DebuffRecordsCleared ? "true" : "false")}"
             }.Concat(DetachedPositions.Select(kv => $"pos.{kv.Key}={kv.Value.X.ToString(ci)};{kv.Value.Y.ToString(ci)}")));
         }

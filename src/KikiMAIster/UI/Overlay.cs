@@ -42,6 +42,7 @@ public static class Overlay
     private static Button? _summaryButton;
     private static Label? _title;
     private static bool _dragging;
+    private static bool _wasInLobby;
     private static string _lastSignature = "";
     /// Refreshes left before the panel shrinks back to its content again (wrapped details settle after a frame).
     private static int _shrinkPending;
@@ -160,7 +161,9 @@ public static class Overlay
     {
         EnsureAttached("F7");
         if (_panel == null || !GodotObject.IsInstanceValid(_panel)) return;
-        Cfg.Visible = !Cfg.Visible;
+        // The lobby has its own choice (hidden by default: no stats there, v0.17.10).
+        if (!InRun && CompositionWindow.InLobby) Cfg.LobbyPanelVisible = !Cfg.LobbyPanelVisible;
+        else Cfg.Visible = !Cfg.Visible;
         Cfg.Save();
         SyncVisibility();
     }
@@ -172,7 +175,10 @@ public static class Overlay
         var inRun = InRun;
         // The character-select lobby also shows the panel (settings, compositions), without stats.
         var inLobby = !inRun && CompositionWindow.InLobby;
-        var show = Cfg.Visible && (inRun || inLobby);
+        var show = inRun ? Cfg.Visible : inLobby && Cfg.LobbyPanelVisible;
+        // Entering the lobby opens the Compositions window, unless the player closed it there last time.
+        if (inLobby && !_wasInLobby && Cfg.CompoLobbyOpen) CompositionWindow.OpenInLobby();
+        _wasInLobby = inLobby;
         if (_panel.Visible != show)
         {
             _panel.Visible = show;
