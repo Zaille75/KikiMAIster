@@ -85,6 +85,7 @@ public static class Loc
         ["why.at"] = ("T{0}", "T{0}"),
         ["why.outside"] = ("Campfire", "Feu de camp"),
         ["why.freeCard"] = ("{0}: free, not played", "{0} : gratuite, pas jouée"),
+        ["why.restBoss"] = ("{0} before the boss: {1} HP before resting, the fight cost {2}", "{0} avant le boss : {1} PV avant de dormir, le combat en a coûté {2}"),
         ["why.tent"] = ("{0}: left without {1}", "{0} : parti sans {1}"),
         ["why.atRun"] = ("C{0} T{1}", "C{0} T{1}"),
         ["tip.col.lethal"] = ("Turns where your starting hand could kill every enemy, yet they survived (minimum)", "Tours où ta main de départ pouvait tuer tous les ennemis, mais ils ont survécu (minimum)"),

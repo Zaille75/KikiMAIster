@@ -55,6 +55,9 @@ public static class BlockAlternatives
         public List<(Creature Target, int Raw, int Slow)> Hits { get; } = new();
         /// Number of times this play gave block (Dexterity counts once per gain).
         public int BlockGains { get; set; }
+        /// Orbs this play triggered (evoke or passive) that Focus boosts: Lightning hits (with their enemy) and Frost
+        /// block (no enemy), for the wrong-order check of a later Focus (v0.17.32).
+        public List<Creature?> OrbTriggers { get; } = new();
     }
 
     /// Damage or block a later card or potion would have added to an earlier play of the turn (wrong order, spec §E0).
@@ -137,7 +140,7 @@ public static class BlockAlternatives
             StrengthDrops.Add((dropping, (double)-amount));
             return;
         }
-        if (amount <= 0 || power is not (VulnerablePower or StrengthPower or DexterityPower)) return;
+        if (amount <= 0 || power is not (VulnerablePower or StrengthPower or DexterityPower or FocusPower)) return;
         InProgress.TryPeek(out var play);
         Player? player;
         string boost;
@@ -172,6 +175,15 @@ public static class BlockAlternatives
                 foreach (var e in earlier.Where(p => p.Card.Type == CardType.Attack && !p.HadNonDamageEffect))
                     foreach (var g in e.Hits.GroupBy(h => h.Target))
                         OrderLosses.Add(new OrderLoss(e, boost, "order", g.Key, (double)amount * g.Count()));
+                break;
+            // Focus gained after orbs fired this turn (Potion de focalisation after an evoke): each Lightning hit lost
+            // that much damage, each Frost trigger that much block (v0.17.32).
+            case FocusPower when power.Owner == player.Creature:
+                foreach (var e in earlier)
+                    foreach (var enemy in e.OrbTriggers)
+                        OrderLosses.Add(enemy != null
+                            ? new OrderLoss(e, boost, "order", enemy, (double)amount)
+                            : new OrderLoss(e, boost, "orderBlock", null, (double)amount));
                 break;
             case DexterityPower when power.Owner == player.Creature:
                 foreach (var e in earlier.Where(p => p.GaveBlock && p.BlockGains > 0 && !p.HadOtherEffect))
@@ -269,6 +281,12 @@ public static class BlockAlternatives
         {
             return true;
         }
+    }
+
+    /// An orb Focus boosts fired during the player's own card play (Lightning on an enemy, Frost block: null).
+    public static void OnOrbTriggered(Player owner, Creature? enemy)
+    {
+        if (InProgress.TryPeek(out var play) && play != null && play.Owner == owner) play.OrbTriggers.Add(enemy);
     }
 
     public static void OnBlockGained(int playId, int amount)
@@ -704,6 +722,10 @@ public static class BlockAlternatives
     /// Cards that always hit twice without saying it in a variable.
     private static readonly HashSet<string> TwoHits = new() { "ASTRAL_PULSE", "MAUL", "DAGGER_SPRAY", "TWIN_STRIKE", "UPROAR", "RIP_AND_TEAR", "REFRACT", "THRASH" };
 
+    /// Attacks whose "Repeat" counts something else than hits (Ice Lance: Frost orbs channeled; Heirloom Hammer: copies),
+    /// found by an audit of every attack with a Repeat variable (v0.17.32).
+    private static readonly HashSet<string> RepeatNotHits = new() { "ICE_LANCE", "HEIRLOOM_HAMMER" };
+
     /// Cards whose number of hits depends on things the mod does not compute (energy spent, cards in piles…).
     private static readonly HashSet<string> UnknownHits = new()
         { "SPITE", "ERADICATE", "FLAK_CANNON", "FIEND_FIRE", "HEAVENLY_DRILL", "MAD_SCIENCE", "SKEWER", "STARDUST", "VOLLEY", "WHIRLWIND" };
@@ -715,8 +737,8 @@ public static class BlockAlternatives
         var id = card.Id.Entry;
         if (UnknownHits.Contains(id)) return null;
         if (card.DynamicVars.TryGetValue("CalculatedHits", out var calc) && calc is CalculatedVar cv) return Math.Max(1, (int)cv.Calculate(target));
-        if (card.DynamicVars.TryGetValue("Repeat", out var repeat)) return Math.Max(1, repeat.IntValue);
         if (TwoHits.Contains(id)) return 2;
+        if (!RepeatNotHits.Contains(id) && card.DynamicVars.TryGetValue("Repeat", out var repeat)) return Math.Max(1, repeat.IntValue);
         if (card is Dismantle) return target?.HasPower<VulnerablePower>() == true ? 2 : 1;
         return 1;
     }

@@ -40,6 +40,7 @@ public static class CombatFlowPatches
         DamagePatches.FlushPending();
         BlockAlternatives.ResolveCombat();
         BlockAndPowerPatches.Reset();
+        Capture.Safe("rest before the boss", () => RestSitePatches.OnCombatEnded(victory));
         Capture.Emit(new CombatEnded(victory));
         RunHistoryPatches.Read(CurrentRun);
         Summary.LogCombat(Capture.Engine);
@@ -118,6 +119,8 @@ public static class CombatFlowPatches
             BlockAlternatives.Reset();
             BlockAndPowerPatches.Reset();
             _combatOpen = true;
+            if (combatState?.Encounter is { } encounter)
+                Capture.Safe("rest before the boss", () => RestSitePatches.OnCombatStarted(runState, encounter.RoomType));
             KikiMAIster.UI.Overlay.EnsureAttached("combat start");
             KikiMAIster.UI.CombatSummary.HideAutoShown();
             var players = combatState?.Players ?? runState.Players;

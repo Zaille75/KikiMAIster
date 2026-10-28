@@ -19,7 +19,7 @@ public static class Overlay
 
     /// Columns about allies, hidden in solo.
     private static readonly HashSet<string> AllyColumns = new() { "col.fromAllies" };
-    /// The Run tab's "Erreurs" column: Gâché + Choix.
+    /// The "Erreurs" column: Gâché + Choix.
     private const string MisplaysKey = "col.misplays";
 
     internal const int FontSize = 13;
@@ -579,10 +579,10 @@ public static class Overlay
         return row;
     }
 
-    /// Missed chances: in the Run tab, Gâché and Choix are one "Erreurs" column (shown unless both are hidden).
+    /// Missed chances: Gâché and Choix are one "Erreurs" column in every tab (shown unless both are hidden; v0.17.32,
+    /// before only in the Run tab).
     private static IReadOnlyList<string> MissedColumnsShown()
     {
-        if (CurrentScope != Scope.Run) return Visible("missed", MissedColumns);
         var bothHidden = Cfg.Hidden.Contains("col:missed:col.wastedBlock") && Cfg.Hidden.Contains("col:missed:col.choices");
         return MissedColumns.Where(c => c != "col.choices").Select(c => c == "col.wastedBlock" ? MisplaysKey : c)
             .Where(c => c == MisplaysKey ? !bothHidden : !Cfg.Hidden.Contains($"col:missed:{c}")).ToList();

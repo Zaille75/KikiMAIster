@@ -549,7 +549,9 @@ public sealed class StatsEngine
 
     private void ConsumeBlock(ulong owner, double amount, Action<BlockLedger.Layer, double> onTaken)
     {
-        var taken = Ledger(owner).Consume(amount);
+        // Block from a play that had an alternative absorbs last: orbs, relics, powers and the block cards that had no
+        // alternative are used first, so the replaceable card is the one left unused (Givre orbs, spec F3, v0.17.32).
+        var taken = Ledger(owner).Consume(amount, l => _hadAlternative.GetValueOrDefault(l.PlayId));
         foreach (var (layer, t) in taken) onTaken(layer, t);
         UnattributedBlock += amount - taken.Sum(x => x.Taken);
     }

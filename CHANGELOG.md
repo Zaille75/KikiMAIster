@@ -16,8 +16,10 @@ Summary by version line. The detailed notes of every version are in [docs/specs/
   with the pet's HP credit the allies behind those HP.
 - **Rules:** cards kept on purpose (Retain, Star cost, Exhaust) are never counted as not played; Slow, Strength drop
   (Friendship) and Plating handled; Personal Hive treated like Thorns; Miniature Tent options left behind; debuff
-  help only counts the HP really saved or dealt; missed lethal ignores enemies spawned by a kill.
-- **Interface:** sections in their own windows, hide columns at 0, richer details (Protection by block source),
+  help only counts the HP really saved or dealt; missed lethal ignores enemies spawned by a kill; block from a card that
+  had an alternative absorbs last (Frost orbs make a Defend gâché); Focus gained after orbs fired and a rest before the
+  boss that was not needed count in Choix; Ice Lance no longer counted as 3 hits.
+- **Interface:** "Erreurs" (Gâché + Choix) in every tab, sections in their own windows, hide columns at 0, richer details (Protection by block source),
   clicked window comes to the front, draggable settings, visible checkboxes, explanations kept across Save & Quit,
   previous session's log kept.
 

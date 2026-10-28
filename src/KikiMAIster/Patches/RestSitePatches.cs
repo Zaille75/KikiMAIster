@@ -5,6 +5,8 @@ using MegaCrit.Sts2.Core.Entities.RestSite;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Relics;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
+using MegaCrit.Sts2.Core.Rooms;
+using MegaCrit.Sts2.Core.Runs;
 
 namespace KikiMAIster.Patches;
 
@@ -23,7 +25,42 @@ public static class RestSitePatches
         {
             var options = __instance.GetOptionsForPlayer(player);
             Mender = optionIndex < options.Count && options[optionIndex] is MendRestSiteOption ? player : null;
+            // Rest: maybe not needed if the next fight is the boss (checked when it ends). Not with the Miniature Tent (the
+            // other options stay) or a relic rewarding the rest itself.
+            if (optionIndex < options.Count && options[optionIndex] is HealRestSiteOption heal && player.GetRelic<MiniatureTent>() == null &&
+                !player.Relics.Any(RewardsResting))
+                Rests[player] = (heal.OptionId, player.Creature.CurrentHp, player.RunState.TotalFloor);
         });
+    }
+
+    /// Rests taken at a campfire: option id, HP before resting, floor. Kept until the next fight starts.
+    private static readonly Dictionary<Player, (string Option, int HpBefore, int Floor)> Rests = new();
+    /// Players who rested just before the boss fight in progress: option id, HP before resting, HP at the fight's start.
+    private static readonly Dictionary<Player, (string Option, int HpBefore, int HpAtStart)> BossRests = new();
+
+    /// A fight starts: a rest from the floor just before counts if this is the boss.
+    public static void OnCombatStarted(IRunState run, RoomType room)
+    {
+        BossRests.Clear();
+        if (room == RoomType.Boss)
+            foreach (var (player, rest) in Rests.Where(r => r.Value.Floor == run.TotalFloor - 1))
+                BossRests[player] = (rest.Option, rest.HpBefore, player.Creature.CurrentHp);
+        Rests.Clear();
+    }
+
+    /// The boss fight is won: a rest was not needed when the HP before resting already covered what the fight cost
+    /// (still alive at the end), so another campfire option (Smith…) was the better choice ("Choix", v0.17.32).
+    public static void OnCombatEnded(bool victory)
+    {
+        foreach (var (player, rest) in BossRests)
+        {
+            var lost = rest.HpAtStart - player.Creature.CurrentHp;
+            ModLog.Info($"rest before the boss by {player.NetId}: {rest.HpBefore} HP before resting, the fight cost {lost}, victory {victory}");
+            if (victory && player.Creature.IsAlive && rest.HpBefore > lost)
+                Capture.Emit(new MissedChance(Capture.ToActor(player), "restBoss",
+                    new[] { $"RestSite:{rest.Option}", rest.HpBefore.ToString(), Math.Max(0, lost).ToString() }));
+        }
+        BossRests.Clear();
     }
 
 #if GAME_DEFAULT
