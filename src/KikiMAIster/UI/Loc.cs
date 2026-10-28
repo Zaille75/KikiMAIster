@@ -80,6 +80,7 @@ public static class Loc
         ["why.potion"] = ("died with {0} potion(s)", "mort avec {0} potion(s)"),
         ["why.order"] = ("{0} before {1}: {2} damage lost", "{0} avant {1} : {2} dégâts perdus"),
         ["why.orderBlock"] = ("{0} before {1}: {2} block lost", "{0} avant {1} : {2} armure perdue"),
+        ["why.orderPotion"] = ("{0} before {1}: {2} damage wasted (the potion alone killed it)", "{0} avant {1} : {2} dégâts inutiles (la potion seule le tuait)"),
         ["why.orderSlow"] = ("{0} before {1}: {2} damage lost (Slow)", "{0} avant {1} : {2} dégâts perdus (Ralenti)"),
         ["why.at"] = ("T{0}", "T{0}"),
         ["why.outside"] = ("Campfire", "Feu de camp"),

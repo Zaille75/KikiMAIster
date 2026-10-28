@@ -178,6 +178,9 @@ public static class DamagePatches
         Capture.Emit(new DamageDealt(Capture.ToActor(dealer), Capture.ToActor(target),
             r.BlockedDamage, r.UnblockedDamage, r.OverkillDamage, r.WasTargetKilled, source));
         if (card != null && target.IsEnemy && r.UnblockedDamage > 0) CreditHelpers(card, dealer, target, r.UnblockedDamage);
+        if (card == null && source.Kind == SourceKind.Potion && target.IsEnemy && r.WasTargetKilled && Capture.PotionUser is { } drinker)
+            Capture.Safe("potion after attacks", () => BlockAlternatives.OnPotionHit(drinker, $"Potion:{source.Id}", target,
+                r.BlockedDamage + r.UnblockedDamage + r.OverkillDamage, r.OverkillDamage));
         if (card is Unleash or Protector && dealer is { IsPet: true } pet && target.IsEnemy && r.UnblockedDamage > 0)
             Capture.Safe("pet HP attack", () => ReportPetHpAttack(card, pet, r.UnblockedDamage));
         if (card != null) BlockAlternatives.OnHit(card, target, r.BlockedDamage + r.UnblockedDamage, dealer);

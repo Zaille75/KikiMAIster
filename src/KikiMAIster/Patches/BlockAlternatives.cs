@@ -192,6 +192,26 @@ public static class BlockAlternatives
             OrderLosses.Add(new OrderLoss(drop, Key(card), "order", target, Math.Min(loss, raw)));
     }
 
+    /// A damage potion thrown at an enemy that the player's attacks of this turn had already hit, when the potion alone
+    /// would have killed it before those attacks (v0.17.30): the attacks were wasted on it (they could have hit another
+    /// enemy, or been kept). One miss per earlier attack, in "Choix" (kind "orderPotion"), with the damage it dealt there.
+    /// Raw: the potion's whole hit (block, HP, overkill); Overkill: the part beyond the enemy's HP.
+    public static void OnPotionHit(Player player, string potion, Creature target, int raw, int overkill)
+    {
+        if (raw <= 0) return;
+        var earlier = ThisTurn.Where(p => p.Owner == player && p.Card.Type == CardType.Attack && !p.HadNonDamageEffect)
+            .Select(p => (Play: p, Damage: p.Hits.Where(h => h.Target == target).Sum(h => h.Raw))).Where(x => x.Damage > 0).ToList();
+        if (earlier.Count == 0) return;
+        // The enemy's HP + block before those attacks = what the potion met + what the attacks took.
+        var before = raw - overkill + earlier.Sum(x => x.Damage);
+        if (raw < before) return;
+        foreach (var (play, damage) in earlier)
+        {
+            ModLog.Info($"potion after attacks: {Capture.IdOf(play.Card)} before {potion}, {damage} damage wasted");
+            Capture.Emit(new MissedChance(Capture.ToActor(player), "orderPotion", new[] { Key(play.Card), potion, N(damage) }));
+        }
+    }
+
     /// Slow (Bygone Effigy): each card played this turn makes the enemy take 10% more attack damage. A non-attack card
     /// played after an attack that hit it, while it was already in hand, would have boosted that attack (spec §E0,
     /// wrong order, v0.17.0).
