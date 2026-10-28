@@ -77,6 +77,10 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
 - Stacks an enemy put on itself credit nobody.
 - Extra damage from a player's Vulnerable is "damage enabled" (for self or for allies). Damage avoided thanks to a
   player's Weak / Strength down is "prevented" (for self or for allies) and is part of "Évités".
+- **Only HP really dealt (v0.17.19):** extra damage from a debuff or an ally's help (Vulnérable, Pendaison, Strength
+  borrowed…) counts only for its share of the HP the hit removed (HP ÷ raw damage), like "Dégâts": not the part that
+  went into block or beyond the enemy's HP. Example: Pendaison ×4 on a 40 hit that removed 5 HP (4 into block, 31
+  overkill) used to credit 30, now 3.75.
 - **Only HP really saved (v0.17.3, Zaille75's example):** damage avoided by a debuff (Weak, Strength down, Tank's
   Guarded…) counts only for the part that would have gone through the block without it. Example: Weak turns a 6 hit into
   4 on a player with 5 block: without Weak, 1 would have gone through → 1 saved, not 2. Weak's amount uses the game's

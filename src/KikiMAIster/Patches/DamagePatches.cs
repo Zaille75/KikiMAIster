@@ -31,7 +31,11 @@ public static class DamagePatches
     private static readonly ConditionalWeakTable<Creature, DamageCall> LastCallOnTarget = new();
     private static readonly List<PendingHit> Pending = new();
 
-    public static void Reset() => Pending.Clear();
+    public static void Reset()
+    {
+        Pending.Clear();
+        DebuffEffectPatches.ResetOffense();
+    }
 
     /// Every damage command funnels into this overload: remember who/what is dealing damage to each target.
     [HarmonyPatch(typeof(CreatureCmd), nameof(CreatureCmd.Damage), typeof(PlayerChoiceContext), typeof(IEnumerable<Creature>),
@@ -144,6 +148,8 @@ public static class DamagePatches
         var callingModel = call?.CallingModel;
         if (Seen.TryGetValue(r, out _)) return;
         Seen.Add(r, true);
+        // The extra damage of this hit (Vulnerable…) counts for the HP it removed only.
+        DebuffEffectPatches.ReleaseOffense(dealer, r.Receiver, r.UnblockedDamage, r.BlockedDamage + r.UnblockedDamage + r.OverkillDamage);
         if (r.TotalDamage + r.OverkillDamage <= 0) return;
 
         var target = r.Receiver;

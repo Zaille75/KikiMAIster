@@ -18,7 +18,30 @@ namespace KikiMAIster.Patches;
 public static class DebuffEffectPatches
 {
     /// Vulnerable: enemies whose Vulnerable increased this hit.
-    private sealed record Pending(IEnumerable<AbstractModel> Modifiers, List<StatEvent> Effects, List<Creature> Vulnerable);
+    private sealed record Pending(IEnumerable<AbstractModel> Modifiers, List<StatEvent> Effects, List<Creature> Vulnerable,
+        Creature Dealer, Creature Target);
+
+    /// Extra damage of a hit (Vulnerable, Pendaison, Strength from others…), held until the hit is reported: only the
+    /// share that really removed HP counts (v0.17.19: not the part into block or overkill, like "Dégâts").
+    private static readonly Dictionary<(Creature Dealer, Creature Target), Queue<List<StatEvent>>> Offense = new();
+
+    /// The hit was reported: its extra damage is scaled to the HP it removed (HP ÷ raw damage).
+    public static void ReleaseOffense(Creature? dealer, Creature target, int hp, int raw)
+    {
+        if (dealer == null || !Offense.TryGetValue((dealer, target), out var queue) || queue.Count == 0) return;
+        var effects = queue.Dequeue();
+        if (raw <= 0 || hp <= 0) return;
+        var scale = Math.Min(1.0, (double)hp / raw);
+        foreach (var e in effects)
+            Capture.Emit(e switch
+            {
+                DebuffEffect d => d with { Amount = d.Amount * scale },
+                StrengthUsed u => u with { Damage = u.Damage * scale },
+                _ => e
+            });
+    }
+
+    public static void ResetOffense() => Offense.Clear();
 
     private static Pending? _last;
 
@@ -125,7 +148,7 @@ public static class DebuffEffectPatches
                             break;
                     }
                 }
-                _last = effects.Count > 0 ? new Pending(mods, effects, vulnerable) : null;
+                _last = effects.Count > 0 ? new Pending(mods, effects, vulnerable, dealer, target) : null;
             });
         }
 
@@ -163,7 +186,15 @@ public static class DebuffEffectPatches
         public static void Prefix(IEnumerable<AbstractModel> modifiers) => Capture.Safe("AfterModifyingDamageAmount", () =>
         {
             if (_last == null || !ReferenceEquals(_last.Modifiers, modifiers)) return;
-            foreach (var e in _last.Effects) Capture.Emit(e);
+            // Damage avoided (Weak…) is resolved by the engine against the hit; extra damage waits for the hit's HP.
+            var offense = _last.Effects.Where(e => e is DebuffEffect { Offense: true } or StrengthUsed).ToList();
+            foreach (var e in _last.Effects.Except(offense)) Capture.Emit(e);
+            if (offense.Count > 0 && _last.Target.IsEnemy)
+            {
+                if (!Offense.TryGetValue((_last.Dealer, _last.Target), out var queue)) Offense[(_last.Dealer, _last.Target)] = queue = new();
+                queue.Enqueue(offense);
+            }
+            else foreach (var e in offense) Capture.Emit(e);
             foreach (var enemy in _last.Vulnerable) BlockAlternatives.OnVulnerableUsed(enemy);
             _last = null;
         });

@@ -134,6 +134,7 @@ public static class CombatFlowPatches
         {
             if (side != CombatSide.Player) return;
             DamagePatches.FlushPending();
+            DebuffEffectPatches.ResetOffense();
             Capture.Emit(new RoundStarted(combatState.RoundNumber));
             BlockAndPowerPatches.GiveNextTurnHelp();
         });
