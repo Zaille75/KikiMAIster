@@ -215,7 +215,18 @@ public static class BlockAndPowerPatches
     {
         public static void Prefix(Creature creature, decimal amount) => Capture.Safe("CreatureCmd.Heal", () =>
         {
-            if (!CombatManager.Instance.IsInProgress || creature.IsDead) return;
+            if (creature.IsDead) return;
+            if (!CombatManager.Instance.IsInProgress)
+            {
+                // Réparer at a campfire (v0.17.17): the heal given to the ally counts as HP saved for them.
+                if (RestSitePatches.Mender is { } mender && creature.IsPlayer && creature.Player != mender)
+                {
+                    var given = (int)Math.Min(amount, creature.MaxHp - creature.CurrentHp);
+                    if (given > 0) Capture.Emit(new Healed(Capture.ToActor(mender), Capture.ToActor(creature), given));
+                    RestSitePatches.Mender = null;
+                }
+                return;
+            }
             var healed = (int)Math.Min(amount, creature.MaxHp - creature.CurrentHp);
             if (healed <= 0) return;
             BlockAlternatives.OnEffect();

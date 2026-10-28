@@ -143,6 +143,7 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
 | Damage enabled for allies | Extra damage allies dealt thanks to this player's Vulnerable (§B2). |
 | Friendly fire | Damage dealt to allies (details: debuffs and status cards put on allies or self). |
 | Deaths | Times this player died. |
+| Campfire heal (v0.17.17) | Réparer (Mend) at a campfire: the HP it heals on the ally count as healing given, so in that ally's "PV sauvés" and in Ange gardien (Partie tab). |
 | Took for allies (v0.13.0) | Damage the player took instead of allies (Intercept: the extra share of each hit, 1 − 1/multiplier). |
 | Energy given (v0.13.0) | Energy given to other players (Believe in You, Energy Surge…). |
 | Cards and energy for next turn (v0.17.1) | A power that gives an ally cards or energy at the start of their next turn (Esquisse: Draw Cards Next Turn; Energy Next Turn) counts as cards / energy given when that next turn comes (**v0.17.2:** not if the fight ends first or the ally is dead). Souls that **Âme sœur** copies into the ally's draw pile are cards given by the Âme sœur player (their damage is "Permis" for them). |
@@ -171,6 +172,7 @@ Cards drawn, played, exhausted, discarded; potions used.
 | Gâché (v0.13.1: a count of misplays, like the other columns) | One per block card play whose block was wasted (rule F3). The block amount stays in the details. (Growing cards never played moved to **Choix** in v0.17.7.) |
 | Wasted block | The "gâché" block of rule F3 (block that saved nothing while a useful card stayed in hand), with its explanation: incoming attack → block already there → card played → what could have been played. In "Protection", gâché and inutile are now one "Inutile" column. |
 | Unused energy (v0.10.0) | Energy left at the end of the turn while a playable card that energy could pay was in hand. Not counted when the energy is kept (Ice Cream…) or wanted (Pael's Tears gives energy for leftover energy). **v0.17.1:** a block skill does not count when the player's block already covers the incoming attack (that block was not needed). |
+| Explanations kept (v0.17.17) | The latest explanations of every kind (missed lethal, wasted block, weak attacks, other misses: 40 of each per player) are saved with the run, so they survive Save & Quit and a restart. |
 | Avoidable HP (v0.10.0) | A playable block card (affordable with the energy left) stayed in hand at the end of the turn, then the player lost HP to enemies before the next round: min(HP lost, that card's block) counts. |
 | Potions left (v0.10.0) | Potions usable in combat still held when the player died. |
 | Smaller block (v0.10.0) | A block card played while a block card giving more block (same cost or cheaper) stayed in hand until the end of the turn, and the player's block was below the incoming attack. Not counted if the played card did something else. |

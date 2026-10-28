@@ -60,6 +60,9 @@ public sealed class PlayerStats
     /// Why block was wasted: one entry per block card play (not saved with the run).
     public List<WastedPlay> WastedPlays { get; } = new();
     public double BlockSpent { get; set; }
+    /// Per block source ("Card:DEFEND_IRONCLAD"…): damage that block stopped, and block that stopped nothing (v0.17.17).
+    public Dictionary<string, double> BlockStoppedBySource { get; } = new();
+    public Dictionary<string, double> BlockUnusedBySource { get; } = new();
     public double AbsorbedByPet { get; set; }
     /// HP loss avoided thanks to relics/powers that reduce it (Tungsten Rod, Intangible…), per source.
     public double PreventedByEffects { get; set; }

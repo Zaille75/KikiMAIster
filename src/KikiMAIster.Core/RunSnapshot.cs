@@ -54,6 +54,47 @@ public static class RunSnapshot
         foreach (var p in Tallies)
             foreach (var (k, t) in (Dictionary<string, PowerTally>)p.GetValue(s)!)
                 lines.Add($"{prefix}.{p.Name}.{k}={t.Count};{t.Stacks.ToString("R", Inv)}");
+        // The explanations of the misses (v0.17.17: kept across Save & Quit), the latest ones of each list.
+        void List<T>(string name, IEnumerable<T> items, Func<T, IEnumerable<string>> fields)
+        {
+            var i = 0;
+            foreach (var item in items.TakeLast(KeptExplanations))
+                lines.Add($"{prefix}.list.{name}.{i++}=" + string.Join(';', fields(item).Select(Uri.EscapeDataString)));
+        }
+        List("MissedEntries", s.MissedEntries, m => new[] { I(m.Round), m.Kind, D(m.Amount), I(m.Combat), Join(m.Args) });
+        List("MissedLethalTurns", s.MissedLethalTurns, m => new[] { I(m.Round), I(m.EnemiesHp), I(m.Combat), Join(m.Cards) });
+        List("WeakAttackPlays", s.WeakAttackPlays, w => new[] { I(w.Round), w.Played, I(w.PlayedDamage), w.Better, I(w.BetterDamage), I(w.Combat) });
+        List("WastedPlays", s.WastedPlays, w => new[] { I(w.PlayId), I(w.Round), I(w.Combat), D(w.Amount), w.Choice.BlockCard, w.Choice.Alternative,
+            I(w.Choice.BlockAtTurnEnd), I(w.Choice.IncomingDamage), Join(w.Choice.UsefulInHand) });
+    }
+
+    private const int KeptExplanations = 40;
+    private static string I(int v) => v.ToString(Inv);
+    private static string D(double v) => v.ToString("R", Inv);
+    private static string Join(IEnumerable<string> items) => string.Join(',', items.Select(Uri.EscapeDataString));
+    private static List<string> Split(string text) => text == "" ? new List<string>() : text.Split(',').Select(Uri.UnescapeDataString).ToList();
+
+    /// One saved explanation: "list.<Name>.<index>" = escaped fields separated by ';'.
+    private static void ReadExplanation(PlayerStats s, string name, string value)
+    {
+        var f = value.Split(';').Select(Uri.UnescapeDataString).ToArray();
+        int Int(int k) => int.Parse(f[k], Inv);
+        switch (name)
+        {
+            case "MissedEntries":
+                s.MissedEntries.Add(new MissedEntry(Int(0), f[1], Split(f[4]), double.Parse(f[2], Inv), Int(3)));
+                break;
+            case "MissedLethalTurns":
+                s.MissedLethalTurns.Add(new MissedLethalTurn(Int(0), Split(f[3]), Int(1), Int(2)));
+                break;
+            case "WeakAttackPlays":
+                s.WeakAttackPlays.Add(new WeakAttackPlay(Int(0), f[1], Int(2), f[3], Int(4), Int(5)));
+                break;
+            case "WastedPlays":
+                s.WastedPlays.Add(new WastedPlay(Int(0), Int(1), new BlockChoice(f[4], f[5], Split(f[8]), Int(6), Int(7)), Int(2))
+                    { Amount = double.Parse(f[3], Inv) });
+                break;
+        }
     }
 
     public sealed record Snapshot(string RunKey, int Floor, IReadOnlyList<PlayerInfo> Players, Dictionary<ulong, PlayerStats> Stats,
@@ -141,7 +182,9 @@ public static class RunSnapshot
         var dot = rest.IndexOf('.');
         var name = dot < 0 ? rest : rest[..dot];
         var sub = dot < 0 ? null : rest[(dot + 1)..];
-        if (sub == null)
+        if (name == "list" && sub != null && sub.IndexOf('.') is > 0 and var listDot)
+            ReadExplanation(s, sub[..listDot], value);
+        else if (sub == null)
             Numbers.FirstOrDefault(p => p.Name == name)?.SetValue(s, double.Parse(value, Inv));
         else if (Amounts.FirstOrDefault(p => p.Name == name) is { } a)
             ((Dictionary<string, double>)a.GetValue(s)!)[sub] = double.Parse(value, Inv);

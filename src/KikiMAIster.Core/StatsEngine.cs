@@ -36,7 +36,7 @@ public sealed class StatsEngine
 
     /// Pet HP saved by a debuff (Debuff: who was responsible, resolved at the hit) or by block (v0.17.8: Giver = who gave
     /// that block, the owner included).
-    private sealed record PetSave(ulong Giver, double Amount, DebuffEffect? Debuff = null)
+    private sealed record PetSave(ulong Giver, double Amount, DebuffEffect? Debuff = null, string Source = "")
     {
         public PetSave Part(double amount) => this with { Amount = amount, Debuff = Debuff == null ? null : Debuff with { Amount = amount } };
     }
@@ -60,6 +60,7 @@ public sealed class StatsEngine
         }
         Each(save.Giver, s =>
         {
+            PlayerStats.Add(s.BlockStoppedBySource, save.Source, save.Amount);
             if (save.Giver == owner) s.PreventedOwnBlock += save.Amount;
             else
             {
@@ -422,11 +423,12 @@ public sealed class StatsEngine
                 // pet died and its owner loses HP, and for attacks that grow with the pet's HP.
                 if (d.Target.Kind == ActorKind.Pet)
                 {
-                    AddPetSaves(owner, new[] { new PetSave(layer.GiverId, taken) });
+                    AddPetSaves(owner, new[] { new PetSave(layer.GiverId, taken, Source: layer.Source) });
                     return;
                 }
                 Each(layer.GiverId, s =>
                 {
+                    PlayerStats.Add(s.BlockStoppedBySource, layer.Source, taken);
                     if (layer.GiverId == owner) s.PreventedOwnBlock += taken;
                     else
                     {
@@ -498,7 +500,7 @@ public sealed class StatsEngine
         var giver = b.Giver.IsPlayerSide ? b.Giver.PlayerId : owner;
         // Plating gives its block at the end of the turn, known in advance: it counts as already there, so it absorbs
         // first and a block card the Plating made unnecessary can be gâché (spec 01-metrics §F, v0.17.0).
-        Ledger(owner).Add(giver, b.Amount, Round, b.PlayId, first: b.Source == Source.Power(PlatingPowerId));
+        Ledger(owner).Add(giver, b.Amount, Round, b.PlayId, first: b.Source == Source.Power(PlatingPowerId), source: b.Source.ToString());
         Each(giver, s =>
         {
             if (giver == owner) s.BlockGainedSelf += b.Amount;
@@ -556,6 +558,7 @@ public sealed class StatsEngine
         {
             if (wasted) s.WastedBlock += amount;
             else s.UselessBlock += amount;
+            PlayerStats.Add(s.BlockUnusedBySource, layer.Source, amount);
             if (toAlly) s.UnusedGivenToAllies += amount;
             if (wasted && hasChoice && PlayerStats.AddWasted(s.WastedPlays, layer.PlayId, layer.Round, choice.Choice, amount, _combatNumber))
                 s.WastedPlayCount++;

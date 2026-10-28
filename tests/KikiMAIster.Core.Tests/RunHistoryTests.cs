@@ -139,4 +139,22 @@ public class RunHistoryTests : TestBase
         Assert.Equal(0, Engine.LastCombat!.Stats[IdA].MissedChoices);
         Assert.Equal(0, Engine.Get(Scope.Run, IdA).MissedEntries[^1].Combat);
     }
+
+    [Fact]
+    public void MissExplanations_SurviveSaveAndQuit()
+    {
+        Engine.Handle(new MissedChance(A, "energy", new[] { "2", "Card:STRIKE", "Card:BASH;odd,name" }, 2));
+        Engine.Handle(new MissedLethal(A, new[] { "Card:STRIKE", "Card:BASH" }, 14));
+        Engine.Handle(new WeakAttack(A, "Card:STRIKE", 6, "Card:BASH", 8));
+        Engine.Handle(new BlockGained(A, A, 5, Source.Card("DEFEND"), PlayId: 9));
+        Engine.Handle(new BlockPlayResolved(9, true, new BlockChoice("Card:DEFEND", "Card:STRIKE", new[] { "Card:STRIKE" }, 5, 0)));
+        Engine.Handle(new CombatEnded(true));
+        var s = RunSnapshot.Read(RunSnapshot.Write("k", 2, Engine))!.Stats[IdA];
+        Assert.Equal(new[] { "2", "Card:STRIKE", "Card:BASH;odd,name" }, s.MissedEntries[0].Args);
+        Assert.Equal(14, s.MissedLethalTurns[0].EnemiesHp);
+        Assert.Equal("Card:BASH", s.WeakAttackPlays[0].Better);
+        Assert.Equal(5, s.WastedPlays[0].Amount);
+        Assert.Equal("Card:STRIKE", s.WastedPlays[0].Choice.Alternative);
+        Assert.Equal(5, s.BlockUnusedBySource["Card:DEFEND"]);
+    }
 }

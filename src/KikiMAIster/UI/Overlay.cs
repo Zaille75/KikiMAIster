@@ -55,16 +55,20 @@ public static class Overlay
         { "col.lethal", "col.wastedBlock", "col.choices", "col.unusedEnergy", "col.hpAvoidable", "col.relicTrigger", "col.potionsLeft" };
 
     /// Damage taken, shown after the damage dealt in the same section (v0.14.0).
+    /// What your debuffs changed (v0.17.17: shown in Dégâts, no longer in Affaiblissements).
+    private static readonly string[] DebuffEffectColumns = { "col.extraDamage", "col.avoided" };
+
     private static readonly string[] TakenColumns = { "col.hpLost", "col.fromSelf", "col.fromAllies", "col.maxHp" };
 
     private static readonly Section[] Sections =
     {
-        new("damage", DamageRow, () => Visible("damage", new[] { "col.total" }.Concat(_damageColumns).Concat(Fixed(TakenColumns))), s => s.DamageDealt),
+        new("damage", DamageRow, () => Visible("damage", new[] { "col.total" }.Concat(_damageColumns).Concat(DebuffEffectColumns).Concat(Fixed(TakenColumns))),
+            s => s.DamageDealt),
         new("protection", ProtectionRow, () => Visible("protection", Fixed("col.prevented", "col.byBlock", "col.byPet", "col.useless")
             .Concat(_anyPetHp ? new[] { "col.petHp" } : Array.Empty<string>())), s => s.PreventedTotal),
         new("debuffs", DebuffRow, () =>
         {
-            var cols = Visible("debuffs", _debuffColumns.Append("col.extraDamage").Append("col.avoided"));
+            var cols = Visible("debuffs", _debuffColumns);
             return cols.Count > 0 ? cols : new[] { "col.noDebuff" };
         }, s => s.DebuffsApplied.Values.Sum(t => t.Stacks)),
         new("missed", MissedRow, MissedColumnsShown, s => -(s.MissedTotal * 100 + s.MissedByKind.GetValueOrDefault("energy"))),
@@ -78,9 +82,9 @@ public static class Overlay
     /// What the settings menu can hide: every section, and its fixed columns (damage kinds and debuff effect included).
     internal static readonly (string Section, string[] Columns)[] Hideable =
     {
-        ("damage", new[] { "cat.cards", "cat.dot", "cat.powers", "cat.pet", "cat.orbs", "cat.relics", "cat.potions", "cat.other", "col.hpLost", "col.fromSelf", "col.fromAllies", "col.maxHp" }),
+        ("damage", new[] { "cat.cards", "cat.dot", "cat.powers", "cat.pet", "cat.orbs", "cat.relics", "cat.potions", "cat.other", "col.extraDamage", "col.avoided", "col.hpLost", "col.fromSelf", "col.fromAllies", "col.maxHp" }),
         ("protection", new[] { "col.byBlock", "col.byPet", "col.useless", "col.petHp" }),
-        ("debuffs", new[] { "col.extraDamage", "col.avoided" }),
+        ("debuffs", Array.Empty<string>()),
         ("missed", MissedColumns),
         ("coop", new[] { "col.blockGiven", "col.blockEnabled", "col.saved", "col.takenForAllies", "col.enabled", "col.energyGiven", "col.cardsGiven", "col.friendly", "col.deaths", "col.chifumi" }),
         ("rest", Array.Empty<string>()),
@@ -732,9 +736,12 @@ public static class Overlay
         var share = total > 0 ? s.DamageDealt / total : 0;
         var taken = Line(("tip.fromEnemies", s.HpLostFromEnemies, false), ("tip.fromAllies", s.HpLostFromAllies, true),
                         ("tip.fromSelf", s.HpLostFromSelf, false), ("tip.other", s.HpLostOther, false), ("col.blocked", s.DamageBlocked, false));
-        var tip = Line(("tip.intoBlock", s.DamageIntoBlock, false), ("tip.overkill", s.Overkill, false),
-                      ("tip.kills", s.Kills, false), ("tip.biggestHit", s.BiggestHit, false), ("tip.bestCard", s.BestCardPlay, false))
+        // Biggest hit / best card are trophies, not shown here (v0.17.17).
+        var extra = s.DamageEnabledSelf + s.DamageEnabledAllies;
+        var avoided = s.PreventedByDebuffsSelf + s.PreventedByDebuffsAllies;
+        var tip = Line(("tip.intoBlock", s.DamageIntoBlock, false), ("tip.overkill", s.Overkill, false), ("tip.kills", s.Kills, false))
                   + Block(Lines(s.DamageBySource))
+                  + (extra + avoided > 0 ? Block(Line(("tip.enabled", extra, false), ("tip.byDebuffs", avoided, false)) + Block(Lines(s.DebuffEffectBySource))) : "")
                   + Block(taken == "" ? "" : $"{Loc.T("col.hpLost")} {N(s.HpLost)}: {taken}")
                   + (s.DebuffsReceived.Count == 0 ? "" : Block($"{Loc.T("tip.debuffsReceived")}:\n{Powers(s.DebuffsReceived)}"))
                   + (s.SelfDebuffs.Count == 0 ? "" : Block($"{Loc.T("tip.selfDebuffs")}:\n{Powers(s.SelfDebuffs)}"));
@@ -746,6 +753,8 @@ public static class Overlay
             tip += Block($"{Loc.T("col.maxHp")}: {Line(("tip.maxHpGained", s.MaxHpGained, false), ("tip.maxHpLost", s.MaxHpLost, false))}");
         return new[] { new Cell("col.total", totalText, tip) }
             .Concat(_damageColumns.Select(c => new Cell(c, N(byColumn.GetValueOrDefault(c)), tip)))
+            .Append(new Cell("col.extraDamage", N(extra), tip))
+            .Append(new Cell("col.avoided", N(avoided), tip))
             .Append(new Cell("col.hpLost", N(s.HpLost), tip))
             .Append(new Cell("col.fromSelf", N(s.HpLostFromSelf), tip))
             .Append(new Cell("col.fromAllies", N(s.HpLostFromAllies), tip))
@@ -796,23 +805,26 @@ public static class Overlay
 
     private static IReadOnlyList<Cell> ProtectionRow(ulong id, PlayerStats s)
     {
+        // What the table does not show (v0.17.17): block gained / given / received, each block source, pet, relics…
         var lines = new List<string>();
-        if (s.PreventedByBlock > 0)
-            lines.Add(_solo ? $"{Loc.T("tip.byBlock")}: {N(s.PreventedByBlock)}"
-                : $"{Loc.T("tip.byBlock")}: {N(s.PreventedByBlock)} ({Loc.T("tip.self")} {N(s.PreventedOwnBlock)} · {Loc.T("tip.allies")} {N(s.PreventedForAllies)})");
-        if (s.AbsorbedByPet + s.PetAbsorbedForAllies > 0 || s.PetDeaths > 0)
-            lines.Add($"{Loc.T("tip.pet")}: {N(s.AbsorbedByPet + s.PetAbsorbedForAllies)}" +
-                      (s.PetAbsorbedForAllies >= 0.5 ? $" ({Loc.T("tip.petOfAllies")} {N(s.PetAbsorbedForAllies)})" : "") +
-                      (s.PetDeaths > 0 ? $" · {Loc.T("tip.petDeaths")} {N(s.PetDeaths)}" : ""));
+        var gained = Line(("tip.blockGained", s.BlockGainedSelf, false), ("tip.blockGiven", s.BlockGivenToAllies, true),
+            ("col.blocked", s.DamageBlocked, false), ("tip.spent", s.BlockSpent, false));
+        if (gained != "") lines.Add(gained);
+        var sources = s.BlockStoppedBySource.Keys.Union(s.BlockUnusedBySource.Keys)
+            .Select(k => (Key: k, Stopped: s.BlockStoppedBySource.GetValueOrDefault(k), Unused: s.BlockUnusedBySource.GetValueOrDefault(k)))
+            .Where(x => Math.Round(x.Stopped) + Math.Round(x.Unused) > 0).OrderByDescending(x => x.Stopped).ThenByDescending(x => x.Unused).Take(8).ToList();
+        if (sources.Count > 0)
+            lines.Add(Loc.T("tip.bySource") + ":\n" + string.Join('\n', sources.Select(x =>
+                $"  {GameNames.Of(x.Key == "" ? "Unknown" : x.Key)}: {Line(("tip.stopped", x.Stopped, false), ("tip.unused", x.Unused, false))}")));
+        if (!_solo && (s.PreventedForAllies > 0 || s.UnusedGivenToAllies > 0))
+            lines.Add($"{Loc.T("tip.blockForAllies")}: {Line(("tip.stopped", s.PreventedForAllies, false), ("tip.unused", s.UnusedGivenToAllies, false))}");
+        var pet = Line(("tip.petOfAllies", s.PetAbsorbedForAllies, true), ("tip.petDeaths", s.PetDeaths, false));
+        if (pet != "") lines.Add($"{Loc.T("tip.pet")}: {pet}");
         if (s.PreventedByEffects > 0)
             lines.Add($"{Loc.T("tip.byEffects")}: " + string.Join(", ", s.PreventedByEffectSource.OrderByDescending(kv => kv.Value)
                 .Select(kv => $"{GameNames.Of(kv.Key)} {N(kv.Value)}")));
         var byDebuffs = s.PreventedByDebuffsSelf + s.PreventedByDebuffsAllies;
         if (byDebuffs > 0) lines.Add($"{Loc.T("tip.byDebuffs")}: {N(byDebuffs)}");
-        if (s.UnusedBlock > 0)
-            lines.Add($"{Loc.T("col.useless")}: {N(s.UnusedBlock)}" + (!_solo && s.UnusedGivenToAllies > 0 ? $" ({Loc.T("tip.ofAllies")} {N(s.UnusedGivenToAllies)})" : ""));
-        if (s.BlockSpent > 0) lines.Add($"{Loc.T("tip.spent")}: {N(s.BlockSpent)}");
-        if (s.PetHpGiven > 0) lines.Add($"{Loc.T("col.petHp")}: {N(s.PetHpGiven)}");
         if (s.HealingSelf > 0) lines.Add($"{Loc.T("tip.healSelf")}: {N(s.HealingSelf)}");
         var tip = string.Join('\n', lines);
         return new[]
@@ -829,16 +841,11 @@ public static class Overlay
     /// (Vulnerable…) and damage avoided (Weak, Strength down…), each debuff's share in the details.
     private static IReadOnlyList<Cell> DebuffRow(ulong id, PlayerStats s)
     {
-        var extra = s.DamageEnabledSelf + s.DamageEnabledAllies;
-        var avoided = s.PreventedByDebuffsSelf + s.PreventedByDebuffsAllies;
-        var tip = (s.DebuffsApplied.Count == 0 ? Loc.T("tip.none") : Powers(s.DebuffsApplied));
+        // x/y explained first; what the debuffs changed is in Dégâts (v0.17.17).
+        var tip = Loc.T("tip.debuffXY") + "\n" + (s.DebuffsApplied.Count == 0 ? Loc.T("tip.none") : Powers(s.DebuffsApplied));
         if (s.DotDamage > 0) tip += $"\n{Loc.T("tip.dot")}: {N(s.DotDamage)}";
-        if (extra + avoided > 0)
-            tip += "\n" + Line(("tip.enabled", extra, false), ("tip.byDebuffs", avoided, false)) + Block(Lines(s.DebuffEffectBySource));
         return s.DebuffsApplied.GroupBy(kv => DebuffColumn(kv.Key))
             .Select(g => new Cell(g.Key, $"{g.Sum(kv => kv.Value.Count)}/{N(g.Sum(kv => kv.Value.Stacks))}", tip))
-            .Append(new Cell("col.extraDamage", N(extra), tip))
-            .Append(new Cell("col.avoided", N(avoided), tip))
             .Append(new Cell("col.noDebuff", "-", tip)).ToArray();
     }
 

@@ -3,7 +3,8 @@ namespace KikiMAIster.Core;
 /// Block layers on one player's creature, consumed first-in first-out (spec 01-metrics §F).
 public sealed class BlockLedger
 {
-    public sealed record Layer(ulong GiverId, int Round, int PlayId = 0)
+    /// Source: what gave the block ("Card:DEFEND_IRONCLAD", "Relic:…"), for the Protection details (v0.17.17).
+    public sealed record Layer(ulong GiverId, int Round, int PlayId = 0, string Source = "")
     {
         public double Amount { get; set; }
         /// Damage this layer already absorbed (its leftover is then overshoot, never a misplay).
@@ -20,10 +21,10 @@ public sealed class BlockLedger
     public Layer? Last => _layers.Last?.Value;
 
     /// First: the layer counts as the oldest one (block known in advance, e.g. Plating at the end of the turn).
-    public void Add(ulong giverId, double amount, int round, int playId = 0, bool first = false)
+    public void Add(ulong giverId, double amount, int round, int playId = 0, bool first = false, string source = "")
     {
         if (amount <= 0) return;
-        var layer = new Layer(giverId, round, playId) { Amount = amount };
+        var layer = new Layer(giverId, round, playId, source) { Amount = amount };
         if (first) _layers.AddFirst(layer);
         else _layers.AddLast(layer);
     }

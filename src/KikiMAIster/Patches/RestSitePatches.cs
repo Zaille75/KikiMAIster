@@ -13,6 +13,19 @@ namespace KikiMAIster.Patches;
 /// local player leaving, or a remote player's "skipped" message.
 public static class RestSitePatches
 {
+    /// The player who chose Réparer (Mend) and has not healed an ally yet: that heal is theirs.
+    public static Player? Mender;
+
+    [HarmonyPatch(typeof(RestSiteSynchronizer), "ChooseOption")]
+    public static class OptionChosen
+    {
+        public static void Prefix(RestSiteSynchronizer __instance, Player player, int optionIndex) => Capture.Safe("RestSite.ChooseOption", () =>
+        {
+            var options = __instance.GetOptionsForPlayer(player);
+            Mender = optionIndex < options.Count && options[optionIndex] is MendRestSiteOption ? player : null;
+        });
+    }
+
     [HarmonyPatch(typeof(RestSiteSynchronizer), nameof(RestSiteSynchronizer.BeforeLocalRestSiteExited))]
     public static class LocalLeft
     {
