@@ -113,7 +113,7 @@ Order: test → default branch → release prep → publish → maintenance. The
    game: Permis, Encaissés, Ange gardien, per-ally details, co-op trophies/records, compositions), ideally plus one solo
    run. Then "log transferred" + screenshots of anything odd. Run-end = "full run without data loss" (roadmap phase 4).
 2. **Default (non-beta) branch:** copy the non-beta game DLLs into `lib/default/` (same files as `lib/beta/`:
-   `sts2.dll` and its dependencies from the game's `data_sts2_windows_x86_64` folder). Then Claude runs
+   `sts2.dll`, `GodotSharp.dll`, `0Harmony.dll`, `release_info.json`; same game folders they came from for the beta). Then Claude runs
    `./build.sh default` and fixes the patches that no longer match. Skip if the beta becomes the default version soon.
 3. **Release prep decisions:**
    - an icon (an image Zaille75 likes, or Claude draws a simple one);
