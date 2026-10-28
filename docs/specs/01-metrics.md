@@ -77,6 +77,10 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
 - Stacks an enemy put on itself credit nobody.
 - Extra damage from a player's Vulnerable is "damage enabled" (for self or for allies). Damage avoided thanks to a
   player's Weak / Strength down is "prevented" (for self or for allies) and is part of "Évités".
+- **Only HP really saved (v0.17.3, Zaille75's example):** damage avoided by a debuff (Weak, Strength down, Tank's
+  Guarded…) counts only for the part that would have gone through the block without it. Example: Weak turns a 6 hit into
+  4 on a player with 5 block: without Weak, 1 would have gone through → 1 saved, not 2. Weak's amount uses the game's
+  rounding (6 × 0.75 = 4.5 hits for 4, so Weak avoided 2).
 
 ## C. Protection & support
 
@@ -144,7 +148,7 @@ Cards drawn, played, exhausted, discarded; potions used.
 ## E0. Missed opportunities (v0.9.0)
 | Stat | Definition |
 |---|---|
-| Missed lethal | Turns where the player's **front hand** (the hand and energy at the start of their turn) could have killed every enemy that must die, yet enemies were still alive at the end of the turn. Only attacks on one enemy or on all enemies, with the game's own damage computation (Strength, Vulnerable…) × hits; X-cost cards and cards whose damage is computed differently are left out. It is a **minimum**: draw, random effects and combos are ignored. |
+| Missed lethal | Turns where the player's **front hand** (the hand and energy at the start of their turn) could have killed every enemy that must die, yet **one of those enemies** was still alive at the end of the turn (v0.17.3: enemies that appear when one dies, like Parasite Krapo's larvae, do not count). Only attacks on one enemy or on all enemies, with the game's own damage computation (Strength, Vulnerable…) × hits; X-cost cards and cards whose damage is computed differently are left out. It is a **minimum**: draw, random effects and combos are ignored. |
 | Gâché (v0.13.1: a count of misplays, like the other columns) | One per block card play whose block was wasted (rule F3), plus one per growing card never played in a fight (below). The block amount stays in the details. |
 | Wasted block | The "gâché" block of rule F3 (block that saved nothing while a useful card stayed in hand), with its explanation: incoming attack → block already there → card played → what could have been played. In "Protection", gâché and inutile are now one "Inutile" column. |
 | Unused energy (v0.10.0) | Energy left at the end of the turn while a playable card that energy could pay was in hand. Not counted when the energy is kept (Ice Cream…) or wanted (Pael's Tears gives energy for leftover energy). **v0.17.1:** a block skill does not count when the player's block already covers the incoming attack (that block was not needed). |

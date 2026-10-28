@@ -66,7 +66,8 @@ public static class BlockAlternatives
     private static readonly Stack<Play?> InProgress = new();
     private static int _nextId;
     /// Players whose front hand was already checked this turn, and the lethal combination found (if any).
-    private static readonly Dictionary<Player, Lethal.Attack[]?> FrontHand = new();
+    /// Targets: the enemies that had to die (a lethal turn is missed only if one of them is still alive).
+    private static readonly Dictionary<Player, (Lethal.Attack[] Attacks, List<Creature> Targets)?> FrontHand = new();
     /// Cards each player played this turn (auto-plays included, as relics count them), by type.
     private static readonly Dictionary<Player, Dictionary<CardType, int>> TurnPlays = new();
     /// Enemies given their first Vulnerable this turn, and the play that gave it (useless until someone hits them).
@@ -357,11 +358,13 @@ public static class BlockAlternatives
         Capture.Safe("wrong order", ResolveOrder);
         var enemies = RealEnemies(combat);
         if (enemies.Count > 0)
-            foreach (var (player, lethal) in FrontHand)
-                if (lethal != null)
+            foreach (var (player, front) in FrontHand)
+                // The enemies the front hand could kill must still be alive: killing them can bring new ones (Parasite
+                // Krapo's larvae), which the front hand could not see (v0.17.3).
+                if (front is { } lethal && lethal.Targets.Any(t => t.IsAlive && t.HpDisplay == HpDisplay.Normal))
                 {
-                    ModLog.Info($"missed lethal: {player.NetId} [{string.Join(", ", lethal.Select(a => a.Id))}]");
-                    Capture.Emit(new MissedLethal(Capture.ToActor(player), lethal.Select(a => a.Id).ToList(),
+                    ModLog.Info($"missed lethal: {player.NetId} [{string.Join(", ", lethal.Attacks.Select(a => a.Id))}]");
+                    Capture.Emit(new MissedLethal(Capture.ToActor(player), lethal.Attacks.Select(a => a.Id).ToList(),
                         enemies.Sum(e => e.CurrentHp + e.Block)));
                 }
         FrontHand.Clear();
@@ -566,7 +569,7 @@ public static class BlockAlternatives
     }
 
     /// The front hand's lethal combination, if the attacks in hand could kill every enemy that must die.
-    private static Lethal.Attack[]? FindLethal(Player player, List<CardModel> hand, int energy)
+    private static (Lethal.Attack[] Attacks, List<Creature> Targets)? FindLethal(Player player, List<CardModel> hand, int energy)
     {
         try
         {
@@ -580,7 +583,7 @@ public static class BlockAlternatives
                     enemies.Select(e => EstimateDamage(c, e)).ToList()))
                 .ToList();
             var found = Lethal.Find(attacks, energy, enemies.Select(e => e.CurrentHp + e.Block).ToList());
-            return found?.ToArray();
+            return found == null ? null : (found.ToArray(), enemies);
         }
         catch (Exception e)
         {

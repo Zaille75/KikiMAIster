@@ -72,7 +72,8 @@ public static class DebuffEffectPatches
                         case WeakPower w when w.Owner == dealer && dealer.IsEnemy:
                         {
                             var factor = (double)w.ModifyDamageMultiplicative(target, __result, props, dealer, cardSource, cardPlay);
-                            if (factor is > 0 and < 1) Add(effects, dealer, w, target, damage / factor - damage, offense: false, fifo: true);
+                            // The game drops the fraction of the final damage: 6 × 0.75 = 4.5 hits for 4, so Weak avoided 2.
+                            if (factor is > 0 and < 1) Add(effects, dealer, w, target, Math.Floor(damage / factor) - Math.Floor(damage), offense: false, fifo: true);
                             break;
                         }
                         // A player's Strength: the part borrowed from others' Vulnerable (Dominate) is damage they enabled.
@@ -113,7 +114,7 @@ public static class DebuffEffectPatches
                         {
                             var factor = (double)g.ModifyDamageMultiplicative(target, __result, props, dealer, cardSource, cardPlay);
                             if (factor is > 0 and < 1)
-                                effects.Add(new DebuffEffect(Capture.ToActor(target), Capture.IdOf(g), Capture.ToActor(target), damage / factor - damage,
+                                effects.Add(new DebuffEffect(Capture.ToActor(target), Capture.IdOf(g), Capture.ToActor(target), Math.Floor(damage / factor) - Math.Floor(damage),
                                     Offense: false, Credit: DebuffCredit.Direct, Applier: Capture.ToActor(guard)));
                             break;
                         }

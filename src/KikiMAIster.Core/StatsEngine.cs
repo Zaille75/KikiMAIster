@@ -25,6 +25,8 @@ public sealed class StatsEngine
     /// Card plays in progress per player (a card can play other cards), and the damage of the outermost play so far.
     private readonly Dictionary<ulong, int> _playDepth = new();
     private readonly Dictionary<ulong, double> _playDamage = new();
+    /// Damage avoided by debuffs (Weak…) on the hit about to land, per player hit: resolved by that hit (v0.17.3).
+    private readonly Dictionary<ulong, List<DebuffEffect>> _pendingDefense = new();
     /// Rock-paper-scissors fights already counted in this run.
     private readonly HashSet<string> _chifumiFights = new();
 
@@ -216,6 +218,7 @@ public sealed class StatsEngine
 
     private void OnRoundStarted(RoundStarted r)
     {
+        FlushDefense();
         ResolveBlockKept();
         _playDepth.Clear();
         _playDamage.Clear();
@@ -242,6 +245,7 @@ public sealed class StatsEngine
 
     private void OnCombatEnded(CombatEnded c)
     {
+        FlushDefense();
         ResolveBlockKept();
         // Block left at the end of combat counts as wasted / useless help (spec §F, decision F2).
         foreach (var (owner, ledger) in _block)
@@ -271,6 +275,7 @@ public sealed class StatsEngine
         _petHp.Clear();
         _playDepth.Clear();
         _playDamage.Clear();
+        _pendingDefense.Clear();
     }
 
     // ---------- Damage ----------
@@ -346,6 +351,7 @@ public sealed class StatsEngine
     private void OnDamageToPlayerSide(DamageDealt d)
     {
         var owner = d.Target.PlayerId;
+        ResolveDefense(owner, d.Blocked, d.Hp);
 
         // Pets use their owner's block (the game blocks pet damage with the owner's block).
         if (d.Blocked > 0)
@@ -522,11 +528,43 @@ public sealed class StatsEngine
             Each(p.Target.PlayerId, s => PlayerStats.AddPower(s.DebuffsReceived, p.PowerId, p.Amount));
     }
 
+    /// Damage avoided by debuffs counts only for the HP it really saved (v0.17.3, spec §B2): what would have gone
+    /// through the block without them. It is known when the hit lands: Blocked + Hp is the hit with the debuffs.
+    private void ResolveDefense(ulong owner, double blocked, double hp)
+    {
+        if (!_pendingDefense.Remove(owner, out var effects)) return;
+        var avoided = effects.Sum(e => e.Amount);
+        if (avoided <= 0) return;
+        var blockBefore = Math.Max(blocked, _block.TryGetValue(owner, out var ledger) ? ledger.Total : 0);
+        var hpWithout = Math.Max(0, blocked + hp + avoided - blockBefore);
+        var saved = Math.Clamp(hpWithout - hp, 0, avoided);
+        if (saved <= 0) return;
+        foreach (var e in effects) CreditDebuffEffect(e with { Amount = e.Amount * saved / avoided });
+    }
+
+    /// Avoided damage with no hit after it (the hit was cancelled): only what the block would not have stopped.
+    private void FlushDefense()
+    {
+        foreach (var owner in _pendingDefense.Keys.ToList()) ResolveDefense(owner, 0, 0);
+    }
+
     /// Extra damage (Vulnerable) or damage avoided (Weak, Strength down) credited to whoever is responsible for
     /// the debuff: the applier of the current turn (FIFO) or every applier by stacks (spec §B2).
     private void OnDebuffEffect(DebuffEffect x)
     {
         if (x.Amount <= 0 || !x.Beneficiary.IsPlayerSide || x.Beneficiary.PlayerId == 0) return;
+        if (!x.Offense)
+        {
+            // Resolved by the hit that follows (ResolveDefense).
+            if (!_pendingDefense.TryGetValue(x.Beneficiary.PlayerId, out var list)) _pendingDefense[x.Beneficiary.PlayerId] = list = new();
+            list.Add(x);
+            return;
+        }
+        CreditDebuffEffect(x);
+    }
+
+    private void CreditDebuffEffect(DebuffEffect x)
+    {
         var shares = new List<(ulong Id, double Share)>();
         _fifo.TryGetValue((x.Holder.CreatureId, x.PowerId), out var fifo);
         switch (x.Credit)

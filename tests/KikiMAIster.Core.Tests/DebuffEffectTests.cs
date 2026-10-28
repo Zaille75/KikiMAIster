@@ -29,12 +29,31 @@ public class DebuffEffectTests : TestBase
     {
         Power(A, Enemy, "WEAK_POWER", 1);
         Engine.Handle(new DebuffEffect(Enemy, "WEAK_POWER", B, 3, Offense: false, Credit: DebuffCredit.CurrentTurn));
+        EnemyHits(B, 0, 6);
         Engine.Handle(new DebuffEffect(Enemy, "WEAK_POWER", A, 2, Offense: false, Credit: DebuffCredit.CurrentTurn));
+        EnemyHits(A, 0, 4);
 
         Assert.Equal(3, Combat(IdA).PreventedByDebuffsAllies);
         Assert.Equal(2, Combat(IdA).PreventedByDebuffsSelf);
         Assert.Equal(3, Combat(IdA).SavedForAllies);
         Assert.Equal(5, Combat(IdA).PreventedTotal);
+    }
+
+    /// Fight 1 of the 2026-10-27 co-op run: A's Weak turns a 6 hit into 4 on B, who has 5 block. Without Weak, only 1
+    /// would have gone through the block: 1 HP saved, not 2.
+    [Fact]
+    public void Weak_CountsOnlyWhatTheBlockWouldNotHaveStopped()
+    {
+        Power(A, Enemy, "WEAK_POWER", 1);
+        Block(B, B, 5);
+        Engine.Handle(new DebuffEffect(Enemy, "WEAK_POWER", B, 2, Offense: false, Credit: DebuffCredit.CurrentTurn));
+        EnemyHits(B, 4, 0);
+        Assert.Equal(1, Combat(IdA).SavedForAllies);
+
+        Block(C, C, 10);
+        Engine.Handle(new DebuffEffect(Enemy, "WEAK_POWER", C, 2, Offense: false, Credit: DebuffCredit.CurrentTurn));
+        EnemyHits(C, 4, 0);
+        Assert.Equal(1, Combat(IdA).SavedForAllies);
     }
 
     [Fact]
@@ -43,6 +62,7 @@ public class DebuffEffectTests : TestBase
         Power(A, Enemy, "STRENGTH_POWER~DOWN", 3);
         Power(B, Enemy, "STRENGTH_POWER~DOWN@ENFEEBLING_TOUCH_POWER", 1);
         Engine.Handle(new DebuffEffect(Enemy, "STRENGTH_POWER~DOWN", C, 4, Offense: false, Credit: DebuffCredit.Stacks));
+        EnemyHits(C, 0, 5);
 
         Assert.Equal(3, Combat(IdA).PreventedByDebuffsAllies, 6);
         Assert.Equal(1, Combat(IdB).PreventedByDebuffsAllies, 6);
