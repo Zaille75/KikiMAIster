@@ -128,6 +128,7 @@ public static class CombatSummary
         if (_panel == null || _content == null || Selected() is not { } combat) return;
         Rebuild(combat);
         _panel.Visible = true;
+        _panel.MoveToFront();
         _panel.CallDeferred(Control.MethodName.ResetSize);
         // Where the player left it, else top center of the screen (above the rewards); always kept on screen.
         var screen = _panel.GetViewportRect().Size;

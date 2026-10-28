@@ -65,6 +65,7 @@ public static class SettingsMenu
         }
         Rebuild();
         _panel.Visible = true;
+        _panel.MoveToFront();
         var screen = _panel.GetViewportRect().Size;
         if (Cfg.SettingsX >= 0)
         {

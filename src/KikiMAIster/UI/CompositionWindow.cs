@@ -174,6 +174,7 @@ public static class CompositionWindow
         Pick();
         Rebuild();
         _panel.Visible = true;
+        _panel.MoveToFront();
         var screen = _panel.GetViewportRect().Size;
         _panel.Position = new Vector2(Math.Max(0, screen.X / 2 - 220), 120);
     }

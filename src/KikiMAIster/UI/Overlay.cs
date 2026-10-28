@@ -187,11 +187,27 @@ public static class Overlay
         if (!show || !inRun)
             foreach (var w in DetachedWindows.Values)
                 if (GodotObject.IsInstanceValid(w.Panel)) w.Panel.Visible = false;
+        // The settings window belongs to the panel: F7 / ✕ hide it too (v0.17.13).
+        if (!show) SettingsMenu.Hide();
         if (!inRun)
         {
             CombatSummary.Hide();
             RunSummary.Hide();
             if (!inLobby) SettingsMenu.Hide();
+        }
+    }
+
+    /// A click on a mod window brings it to the front (v0.17.13): no window stays stuck over another one. Called for every
+    /// mouse press the game receives; the topmost visible window under the mouse is raised.
+    internal static void RaiseAt(Vector2 position)
+    {
+        if (_layer == null || !GodotObject.IsInstanceValid(_layer)) return;
+        foreach (var child in _layer.GetChildren().Reverse())
+        {
+            if (child is not Control { Visible: true } window) continue;
+            if (!new Rect2(window.Position, window.Size * window.Scale).HasPoint(position)) continue;
+            if (window.GetIndex() != _layer.GetChildCount() - 1) window.MoveToFront();
+            return;
         }
     }
 

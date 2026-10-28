@@ -43,6 +43,7 @@ public static class UiPatches
         {
             // Any input (even a mouse move) proves the game is running on the main thread: attach if needed.
             Overlay.EnsureAttached("input");
+            if (inputEvent is InputEventMouseButton { Pressed: true } click) Overlay.RaiseAt(click.Position);
             if (inputEvent is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F7 }) Overlay.Toggle();
             // F8: group compositions, anywhere (the lobby included).
             if (inputEvent is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F8 }) CompositionWindow.Toggle();

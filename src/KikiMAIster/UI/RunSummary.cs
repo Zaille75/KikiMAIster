@@ -108,6 +108,7 @@ public static class RunSummary
         _shownEnded = ended;
         Rebuild(ended);
         _panel.Visible = true;
+        _panel.MoveToFront();
         _panel.CallDeferred(Control.MethodName.ResetSize);
         var screen = _panel.GetViewportRect().Size;
         _panel.Position = new Vector2(Math.Max(0, (screen.X - 560) / 2), 90);
