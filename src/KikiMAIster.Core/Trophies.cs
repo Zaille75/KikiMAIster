@@ -60,69 +60,79 @@ public sealed class RecordBook
     private readonly Dictionary<string, Entry> _entries = new();
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
-    private static string Mode(bool coop) => coop ? "coop." : "";
+    /// Key prefix: solo or co-op, then the ascension level ("coop.A10."); no level = every level together (v0.17.24).
+    private static string Mode(bool coop, int? ascension = null) =>
+        (coop ? "coop." : "") + (ascension is { } a ? $"A{a.ToString(Inv)}." : "");
 
-    public Entry? Best(string category, bool coop = false) => _entries.GetValueOrDefault($"{Mode(coop)}{category}.all");
-    public Entry? Personal(string category, ulong playerId, bool coop = false) => _entries.GetValueOrDefault($"{Mode(coop)}{category}.{playerId}");
-    public Entry? OfCharacter(string category, string character, bool coop = false) =>
-        _entries.GetValueOrDefault($"{Mode(coop)}{category}.char.{character}");
+    public Entry? Best(string category, bool coop = false, int? ascension = null) =>
+        _entries.GetValueOrDefault($"{Mode(coop, ascension)}{category}.all");
+    public Entry? Personal(string category, ulong playerId, bool coop = false, int? ascension = null) =>
+        _entries.GetValueOrDefault($"{Mode(coop, ascension)}{category}.{playerId}");
+    public Entry? OfCharacter(string category, string character, bool coop = false, int? ascension = null) =>
+        _entries.GetValueOrDefault($"{Mode(coop, ascension)}{category}.char.{character}");
 
     /// Every character's record in a category ("IRONCLAD" → entry).
-    public IEnumerable<(string Character, Entry Entry)> Characters(string category, bool coop = false)
+    public IEnumerable<(string Character, Entry Entry)> Characters(string category, bool coop = false, int? ascension = null)
     {
-        var prefix = $"{Mode(coop)}{category}.char.";
+        var prefix = $"{Mode(coop, ascension)}{category}.char.";
         return _entries.Where(kv => kv.Key.StartsWith(prefix, StringComparison.Ordinal))
             .Select(kv => (kv.Key[prefix.Length..], kv.Value)).OrderBy(x => x.Item1, StringComparer.Ordinal);
     }
 
-    /// What a finished run changed: new all-time records, new personal bests and new character records.
+    /// What a finished run changed: new records, new personal bests and new character records (at the run's ascension
+    /// level when it is given, else every level together).
     public sealed record Update(HashSet<string> NewRecords, HashSet<(string Category, ulong Player)> NewPersonal,
         HashSet<(string Category, string Character)> NewCharacter);
 
     /// Adds a finished run (co-op when it has 2+ players). Lower-is-better and victory-only categories only count a victory. Zero values never make a record.
     /// Characters: each player's character ("IRONCLAD"…); players without one get no character record.
+    /// Ascension: the run's level; its records are kept both for that level and for every level together (v0.17.24).
     public Update Add(IReadOnlyDictionary<ulong, PlayerStats> run, IReadOnlyDictionary<ulong, string> names, bool victory, string date,
-        IReadOnlyDictionary<ulong, string>? characters = null)
+        IReadOnlyDictionary<ulong, string>? characters = null, int? ascension = null)
     {
-        var update = new Update(new(), new(), new());
         var coop = run.Count > 1;
-        var mode = Mode(coop);
-        foreach (var c in Trophies.All)
+        Update? result = null;
+        foreach (var level in ascension == null ? new int?[] { null } : new int?[] { null, ascension })
         {
-            if (c.NeedsVictory && !victory) continue;
-            if (c.CoopOnly && run.Count < 2) continue;
-            foreach (var (id, s) in run)
+            var update = new Update(new(), new(), new());
+            var mode = Mode(coop, level);
+            foreach (var c in Trophies.All)
             {
-                var v = c.Value(s);
-                if (!c.LowerIsBetter && v <= 0) continue;
-                var entry = new Entry(v, names.GetValueOrDefault(id, id.ToString(Inv)), date);
-                if (Beats(c, v, Personal(c.Key, id, coop)))
+                if (c.NeedsVictory && !victory) continue;
+                if (c.CoopOnly && run.Count < 2) continue;
+                foreach (var (id, s) in run)
                 {
-                    _entries[$"{mode}{c.Key}.{id}"] = entry;
-                    update.NewPersonal.Add((c.Key, id));
-                }
-                var character = characters?.GetValueOrDefault(id) ?? "";
-                if (character != "" && Beats(c, v, OfCharacter(c.Key, character, coop)))
-                {
-                    _entries[$"{mode}{c.Key}.char.{character}"] = entry;
-                    update.NewCharacter.Add((c.Key, character));
-                }
-                if (Beats(c, v, Best(c.Key, coop)))
-                {
-                    _entries[$"{mode}{c.Key}.all"] = entry;
-                    update.NewRecords.Add(c.Key);
+                    var v = c.Value(s);
+                    if (!c.LowerIsBetter && v <= 0) continue;
+                    var entry = new Entry(v, names.GetValueOrDefault(id, id.ToString(Inv)), date);
+                    if (Beats(c, v, Personal(c.Key, id, coop, level)))
+                    {
+                        _entries[$"{mode}{c.Key}.{id}"] = entry;
+                        update.NewPersonal.Add((c.Key, id));
+                    }
+                    var character = characters?.GetValueOrDefault(id) ?? "";
+                    if (character != "" && Beats(c, v, OfCharacter(c.Key, character, coop, level)))
+                    {
+                        _entries[$"{mode}{c.Key}.char.{character}"] = entry;
+                        update.NewCharacter.Add((c.Key, character));
+                    }
+                    if (Beats(c, v, Best(c.Key, coop, level)))
+                    {
+                        _entries[$"{mode}{c.Key}.all"] = entry;
+                        update.NewRecords.Add(c.Key);
+                    }
                 }
             }
+            result = update;
         }
-        return update;
+        return result!;
     }
 
-    /// Clears a category's records (all-time, personal, per character), solo and co-op: a value found to be wrong.
+    /// Clears a category's records (all-time, personal, per character), solo and co-op, every level: a value found to be wrong.
     public void Clear(string category)
     {
-        foreach (var key in _entries.Keys.Where(k => k.StartsWith($"{category}.", StringComparison.Ordinal) ||
-                                                     k.StartsWith($"coop.{category}.", StringComparison.Ordinal)).ToList())
-            _entries.Remove(key);
+        var pattern = new System.Text.RegularExpressions.Regex($@"^(coop\.)?(A\d+\.)?{System.Text.RegularExpressions.Regex.Escape(category)}\.");
+        foreach (var key in _entries.Keys.Where(k => pattern.IsMatch(k)).ToList()) _entries.Remove(key);
     }
 
     private static bool Beats(Trophies.Category c, double v, Entry? old) =>

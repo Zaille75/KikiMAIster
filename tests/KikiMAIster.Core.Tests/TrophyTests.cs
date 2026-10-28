@@ -98,4 +98,21 @@ public class TrophyTests
         Assert.Single(c.Played(3, 10));
         Assert.Empty(c.Played(3, 3));
     }
+
+    [Fact]
+    public void Records_PerAscensionLevel_AndEveryLevel()
+    {
+        var book = new RecordBook();
+        book.Add(Run(100, 150), Names, victory: true, "2026-10-28", ascension: 10);
+        var low = book.Add(Run(400, 10), Names, victory: true, "2026-10-28", ascension: 1);
+        Assert.Contains("trophy.damage", low.NewRecords);
+        Assert.Equal(150, book.Best("trophy.damage", coop: true, ascension: 10)!.Value);
+        Assert.Equal(400, book.Best("trophy.damage", coop: true, ascension: 1)!.Value);
+        Assert.Equal(400, book.Best("trophy.damage", coop: true)!.Value);
+        book = RecordBook.Read(book.Write());
+        Assert.Equal(150, book.Best("trophy.damage", coop: true, ascension: 10)!.Value);
+        book.Clear("trophy.damage");
+        Assert.Null(book.Best("trophy.damage", coop: true, ascension: 10));
+        Assert.Null(book.Best("trophy.damage", coop: true));
+    }
 }

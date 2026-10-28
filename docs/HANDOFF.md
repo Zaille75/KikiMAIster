@@ -147,6 +147,8 @@ hotkey settings, chart history across Save & Quit.
   energy counted when the block was not needed), 23 (Esquisse not in "Cartes données"), 24 (missed lethal fight 4 T4),
   27 (Max's many "À l'attaque !" in Affaiblissements; then clear that record: `RecordBook.Clear("trophy.debuffs")`).
 - New trophy names (Culturiste, Peau sur les os) are proposals.
+- Main branch solo Regent run (v0.17.22, `logs/2026-10-28_v0.17.22_main_solo_regent_15fights.log`): no errors, all
+  damage sources known, history reads fine. Records per ascension level since v0.17.24.
 - Solo Necrobinder run (v0.17.8, `logs/2026-10-28_v0.17.8_solo_necrobinder_15fights.log`, death fight 15 Ovicoptère):
   no errors. Fixed: extra damage (Dégâts + / Permis) counted block and overkill (v0.17.19). Personal Hive
   (Apicultueur) now treated like Thorns (v0.17.20, validated).

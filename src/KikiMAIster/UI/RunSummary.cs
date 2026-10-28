@@ -41,7 +41,7 @@ public static class RunSummary
         _victory = victory;
         var names = Capture.Engine.Players.ToDictionary(kv => kv.Key, kv => kv.Value.Name);
         var characters = Capture.Engine.Players.ToDictionary(kv => kv.Key, kv => kv.Value.Character);
-        _update = RecordStore.Add(run, names, characters, victory);
+        _update = RecordStore.Add(run, names, characters, victory, Patches.CombatFlowPatches.Ascension);
         CompositionStore.Add(characters, Patches.CombatFlowPatches.Ascension, victory);
         _showPending = true;
     }
@@ -183,6 +183,7 @@ public static class RunSummary
             grid.AddChild(l);
         }
 
+        var level = Patches.CombatFlowPatches.Ascension;
         var book = RecordStore.Book;
         var coop = run.Count > 1;
         foreach (var c in Trophies.All.OrderBy(c => c.Fun))
@@ -213,21 +214,28 @@ public static class RunSummary
                 value.MouseFilter = Control.MouseFilterEnum.Stop;
                 grid.AddChild(value);
             }
-            var best = book.Best(c.Key, coop);
+            // Records at this run's ascension level (v0.17.24); hovering shows the record of every level together.
+            var best = book.Best(c.Key, coop, level);
             var newRecord = update?.NewRecords.Contains(c.Key) == true;
-            grid.AddChild(Overlay.MakeLabel(best == null ? "-" : $"{(newRecord ? "★ " : "")}{Overlay.N(best.Value)} ({best.Name}, {best.Date})",
-                newRecord ? Overlay.Accent : Overlay.Muted));
-            var personal = winner is { } pw ? book.Personal(c.Key, pw.Id, coop) : null;
+            var recordCell = Overlay.MakeLabel(best == null ? "-" : $"{(newRecord ? "★ " : "")}{Overlay.N(best.Value)} ({best.Name}, {best.Date})",
+                newRecord ? Overlay.Accent : Overlay.Muted);
+            if (book.Best(c.Key, coop) is { } anyLevel)
+            {
+                recordCell.TooltipText = $"{Loc.T("run.allLevels")}: {Overlay.N(anyLevel.Value)} ({anyLevel.Name}, {anyLevel.Date})";
+                recordCell.MouseFilter = Control.MouseFilterEnum.Stop;
+            }
+            grid.AddChild(recordCell);
+            var personal = winner is { } pw ? book.Personal(c.Key, pw.Id, coop, level) : null;
             var newPersonal = winner is { } nw && update?.NewPersonal.Contains((c.Key, nw.Id)) == true;
             grid.AddChild(Overlay.MakeLabel(personal == null ? "-" : $"{(newPersonal ? "★ " : "")}{Overlay.N(personal.Value)}",
                 newPersonal ? Overlay.Accent : Overlay.Muted));
             // The best of the winner's character (in solo: the character played); the tooltip lists every character.
             var character = winner is { } cw ? engine.Players.GetValueOrDefault(cw.Id)?.Character ?? "" : "";
-            var ofCharacter = character == "" ? null : book.OfCharacter(c.Key, character, coop);
+            var ofCharacter = character == "" ? null : book.OfCharacter(c.Key, character, coop, level);
             var newCharacter = update?.NewCharacter.Contains((c.Key, character)) == true;
             var cell = Overlay.MakeLabel(ofCharacter == null ? "-" : $"{(newCharacter ? "★ " : "")}{Overlay.N(ofCharacter.Value)} ({ofCharacter.Name}, {ofCharacter.Date})",
                 newCharacter ? Overlay.Accent : Overlay.Muted);
-            var all = book.Characters(c.Key, coop).ToList();
+            var all = book.Characters(c.Key, coop, level).ToList();
             if (all.Count > 0)
             {
                 cell.TooltipText = string.Join('\n', all.Select(x =>
@@ -238,7 +246,7 @@ public static class RunSummary
         }
         _content.AddChild(grid);
         if (coop) AddChifumi(run, engine);
-        _content.AddChild(Overlay.MakeLabel(Loc.T(coop ? "run.coopRecords" : "run.soloRecords") + " · " +
+        _content.AddChild(Overlay.MakeLabel(Loc.T(coop ? "run.coopRecords" : "run.soloRecords") + $" A{level.ToString(CultureInfo.InvariantCulture)} · " +
             Loc.T(ended ? "run.recordsNote" : "run.inProgressNote"), Overlay.Muted));
         _panel!.CallDeferred(Control.MethodName.ResetSize);
     }
@@ -315,12 +323,12 @@ public static class RecordStore
     }
 
     public static RecordBook.Update? Add(IReadOnlyDictionary<ulong, PlayerStats> run, IReadOnlyDictionary<ulong, string> names,
-        IReadOnlyDictionary<ulong, string> characters, bool victory)
+        IReadOnlyDictionary<ulong, string> characters, bool victory, int ascension)
     {
         RecordBook.Update? update = null;
         Capture.Safe("RecordStore.Save", () =>
         {
-            update = Book.Add(run, names, victory, DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), characters);
+            update = Book.Add(run, names, victory, DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), characters, ascension);
             if (FilePath != null) File.WriteAllText(FilePath, Book.Write());
             ModLog.Info($"records updated: {update.NewRecords.Count} new records, {update.NewPersonal.Count} personal bests");
         });
