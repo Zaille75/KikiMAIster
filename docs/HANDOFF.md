@@ -115,7 +115,8 @@ Order: test → default branch → release prep → publish → maintenance. The
 2. **Default (main) branch — done (v0.17.22):** `lib/default/` holds the main branch v0.107.1 (decompiled in
    `lib/default/decompiled/`, namespaces as folder names). `./build.sh default` → `dist/default/KikiMAIster/`. Branch
    differences are `#if GAME_DEFAULT` blocks (spec 03-technical). The old beta files are kept in `lib/beta-v0.111.0/`.
-   Zaille75 switched his game to the main branch on 2026-10-28: give him the **default** install command.
+   Zaille75 only switched to the main branch to get its files; he plays the **beta**: give him the **beta** install
+   command (unless he says otherwise).
 3. **Release prep (decided 2026-10-28, done):** icon `docs/images/icon.png` (drawn by `tools/icon/make_icon.py`),
    MIT license, README (English + French in one file), CHANGELOG, manifest description updated. Name stays
    KikiMAIster. The GitHub repo becomes public at 1.0 (checked: no game files, Steam IDs, login or server address in
