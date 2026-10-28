@@ -519,7 +519,8 @@ public static class BlockAlternatives
     private static bool IsFree(CardModel c) => !c.EnergyCost.CostsX && Cost(c) == 0 && c.CurrentStarCost <= 0 && !c.HasStarCostX;
 
     /// A useful free card (attack, or skill/power without block: Neutralisation…) left in hand at the end of the turn is a
-    /// misplay counted in "Gâché" (v0.17.26), unless it is kept on purpose (Retain, Stars, Exhaust), punished (Thorns
+    /// misplay counted in "Gâché" (v0.17.26), unless it is kept on purpose (Retain — Shivs with Phantom Blades —, Stars),
+    /// punished (Thorns
     /// the block cannot afford, Personal Hive), deals no damage, or there is nothing left to hit.
     private static void FreeCardsLeft(ICombatState combat, Player player)
     {
@@ -527,7 +528,7 @@ public static class BlockAlternatives
         var creature = player.Creature;
         var surplus = creature.Block - IncomingDamage(creature);
         foreach (var c in st.Hand.Cards.Where(c => IsFree(c) && IsUseful(c) && !IsStatusOrCurse(c) && PlayableExceptEnergy(c) &&
-                                                   !KeptOnPurpose(c, combat) && !c.Keywords.Contains(CardKeyword.Exhaust) && !PunishedAttack(c) &&
+                                                   !KeptOnPurpose(c, combat) && !PunishedAttack(c) &&
                                                    (c.Type != CardType.Attack || (DealsDamage(c, combat) && ThornsDamage(c, creature) <= Math.Max(0, surplus)))))
             Capture.Emit(new MissedChance(Capture.ToActor(player), "freeCard", new[] { Key(c) }));
     }
