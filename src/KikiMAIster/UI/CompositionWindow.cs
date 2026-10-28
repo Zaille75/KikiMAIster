@@ -31,9 +31,13 @@ public static class CompositionWindow
                                     screen.IsInsideTree() && screen.IsVisibleInTree();
     private static string _contextSignature = "";
 
+    /// Opened while the lobby was open: closes by itself once the lobby is gone (v0.17.0).
+    private static bool _openedInLobby;
+
     /// Where the player is: Solo true/false (null = unknown: main menu…), players, ascension, and the group's
     /// characters ("" when not all chosen). From the run being played, else from the character-select lobby.
-    private sealed record Context(bool? Solo, int Players, int? Ascension, string Group);
+    /// Ids / Names: the players present (co-op), for the "this group" stats.
+    private sealed record Context(bool? Solo, int Players, int? Ascension, string Group, IReadOnlyList<ulong> Ids, IReadOnlyList<string> Names);
 
     private static Context Current()
     {
@@ -42,7 +46,9 @@ public static class CompositionWindow
             var count = Patches.CombatFlowPatches.PlayerCount;
             var players = Capture.Engine.Players.Values.ToList();
             var group = players.Count == count ? Compositions.KeyOf(players.Select(p => p.Character)) : "";
-            return new Context(count == 1, count, Patches.CombatFlowPatches.Ascension, group);
+            var ids = Capture.Engine.Players.Keys.ToList();
+            return new Context(count == 1, count, Patches.CombatFlowPatches.Ascension, group, ids,
+                Capture.Engine.Players.Values.Select(p => p.Name).ToList());
         }
         if (Lobby != null && Lobby.TryGetTarget(out var screen) && GodotObject.IsInstanceValid(screen) && screen.Lobby is { } lobby)
         {
@@ -50,10 +56,32 @@ public static class CompositionWindow
             var known = Characters();
             var chars = lobby.Players.Select(p => p.character?.Id.Entry ?? "").ToList();
             var group = chars.Count > 0 && chars.All(known.Contains) ? Compositions.KeyOf(chars) : "";
-            return new Context(solo, solo ? 1 : Math.Max(2, lobby.Players.Count), lobby.Ascension, group);
+            var ids = lobby.Players.Select(p => p.id).ToList();
+            return new Context(solo, solo ? 1 : Math.Max(2, lobby.Players.Count), lobby.Ascension, group, ids,
+                ids.Select(id => LobbyName(lobby.NetService, id)).ToList());
         }
-        return new Context(null, 0, null, "");
+        return new Context(null, 0, null, "", Array.Empty<ulong>(), Array.Empty<string>());
     }
+
+    private static string LobbyName(INetGameService net, ulong id)
+    {
+        try
+        {
+            var name = MegaCrit.Sts2.Core.Platform.PlatformUtil.GetPlayerNameRaw(net.Platform, id);
+            return string.IsNullOrWhiteSpace(name) ? id.ToString(CultureInfo.InvariantCulture) : name;
+        }
+        catch (Exception)
+        {
+            return id.ToString(CultureInfo.InvariantCulture);
+        }
+    }
+
+    /// "This group" can be shown: a co-op group whose players are known.
+    private static bool HasGroup(Context c) => c.Solo == false && c.Ids.Count > 1;
+
+    /// The tallies shown: every run of this profile, or only the runs of exactly this group of players.
+    private static Compositions DataFor(Context c) =>
+        ModConfig.Current.CompoGroupOnly && HasGroup(c) ? CompositionStore.OfGroup(c.Ids) : CompositionStore.Data;
 
     public static void Attach(CanvasLayer layer)
     {
@@ -68,6 +96,13 @@ public static class CompositionWindow
         timer.Timeout += () => Capture.Safe("CompositionWindow.Tick", () =>
         {
             if (_panel is not { Visible: true }) return;
+            // Opened in the lobby: gone with it (the run started or the player left).
+            if (_openedInLobby && !InLobby)
+            {
+                _openedInLobby = false;
+                _panel.Visible = false;
+                return;
+            }
             // The lobby changed (a player joined, a character or the ascension was chosen): follow it.
             var context = Current();
             var signature = Signature(context);
@@ -95,6 +130,7 @@ public static class CompositionWindow
         }
         var context = Current();
         _contextSignature = Signature(context);
+        _openedInLobby = InLobby && !Overlay.InRun;
         _players = context.Players > 0 ? context.Players : _players > 0 ? _players : 2;
         _ascension = context.Ascension ?? CompositionStore.Data.MostPlayedAscension();
         Pick();
@@ -137,7 +173,7 @@ public static class CompositionWindow
         _neverWonPick = Rng.Next(1000);
     }
 
-    private static string Signature(Context c) => $"{c.Solo}|{c.Players}|{c.Ascension}|{c.Group}";
+    private static string Signature(Context c) => $"{c.Solo}|{c.Players}|{c.Ascension}|{c.Group}|{string.Join(',', c.Ids)}";
 
     /// "2× La Silencieuse + Le Soldat de Fer".
     internal static string Describe(string key) =>
@@ -168,7 +204,9 @@ public static class CompositionWindow
             child.QueueFree();
         }
         _panel.CallDeferred(Control.MethodName.ResetSize);
-        var data = CompositionStore.Data;
+        var context = Current();
+        var cfg = ModConfig.Current;
+        var data = DataFor(context);
         var characters = Characters();
 
         var header = new HBoxContainer();
@@ -180,9 +218,32 @@ public static class CompositionWindow
         header.AddChild(close);
         _content.AddChild(header);
 
+        // Whose stats: every run of this profile, or only this group of players (co-op, v0.17.0).
+        if (HasGroup(context))
+        {
+            var whose = new HBoxContainer();
+            whose.AddChild(Overlay.MakeLabel(Loc.T("compo.stats.of"), Overlay.Text));
+            foreach (var groupOnly in new[] { false, true })
+            {
+                var b = Overlay.MakeButton(Loc.T(groupOnly ? "compo.thisGroup" : "compo.mine"));
+                b.AddThemeColorOverride("font_color", cfg.CompoGroupOnly == groupOnly ? Overlay.Accent : Overlay.Muted);
+                if (groupOnly) b.TooltipText = string.Format(Loc.T("compo.thisGroupTip"), string.Join(", ", context.Names));
+                b.Pressed += () => Capture.Safe("CompositionWindow.Whose", () =>
+                {
+                    cfg.CompoGroupOnly = groupOnly;
+                    cfg.Save();
+                    Pick();
+                    _rebuildPending = true;
+                });
+                whose.AddChild(b);
+            }
+            _content.AddChild(whose);
+            if (cfg.CompoGroupOnly && !CompositionStore.HistoryRead)
+                _content.AddChild(Overlay.MakeLabel(Loc.T("compo.noHistory"), Overlay.Muted));
+        }
+
         var count = new HBoxContainer();
         count.AddChild(Overlay.MakeLabel(Loc.T("compo.players"), Overlay.Text));
-        var context = Current();
         foreach (var n in new[] { 1, 2, 3, 4 })
         {
             var b = Overlay.MakeButton(n.ToString(CultureInfo.InvariantCulture));
@@ -223,23 +284,62 @@ public static class CompositionWindow
         // The group being played or being chosen in the lobby, at its ascension level.
         if (context.Group != "")
             _content.AddChild(Overlay.MakeLabel($"{Loc.T("compo.group")} {Describe(context.Group)} · " +
-                (context.Ascension is { } a ? string.Format(Loc.T("compo.at"), a) : "") + Stats(CompositionStore.Data.Get(context.Group, context.Ascension)),
+                (context.Ascension is { } a ? string.Format(Loc.T("compo.at"), a) : "") + Stats(data.Get(context.Group, context.Ascension)),
                 Overlay.Text));
 
-        // Played compositions, most played first.
-        var compositions = data.Played(_players, _ascension).ToList();
+        // Sort: by games or by win rate, decreasing or increasing (v0.17.0).
+        var sort = new HBoxContainer();
+        sort.AddChild(Overlay.MakeLabel(Loc.T("compo.order"), Overlay.Text));
+        foreach (var (order, label) in new[] { ("games", "compo.byGames"), ("winrate", "compo.byWinRate") })
+        {
+            var b = Overlay.MakeButton(Loc.T(label));
+            b.AddThemeColorOverride("font_color", cfg.CompoOrder == order ? Overlay.Accent : Overlay.Muted);
+            b.Pressed += () => Capture.Safe("CompositionWindow.Order", () =>
+            {
+                cfg.CompoOrder = order;
+                cfg.Save();
+                _rebuildPending = true;
+            });
+            sort.AddChild(b);
+        }
+        var direction = Overlay.MakeButton(Loc.T(cfg.CompoDescending ? "compo.descending" : "compo.ascending"));
+        direction.AddThemeColorOverride("font_color", Overlay.Accent);
+        direction.TooltipText = Loc.T("compo.directionTip");
+        direction.Pressed += () => Capture.Safe("CompositionWindow.Direction", () =>
+        {
+            cfg.CompoDescending = !cfg.CompoDescending;
+            cfg.Save();
+            _rebuildPending = true;
+        });
+        sort.AddChild(direction);
+        _content.AddChild(sort);
+
+        // Every played composition (v0.17.0: no longer cut at 12), scrolled when the list is long.
+        var compositions = data.Played(_players, _ascension, cfg.CompoOrder == "winrate" ? Compositions.Order.WinRate : Compositions.Order.Games,
+            cfg.CompoDescending).ToList();
         if (compositions.Count == 0) _content.AddChild(Overlay.MakeLabel(Loc.T("compo.none"), Overlay.Muted));
         else
         {
             var grid = new GridContainer { Columns = 2, MouseFilter = Control.MouseFilterEnum.Pass };
             grid.AddThemeConstantOverride("h_separation", 14);
             grid.AddThemeConstantOverride("v_separation", 0);
-            foreach (var (key, tally) in compositions.Take(12))
+            foreach (var (key, tally) in compositions)
             {
                 grid.AddChild(Overlay.MakeLabel(Describe(key), Overlay.Text));
                 grid.AddChild(Overlay.MakeLabel(Stats(tally), tally.Won > 0 ? Overlay.Text : Overlay.Muted));
             }
-            _content.AddChild(grid);
+            const int maxRows = 18;
+            if (compositions.Count <= maxRows) _content.AddChild(grid);
+            else
+            {
+                var scroll = new ScrollContainer
+                {
+                    HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled, MouseFilter = Control.MouseFilterEnum.Pass,
+                    CustomMinimumSize = new Vector2(0, maxRows * 18)
+                };
+                scroll.AddChild(grid);
+                _content.AddChild(scroll);
+            }
         }
 
         // Suggestions: a composition never played, one never won.
@@ -256,7 +356,10 @@ public static class CompositionWindow
         row.AddChild(Overlay.MakeLabel(options.Count == 0 ? "-" : Describe(options[pick % options.Count]), Overlay.Text));
         if (options.Count > 1)
         {
-            var another = Overlay.MakeButton(Loc.T("compo.another"));
+            // A "turning arrows" button (v0.17.0), clearer than the "Another one" text, which stays as its tooltip.
+            var another = Overlay.MakeButton("↻");
+            another.TooltipText = Loc.T("compo.another");
+            another.AddThemeColorOverride("font_color", Overlay.Accent);
             another.Pressed += () => Capture.Safe("CompositionWindow.Another", () =>
             {
                 next();
@@ -272,6 +375,18 @@ public static class CompositionWindow
 public static class CompositionStore
 {
     private static Compositions? _data;
+    /// The finished runs of the game's history (and of this session), with their players: "this group" stats.
+    private static readonly List<Compositions.Run> Runs = new();
+
+    /// The game's run history could be read (else "this group" has no data).
+    public static bool HistoryRead { get; private set; }
+
+    /// The tallies of the runs played by exactly these players.
+    public static Compositions OfGroup(IReadOnlyCollection<ulong> players)
+    {
+        _ = Data;
+        return Compositions.OfGroup(Runs, players);
+    }
 
     private static string? FilePath
     {
@@ -297,7 +412,10 @@ public static class CompositionStore
             Capture.Safe("CompositionStore.History", () =>
             {
                 if (FromHistory() is not { } history) return;
-                _data = history;
+                _data = Compositions.Of(history);
+                Runs.Clear();
+                Runs.AddRange(history);
+                HistoryRead = true;
                 if (FilePath != null) File.WriteAllText(FilePath, _data.Write());
             });
             return _data;
@@ -306,12 +424,12 @@ public static class CompositionStore
 
     /// Every finished standard run of the game's history (this profile): its players' characters, ascension and result.
     /// Daily and custom runs, and abandoned runs, are left out. Null when the history cannot be read.
-    private static Compositions? FromHistory()
+    private static List<Compositions.Run>? FromHistory()
     {
         var save = SaveManager.Instance;
         if (save == null) return null;
         var watch = System.Diagnostics.Stopwatch.StartNew();
-        var result = new Compositions();
+        var result = new List<Compositions.Run>();
         int read = 0, counted = 0, failed = 0;
         foreach (var name in save.GetAllRunHistoryNames())
         {
@@ -325,7 +443,7 @@ public static class CompositionStore
                     continue;
                 }
                 if (h.GameMode != GameMode.Standard || h.WasAbandoned || h.Players.Count == 0) continue;
-                result.Add(h.Players.Select(p => p.Character.Entry), h.Ascension, h.Win);
+                result.Add(new Compositions.Run(h.Players.Select(p => p.Id).ToList(), h.Players.Select(p => p.Character.Entry).ToList(), h.Ascension, h.Win));
                 counted++;
             }
             catch (Exception e)
@@ -339,10 +457,11 @@ public static class CompositionStore
     }
 
     /// A finished run (victory or defeat) counts one game for its composition.
-    public static void Add(IEnumerable<string> characters, int ascension, bool victory) => Capture.Safe("CompositionStore.Save", () =>
+    public static void Add(IReadOnlyDictionary<ulong, string> players, int ascension, bool victory) => Capture.Safe("CompositionStore.Save", () =>
     {
-        var list = characters.ToList();
+        var list = players.Values.ToList();
         Data.Add(list, ascension, victory);
+        Runs.Add(new Compositions.Run(players.Keys.ToList(), list, ascension, victory));
         if (FilePath != null) File.WriteAllText(FilePath, Data.Write());
         ModLog.Info($"composition A{ascension} {Compositions.KeyOf(list)}: {(victory ? "victory" : "defeat")} recorded");
     });

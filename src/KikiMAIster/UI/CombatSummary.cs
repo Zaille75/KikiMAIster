@@ -234,7 +234,6 @@ public static class CombatSummary
         left.AddChild(BuildChart(combat, metric));
         left.AddChild(BuildLegend(combat, metric));
         body.AddChild(left);
-        if (coop) body.AddChild(BuildCoopSummary(combat));
         _content.AddChild(body);
 
         var auto = new CheckBox { Text = Loc.T("summary.auto"), ButtonPressed = Cfg.AutoSummary, FocusMode = Control.FocusModeEnum.None };
@@ -336,43 +335,13 @@ public static class CombatSummary
             if (!Cfg.ChartPerRound || point.Round > 0) result.Add((point.Round, values));
             previous = point;
         }
+        // The cumulative curve starts at 0 at round 0 for every player (v0.17.0).
+        if (!Cfg.ChartPerRound)
+        {
+            result.RemoveAll(p => p.Item1 == 0);
+            result.Insert(0, (0, Players(combat).ToDictionary(id => id, _ => 0.0)));
+        }
         return result;
-    }
-
-    /// Co-op summary of the combat, next to the chart: what each player did for the others (best first).
-    private static Control BuildCoopSummary(CombatRecord combat)
-    {
-        var box = new VBoxContainer { MouseFilter = Control.MouseFilterEnum.Pass };
-        box.AddChild(Overlay.MakeLabel(Loc.T("section.coop"), Overlay.Accent));
-        var columns = new (string Key, Func<PlayerStats, double> Value)[]
-        {
-            ("col.blockGiven", s => s.BlockGivenToAllies), ("col.saved", s => s.SavedForAllies),
-            ("col.enabled", s => s.DamageEnabledAllies), ("col.friendly", s => s.FriendlyDamage), ("col.deaths", s => s.Deaths),
-        };
-        var grid = new GridContainer { Columns = columns.Length + 1, MouseFilter = Control.MouseFilterEnum.Pass };
-        grid.AddThemeConstantOverride("h_separation", 10);
-        grid.AddChild(Overlay.MakeLabel("", Overlay.Muted));
-        foreach (var (key, _) in columns)
-        {
-            var l = Overlay.MakeLabel(Loc.T(key), Overlay.Muted, HorizontalAlignment.Right);
-            if (Loc.Has($"tip.{key}"))
-            {
-                l.TooltipText = Loc.T($"tip.{key}");
-                l.MouseFilter = Control.MouseFilterEnum.Stop;
-            }
-            grid.AddChild(l);
-        }
-        foreach (var (id, s) in combat.Stats.OrderByDescending(kv => kv.Value.SavedForAllies + kv.Value.DamageEnabledAllies).ThenBy(kv => kv.Key))
-        {
-            var name = Capture.Engine.Players.GetValueOrDefault(id)?.Name ?? id.ToString(CultureInfo.InvariantCulture);
-            var n = Overlay.MakeLabel(name, Overlay.PlayerColor(id));
-            n.ClipText = true;
-            n.CustomMinimumSize = new Vector2(80, 0);
-            grid.AddChild(n);
-            foreach (var (_, value) in columns) grid.AddChild(Overlay.MakeLabel(Overlay.N(value(s)), Overlay.Text, HorizontalAlignment.Right));
-        }
-        box.AddChild(grid);
-        return box;
     }
 
     /// Moves the window out of the overlay panel's way (the panel grows when sections open). Not saved.

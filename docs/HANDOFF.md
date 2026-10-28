@@ -1,4 +1,4 @@
-# Handoff — state of the project (2026-10-28, v0.16.8)
+# Handoff — state of the project (2026-10-28, v0.17.0)
 
 Read this first in a new conversation, then `CLAUDE.md`, `docs/specs/01-metrics.md` and `docs/specs/02-ui.md`.
 The conversation of 2026-10-27 turned the 27 feedback points of the first co-op games into v0.8.0 → v0.13.4, then
@@ -131,6 +131,13 @@ Optional roadmap items (only if asked): JSON export, end-of-run Totals / Per act
 hotkey settings, chart history across Save & Quit.
 
 ## Open topics for the next conversation
+- **First co-op run with v0.16.8 (2026-10-28): 27 feedback points.** v0.17.0 did the ones that did not need the log
+  (1–9, 11, 12, 16–21, 25, 26: see 02-ui v0.17.0). **Waiting for the log** ("log transferred") for: 10 (Âme sœur cards
+  created in the other player's deck not in Coop), 13 (crash mid-fight: did the Run stats keep the first attempt?),
+  14 (fight 1 T2: Nox got 2 PV sauvés, expected 0–1), 15 (Déflagration tombale counted as a misplay), 22 (unused
+  energy counted when the block was not needed), 23 (Esquisse not in "Cartes données"), 24 (missed lethal fight 4 T4),
+  27 (Max's many "À l'attaque !" in Affaiblissements; then clear that record: `RecordBook.Clear("trophy.debuffs")`).
+- New trophy names (Culturiste, Peau sur les os) are proposals.
 - Zaille75 tests v0.16.8 in co-op and sends the log ("log transferred"), see "Path to v1.0" step 1.
 - **Trophy list:** v0.15.0 co-op additions validated by Zaille75 (Bouclier humain, Dynamo, Croupier; Forteresse = own only;
   Traître includes ally HP that a kept ally block card could have saved; Tank and pets given to allies credited). Not tested in game.

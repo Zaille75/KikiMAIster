@@ -28,6 +28,9 @@ public static class CombatFlowPatches
     /// The number of players of the run being played.
     public static int PlayerCount { get; private set; }
 
+    /// The run being played (null before the first run of the session).
+    public static IRunState? CurrentRun => _currentRun != null && _currentRun.TryGetTarget(out var run) ? run : null;
+
     /// Ends the combat once, whether it was won (AfterCombatEnd) or lost (LoseCombat).
     private static void EndCombat(bool victory)
     {
@@ -36,6 +39,7 @@ public static class CombatFlowPatches
         DamagePatches.FlushPending();
         BlockAlternatives.ResolveCombat();
         Capture.Emit(new CombatEnded(victory));
+        RunHistoryPatches.Read(CurrentRun);
         Summary.LogCombat(Capture.Engine);
         if (_runKey != null) RunStore.Save(_runKey, _floor, Capture.Engine);
     }
@@ -58,12 +62,18 @@ public static class CombatFlowPatches
         _floor = runState.TotalFloor;
         Ascension = runState.AscensionLevel;
         PlayerCount = runState.Players.Count;
-        if (_currentRun != null && _currentRun.TryGetTarget(out var run) && ReferenceEquals(run, runState)) return;
+        if (_currentRun != null && _currentRun.TryGetTarget(out var run) && ReferenceEquals(run, runState))
+        {
+            RunHistoryPatches.Read(runState);
+            return;
+        }
         _currentRun = new WeakReference<IRunState>(runState);
         _runKey = null;
         Capture.Emit(new RunStarted());
         Capture.Safe("run key", () => _runKey = RunStore.KeyOf(runState));
         if (_runKey != null) RunStore.TryRestore(_runKey, _floor, Capture.Engine);
+        RunHistoryPatches.Reset();
+        RunHistoryPatches.Read(runState);
         // Composition stats are rebuilt from the game's history before this run can end (it would be counted twice).
         _ = UI.CompositionStore.Data;
     }
@@ -174,6 +184,7 @@ public static class CombatFlowPatches
     {
         public static void Prefix(bool isVictory) => Capture.Safe("RunManager.OnEnded", () =>
         {
+            RunHistoryPatches.Read(CurrentRun);
             Capture.Emit(new RunEnded(isVictory));
             KikiMAIster.UI.RunSummary.OnRunEnded(isVictory);
         });

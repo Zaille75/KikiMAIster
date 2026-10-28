@@ -149,6 +149,15 @@ public sealed record PlayerDied(Actor Player) : StatEvent;
 /// The run ended (victory or defeat): the end-of-run summary can be shown.
 public sealed record RunEnded(bool Victory) : StatEvent;
 
+/// Several players picked the same treasure relic and the game settled it with rock-paper-scissors (spec 01-metrics
+/// §C4). FightId: identifies the fight in the run (a reloaded treasure room is not counted twice).
+public sealed record ChifumiFought(string FightId, Actor Winner, IReadOnlyList<Actor> Players) : StatEvent;
+
+/// What the game's map history says about one player so far in the run: Max HP gained and lost, campfire choices
+/// (option id → times). Replaces the previous values (the history is complete each time).
+public sealed record RunHistoryRead(Actor Player, double MaxHpGained, double MaxHpLost, IReadOnlyDictionary<string, double> RestSiteChoices)
+    : StatEvent;
+
 /// A missed lethal turn, kept for its explanation (not saved with the run). Combat: the fight's number in the run.
 public sealed record MissedLethalTurn(int Round, IReadOnlyList<string> Cards, int EnemiesHp, int Combat = 0);
 
@@ -156,7 +165,8 @@ public sealed record MissedLethalTurn(int Round, IReadOnlyList<string> Cards, in
 public sealed record WeakAttackPlay(int Round, string Played, int PlayedDamage, string Better, int BetterDamage, int Combat = 0);
 
 /// Another missed opportunity (spec 01-metrics §E0). Kind: "smallBlock", "penNib", "orichalcum", "growth", "energy",
-/// "relic", "potion", "order" (damage lost by playing in the wrong order), "orderBlock" (block lost). Args: values for its explanation ("Card:ID"/"Relic:ID" keys are shown with their game names).
+/// "relic", "potion", "order" (damage lost by playing in the wrong order), "orderBlock" (block lost), "orderSlow" (a
+/// non-attack card played after an attack it would have boosted through Slow). Args: values for its explanation ("Card:ID"/"Relic:ID" keys are shown with their game names).
 /// Amount: what is counted (1 per occurrence, energy points for "energy", potions for "potion").
 public sealed record MissedChance(Actor Player, string Kind, IReadOnlyList<string> Args, double Amount = 1) : StatEvent;
 

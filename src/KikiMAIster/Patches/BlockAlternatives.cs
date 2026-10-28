@@ -50,14 +50,15 @@ public static class BlockAlternatives
         public (CardModel Card, int Block, int Played)? BiggerBlock { get; set; }
         /// The whole hand when the card was played (the card itself left out).
         public required List<CardModel> HandAtPlay { get; init; }
-        /// Raw damage (HP + block) of each hit this card dealt to an enemy.
-        public List<(Creature Target, int Raw)> Hits { get; } = new();
+        /// Raw damage (HP + block) of each hit this card dealt to an enemy, and the enemy's Slow (cards played before the
+        /// hit this turn, each +10% damage; -1 without Slow).
+        public List<(Creature Target, int Raw, int Slow)> Hits { get; } = new();
         /// Number of times this play gave block (Dexterity counts once per gain).
         public int BlockGains { get; set; }
     }
 
     /// Damage or block a later card or potion would have added to an earlier play of the turn (wrong order, spec §E0).
-    /// Kind "order": Extra damage on Enemy. Kind "orderBlock": Extra block.
+    /// Kind "order" / "orderSlow": Extra damage on Enemy. Kind "orderBlock": Extra block.
     private sealed record OrderLoss(Play Early, string Boost, string Kind, Creature? Enemy, double Extra);
 
     private static readonly ConditionalWeakTable<CardPlay, Play> Plays = new();
@@ -170,7 +171,21 @@ public static class BlockAlternatives
     /// A hit of the card play in progress on an enemy (for the wrong-order check).
     public static void OnHit(CardModel card, Creature target, int raw)
     {
-        if (raw > 0 && target.IsEnemy && InProgress.TryPeek(out var play) && play != null && play.Card == card) play.Hits.Add((target, raw));
+        if (raw <= 0 || !target.IsEnemy || !InProgress.TryPeek(out var play) || play == null || play.Card != card) return;
+        var slow = target.GetPower<SlowPower>() is { } power ? (int)power.DynamicVars["SlowAmount"].BaseValue : -1;
+        play.Hits.Add((target, raw, slow));
+    }
+
+    /// Slow (Bygone Effigy): each card played this turn makes the enemy take 10% more attack damage. A non-attack card
+    /// played after an attack that hit it, while it was already in hand, would have boosted that attack (spec §E0,
+    /// wrong order, v0.17.0).
+    private static void CheckSlowOrder(Play late)
+    {
+        if (late.Card.Type == CardType.Attack) return;
+        foreach (var early in ThisTurn.Where(p => p != late && p.Owner == late.Owner && p.Card.Type == CardType.Attack &&
+                                                  !p.HadNonDamageEffect && p.HandAtPlay.Contains(late.Card)))
+            foreach (var (target, raw, slow) in early.Hits.Where(h => h.Slow >= 0))
+                OrderLosses.Add(new OrderLoss(early, Key(late.Card), "orderSlow", target, raw * 0.1 / (1 + 0.1 * slow)));
     }
 
     /// End of the turn: damage is only lost on enemies still alive (up to their HP + block), block only when it was
@@ -182,7 +197,7 @@ public static class BlockAlternatives
         {
             var (early, boost, kind) = g.Key;
             double lost;
-            if (kind == "order")
+            if (kind is "order" or "orderSlow")
                 lost = g.GroupBy(o => o.Enemy!).Sum(e => e.Key.IsAlive ? Math.Min(e.Sum(o => o.Extra), e.Key.CurrentHp + e.Key.Block) : 0);
             else
             {
@@ -277,6 +292,7 @@ public static class BlockAlternatives
             else play.Stronger = StrongerAttack(cardPlay.Card, target, hand, Cost(cardPlay.Card), doubled: false);
         }
         if (cardPlay.Card.GainsBlock) play.BiggerBlock = BiggerBlock(cardPlay.Card, hand);
+        Capture.Safe("wrong order (Slow)", () => CheckSlowOrder(play));
         Plays.AddOrUpdate(cardPlay, play);
         ThisTurn.Add(play);
         InProgress.Push(play);
@@ -319,7 +335,7 @@ public static class BlockAlternatives
             var surplus = creature.Block - IncomingDamage(creature);
             // An attack into Thorns is an alternative only if the block left would still have covered the Thorns damage.
             var alternative = state == null || play.HadOtherEffect || play.Ethereal ? null : play.UsefulCardsInHand.FirstOrDefault(c =>
-                !used.Contains(c) && state.Hand.Cards.Contains(c) && Cost(c) <= budget && PlayableExceptEnergy(c) &&
+                !used.Contains(c) && state.Hand.Cards.Contains(c) && !KeptOnPurpose(c, combat) && Cost(c) <= budget && PlayableExceptEnergy(c) &&
                 ThornsDamage(c, creature) <= Math.Max(0, surplus));
             if (alternative != null) used.Add(alternative);
             ModLog.Info($"block play {play.Id}: other effect {play.HadOtherEffect}, ethereal {play.Ethereal}, energy budget {budget}, useful cards in hand when played: " +
@@ -352,13 +368,13 @@ public static class BlockAlternatives
             var hand = play.Owner.PlayerCombatState?.Hand.Cards;
             if (hand == null) continue;
             var actor = Capture.ToActor(play.Owner);
-            if (play.Stronger is { } better && !play.HadNonDamageEffect && hand.Contains(better.Card))
+            if (play.Stronger is { } better && !play.HadNonDamageEffect && hand.Contains(better.Card) && !KeptOnPurpose(better.Card, combat))
                 Capture.Emit(new WeakAttack(actor, Key(play.Card), better.Played, Key(better.Card), better.Damage));
             // Pen Nib doubled a weak attack: counted even if the stronger one was played later (it was not doubled).
             if (play.PenNibBetter is { } nib && !play.HadNonDamageEffect)
                 Capture.Emit(new MissedChance(actor, "penNib", new[] { Key(play.Card), N(nib.Played), Key(nib.Card), N(nib.Damage) }));
             // A smaller block card, while the bigger one stayed in hand and the block was not enough for the attack.
-            if (play.BiggerBlock is { } bigger && !play.HadOtherEffect && hand.Contains(bigger.Card) &&
+            if (play.BiggerBlock is { } bigger && !play.HadOtherEffect && hand.Contains(bigger.Card) && !KeptOnPurpose(bigger.Card, combat) &&
                 play.Owner.Creature.Block < IncomingDamage(play.Owner.Creature))
                 Capture.Emit(new MissedChance(actor, "smallBlock", new[] { Key(play.Card), N(bigger.Played), Key(bigger.Card), N(bigger.Block) }));
         }
@@ -393,10 +409,12 @@ public static class BlockAlternatives
         var nothingToKill = RealEnemies(combat).Count == 0;
 
         // Unused energy: lost at the end of the turn (not kept by Ice Cream & co., not wanted by Pael's Tears).
-        if (energy > 0 && !nothingToKill && hand.Any(Affordable) && Hook.ShouldPlayerResetEnergy(combat, player) && player.GetRelic<PaelsTears>() == null)
+        // Cards kept on purpose (Retain, Star cost) are left out: not playing them is a choice (spec §E0, v0.17.0).
+        if (energy > 0 && !nothingToKill && hand.Any(c => Affordable(c) && !KeptOnPurpose(c, combat)) && Hook.ShouldPlayerResetEnergy(combat, player) &&
+            player.GetRelic<PaelsTears>() == null)
         {
             // Args: the energy, then the cards that energy could have paid (most expensive first, at most 3).
-            var playable = hand.Where(Affordable).GroupBy(c => Capture.IdOf(c)).Select(g => g.First())
+            var playable = hand.Where(c => Affordable(c) && !KeptOnPurpose(c, combat)).GroupBy(c => Capture.IdOf(c)).Select(g => g.First())
                 .OrderByDescending(c => c.EnergyCost.CostsX ? energy : Cost(c)).Take(3).Select(Key);
             Capture.Emit(new MissedChance(actor, "energy", new[] { N(energy) }.Concat(playable).ToArray(), energy));
         }
@@ -447,7 +465,7 @@ public static class BlockAlternatives
         var blockNeeded = surplus < 0 && blockCards.Count > 0;
         bool WorthPlaying(CardModel c, bool free)
         {
-            if (IsStatusOrCurse(c) || !PlayableExceptEnergy(c)) return false;
+            if (IsStatusOrCurse(c) || !PlayableExceptEnergy(c) || KeptOnPurpose(c, combat)) return false;
             if (!free && (!energyLost || !Affordable(c))) return false;
             if (c.Type == CardType.Attack && (ThornsDamage(c, creature) > Math.Max(0, surplus) || !DealsDamage(c, combat))) return false;
             if (blockNeeded && !c.GainsBlock && !free && Cost(c) + blockCards.Min(Cost) > energy) return false;
@@ -550,7 +568,7 @@ public static class BlockAlternatives
             var enemies = all.Where(e => !e.IsSecondaryEnemy).ToList();
             if (enemies.Count == 0) enemies = all.ToList();
             if (enemies.Count == 0) return null;
-            var attacks = hand.Where(c => c.Type == CardType.Attack && !c.EnergyCost.CostsX && PlayableExceptEnergy(c) &&
+            var attacks = hand.Where(c => c.Type == CardType.Attack && !c.EnergyCost.CostsX && PlayableExceptEnergy(c) && !LacksStars(c) &&
                                           c.TargetType is TargetType.AnyEnemy or TargetType.AllEnemies)
                 .Select(c => new Lethal.Attack($"Card:{Capture.IdOf(c)}", Cost(c), c.TargetType == TargetType.AllEnemies,
                     enemies.Select(e => EstimateDamage(c, e)).ToList()))
@@ -682,6 +700,18 @@ public static class BlockAlternatives
         var thorns = enemies.Select(e => e.GetPowerAmount<ThornsPower>()).ToList();
         var perHit = card.TargetType == TargetType.AllEnemies ? thorns.Sum() : thorns.Min();
         return perHit * (HitCount(card, null) ?? 1);
+    }
+
+    /// A card the player may keep on purpose, so not playing it is never a misplay (spec §E0, v0.17.0): it is retained
+    /// (Retain, or the whole hand is kept: Main retenue…), or it costs Stars (they are not refilled each turn).
+    private static bool KeptOnPurpose(CardModel card, ICombatState combat) =>
+        card.ShouldRetainThisTurn || card.CurrentStarCost > 0 || card.HasStarCostX || !Hook.ShouldFlush(combat, card.Owner);
+
+    /// The player has not enough Stars for this card.
+    private static bool LacksStars(CardModel card)
+    {
+        card.CanPlay(out var reason, out _);
+        return (reason & UnplayableReason.StarCostTooHigh) != UnplayableReason.None;
     }
 
     private static int Cost(CardModel card) => Math.Max(0, card.EnergyCost.GetWithModifiers(CostModifiers.All));

@@ -24,6 +24,17 @@ public sealed class ModConfig
     public HashSet<string> Hidden { get; set; } = new();
     /// Summary chart: per-round values instead of cumulative totals.
     public bool ChartPerRound { get; set; }
+    /// Hide a column when every player shows 0 in it (v0.17.0, on by default).
+    public bool HideZeroColumns { get; set; } = true;
+    /// Show the group's composition and record line in the panel (v0.17.0, off by default).
+    public bool ShowGroupLine { get; set; }
+    /// Compositions window: order by "games" or "winrate", descending or not, and stats of this group of players only.
+    public string CompoOrder { get; set; } = "games";
+    public bool CompoDescending { get; set; } = true;
+    public bool CompoGroupOnly { get; set; }
+    /// Sections shown in their own window (v0.17.0), and each window's position ("section" → x, y).
+    public HashSet<string> Detached { get; set; } = new();
+    public Dictionary<string, (float X, float Y)> DetachedPositions { get; set; } = new();
     /// Not saved: every section starts folded when the game starts.
     public List<string> OpenSections { get; set; } = new();
 
@@ -63,6 +74,17 @@ public sealed class ModConfig
                     case "summaryY": c.SummaryY = float.Parse(v, CultureInfo.InvariantCulture); break;
                     case "hidden": c.Hidden = v.Split(',', StringSplitOptions.RemoveEmptyEntries).ToHashSet(); break;
                     case "chartPerRound": c.ChartPerRound = v == "true"; break;
+                    case "hideZeroColumns": c.HideZeroColumns = v == "true"; break;
+                    case "showGroupLine": c.ShowGroupLine = v == "true"; break;
+                    case "compoOrder": c.CompoOrder = v; break;
+                    case "compoDescending": c.CompoDescending = v == "true"; break;
+                    case "compoGroupOnly": c.CompoGroupOnly = v == "true"; break;
+                    case "detached": c.Detached = v.Split(',', StringSplitOptions.RemoveEmptyEntries).ToHashSet(); break;
+                    default:
+                        // "pos.<section>=x;y": a detached section's window.
+                        if (k.StartsWith("pos.") && v.Split(';') is { Length: 2 } xy)
+                            c.DetachedPositions[k[4..]] = (Float(xy[0], 20), Float(xy[1], 160));
+                        break;
                 }
             }
         }
@@ -88,8 +110,11 @@ public sealed class ModConfig
                 $"scope={Scope}", $"opacity={Opacity.ToString(ci)}", $"scale={Scale.ToString(ci)}",
                 $"language={Language}", $"autoSummary={(AutoSummary ? "true" : "false")}",
                 $"summaryX={SummaryX.ToString(CultureInfo.InvariantCulture)}", $"summaryY={SummaryY.ToString(CultureInfo.InvariantCulture)}",
-                $"hidden={string.Join(',', Hidden)}", $"chartPerRound={(ChartPerRound ? "true" : "false")}"
-            });
+                $"hidden={string.Join(',', Hidden)}", $"chartPerRound={(ChartPerRound ? "true" : "false")}",
+                $"hideZeroColumns={(HideZeroColumns ? "true" : "false")}", $"showGroupLine={(ShowGroupLine ? "true" : "false")}",
+                $"compoOrder={CompoOrder}", $"compoDescending={(CompoDescending ? "true" : "false")}",
+                $"compoGroupOnly={(CompoGroupOnly ? "true" : "false")}", $"detached={string.Join(',', Detached)}"
+            }.Concat(DetachedPositions.Select(kv => $"pos.{kv.Key}={kv.Value.X.ToString(ci)};{kv.Value.Y.ToString(ci)}")));
         }
         catch (Exception e)
         {

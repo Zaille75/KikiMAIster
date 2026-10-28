@@ -25,6 +25,8 @@ public sealed class StatsEngine
     /// Card plays in progress per player (a card can play other cards), and the damage of the outermost play so far.
     private readonly Dictionary<ulong, int> _playDepth = new();
     private readonly Dictionary<ulong, double> _playDamage = new();
+    /// Rock-paper-scissors fights already counted in this run.
+    private readonly HashSet<string> _chifumiFights = new();
 
     public int Round { get; private set; }
 
@@ -146,6 +148,24 @@ public sealed class StatsEngine
                 break;
             case PotionUsed p when p.Player.IsPlayerSide: Each(p.Player.PlayerId, s => s.PotionsUsed++); break;
             case PlayerDied p when p.Player.Kind == ActorKind.Player: Each(p.Player.PlayerId, s => s.Deaths++); break;
+            case ChifumiFought f when f.Winner.IsPlayerSide && _chifumiFights.Add(f.FightId):
+                foreach (var p in f.Players.Where(p => p.IsPlayerSide).Select(p => p.PlayerId).Distinct())
+                {
+                    var s = Stats(Scope.Run, p);
+                    s.ChifumiPlayed++;
+                    if (p == f.Winner.PlayerId) s.ChifumiWon++;
+                }
+                break;
+            case RunHistoryRead h when h.Player.IsPlayerSide && h.Player.PlayerId != 0:
+            {
+                // Run scope only: the game's history covers the whole run (campfires and events happen outside combat).
+                var s = Stats(Scope.Run, h.Player.PlayerId);
+                s.MaxHpGained = h.MaxHpGained;
+                s.MaxHpLost = h.MaxHpLost;
+                s.RestSiteChoices.Clear();
+                foreach (var (k, v) in h.RestSiteChoices) s.RestSiteChoices[k] = v;
+                break;
+            }
             case BlockPlayResolved r:
                 _hadAlternative[r.PlayId] = r.HadAlternative;
                 if (r.Choice != null) _choices[r.PlayId] = (Round, r.Choice);
@@ -159,6 +179,7 @@ public sealed class StatsEngine
         _players.Clear();
         _combats.Clear();
         _combatNumber = 0;
+        _chifumiFights.Clear();
         ResetCombatState();
     }
 
@@ -401,13 +422,17 @@ public sealed class StatsEngine
         if (!b.Receiver.IsPlayerSide || b.Amount <= 0) return;
         var owner = b.Receiver.PlayerId;
         var giver = b.Giver.IsPlayerSide ? b.Giver.PlayerId : owner;
-        Ledger(owner).Add(giver, b.Amount, Round, b.PlayId);
+        // Plating gives its block at the end of the turn, known in advance: it counts as already there, so it absorbs
+        // first and a block card the Plating made unnecessary can be gâché (spec 01-metrics §F, v0.17.0).
+        Ledger(owner).Add(giver, b.Amount, Round, b.PlayId, first: b.Source == Source.Power(PlatingPowerId));
         Each(giver, s =>
         {
             if (giver == owner) s.BlockGainedSelf += b.Amount;
             else s.BlockGivenToAllies += b.Amount;
         });
     }
+
+    internal const string PlatingPowerId = "PLATING_POWER";
 
     private void OnBlockCleared(BlockCleared b)
     {

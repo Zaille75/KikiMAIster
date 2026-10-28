@@ -42,7 +42,7 @@ public static class RunSummary
         var names = Capture.Engine.Players.ToDictionary(kv => kv.Key, kv => kv.Value.Name);
         var characters = Capture.Engine.Players.ToDictionary(kv => kv.Key, kv => kv.Value.Character);
         _update = RecordStore.Add(run, names, characters, victory);
-        CompositionStore.Add(characters.Values, Patches.CombatFlowPatches.Ascension, victory);
+        CompositionStore.Add(characters, Patches.CombatFlowPatches.Ascension, victory);
         _showPending = true;
     }
 
@@ -123,6 +123,26 @@ public static class RunSummary
         }
     }
 
+    /// Chifumi: this run's fights per player, then every pair of this run's players across all runs (v0.17.0).
+    private static void AddChifumi(IReadOnlyDictionary<ulong, PlayerStats> run, StatsEngine engine)
+    {
+        string Name(ulong id) => engine.Players.GetValueOrDefault(id)?.Name ?? ChifumiStore.Book.NameOf(id);
+        _content!.AddChild(Overlay.MakeLabel(Loc.T("run.chifumi"), Overlay.Accent));
+        var lines = run.Where(kv => kv.Value.ChifumiPlayed > 0).OrderByDescending(kv => kv.Value.ChifumiWon).ThenBy(kv => kv.Key)
+            .Select(kv => string.Format(Loc.T("run.chifumiRun"), Name(kv.Key), Overlay.N(kv.Value.ChifumiWon), Overlay.N(kv.Value.ChifumiPlayed))).ToList();
+        var ids = run.Keys.OrderBy(id => id).ToList();
+        for (var i = 0; i < ids.Count; i++)
+            for (var j = i + 1; j < ids.Count; j++)
+            {
+                var (won, lost) = ChifumiStore.Book.Against(ids[i], ids[j]);
+                if (won + lost == 0) continue;
+                var rate = ((double)won / (won + lost)).ToString("P0", CultureInfo.InvariantCulture);
+                lines.Add(string.Format(Loc.T("run.chifumiPair"), Name(ids[i]), Name(ids[j]), won, lost, rate));
+            }
+        if (lines.Count == 0) lines.Add(Loc.T("run.chifumiNone"));
+        foreach (var line in lines) _content.AddChild(Overlay.MakeLabel(line, Overlay.Text));
+    }
+
     private static void Rebuild(bool ended)
     {
         foreach (var child in _content!.GetChildren())
@@ -168,7 +188,7 @@ public static class RunSummary
         {
             if (c.CoopOnly && run.Count < 2) continue;
             // A victory-only trophy (Intouchable) is not shown after a defeat.
-            if (ended && c.LowerIsBetter && !_victory) continue;
+            if (ended && c.NeedsVictory && !_victory) continue;
             var winner = Trophies.Winner(c, run);
             var name = Overlay.MakeLabel(Loc.T(c.Key), c.Fun ? Overlay.Muted : Overlay.Text);
             name.TooltipText = Loc.T($"{c.Key}.tip");
@@ -183,7 +203,14 @@ public static class RunSummary
             {
                 grid.AddChild(Overlay.MakeLabel(engine.Players.GetValueOrDefault(w.Id)?.Name ?? w.Id.ToString(CultureInfo.InvariantCulture),
                     Overlay.PlayerColor(w.Id)));
-                grid.AddChild(Overlay.MakeLabel(Overlay.N(w.Value), Overlay.Text, HorizontalAlignment.Right));
+                // Hovering the winning value shows every player's score (v0.17.0).
+                var value = Overlay.MakeLabel(Overlay.N(w.Value), Overlay.Text, HorizontalAlignment.Right);
+                value.TooltipText = Loc.T("run.others") + ":\n" + string.Join('\n', run
+                    .Select(kv => (Id: kv.Key, Value: c.Value(kv.Value)))
+                    .OrderBy(x => c.LowerIsBetter ? x.Value : -x.Value).ThenBy(x => x.Id)
+                    .Select(x => $"{engine.Players.GetValueOrDefault(x.Id)?.Name ?? x.Id.ToString(CultureInfo.InvariantCulture)}: {Overlay.N(x.Value)}"));
+                value.MouseFilter = Control.MouseFilterEnum.Stop;
+                grid.AddChild(value);
             }
             var best = book.Best(c.Key, coop);
             var newRecord = update?.NewRecords.Contains(c.Key) == true;
@@ -209,10 +236,46 @@ public static class RunSummary
             grid.AddChild(cell);
         }
         _content.AddChild(grid);
+        if (coop) AddChifumi(run, engine);
         _content.AddChild(Overlay.MakeLabel(Loc.T(coop ? "run.coopRecords" : "run.soloRecords") + " · " +
             Loc.T(ended ? "run.recordsNote" : "run.inProgressNote"), Overlay.Muted));
         _panel!.CallDeferred(Control.MethodName.ResetSize);
     }
+}
+
+/// Rock-paper-scissors results across runs, saved next to the DLL (spec 01-metrics §C4).
+public static class ChifumiStore
+{
+    private static Chifumi? _book;
+
+    private static string? FilePath
+    {
+        get
+        {
+            var dir = Path.GetDirectoryName(typeof(ChifumiStore).Assembly.Location);
+            return string.IsNullOrEmpty(dir) ? null : Path.Combine(dir, "KikiMAIster.chifumi.cfg");
+        }
+    }
+
+    public static Chifumi Book
+    {
+        get
+        {
+            if (_book != null) return _book;
+            _book = new Chifumi();
+            Capture.Safe("ChifumiStore.Load", () =>
+            {
+                if (FilePath != null && File.Exists(FilePath)) _book = Chifumi.Read(File.ReadAllText(FilePath));
+            });
+            return _book;
+        }
+    }
+
+    public static void Record(string fightId, ulong winner, IEnumerable<ulong> players, IReadOnlyDictionary<ulong, string> names) =>
+        Capture.Safe("ChifumiStore.Save", () =>
+        {
+            if (Book.Record(fightId, winner, players, names) && FilePath != null) File.WriteAllText(FilePath, Book.Write());
+        });
 }
 
 /// The record book, saved next to the DLL (not a .json file: the game reads every .json in mods/ as a manifest).

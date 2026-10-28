@@ -10,8 +10,9 @@ public static class Overlay
 {
     /// Columns: the column keys to show, computed at each refresh (some depend on the data or on solo/co-op).
     /// Rank: players are listed from the best to the worst by this value (highest first).
+    /// RunOnly: only in the Run tab (campfires happen outside combat).
     private sealed record Section(string Key, Func<ulong, PlayerStats, IReadOnlyList<Cell>> Row, Func<IReadOnlyList<string>> Columns,
-        Func<PlayerStats, double> Rank, bool CoopOnly = false);
+        Func<PlayerStats, double> Rank, bool CoopOnly = false, bool RunOnly = false);
 
     /// One table cell: its column key, text and optional tooltip.
     private sealed record Cell(string Column, string Text, string Tooltip = "");
@@ -33,6 +34,7 @@ public static class Overlay
     private static readonly HashSet<string> Expanded = new();
     private static IReadOnlyList<string> _damageColumns = Array.Empty<string>();
     private static IReadOnlyList<string> _debuffColumns = Array.Empty<string>();
+    private static IReadOnlyList<string> _restColumns = Array.Empty<string>();
     private static IReadOnlyDictionary<ulong, PlayerStats> _shown = new Dictionary<ulong, PlayerStats>();
     private static bool _solo;
     private static bool _anyPetHp;
@@ -52,7 +54,7 @@ public static class Overlay
         { "col.lethal", "col.wastedBlock", "col.choices", "col.unusedEnergy", "col.hpAvoidable", "col.relicTrigger", "col.potionsLeft" };
 
     /// Damage taken, shown after the damage dealt in the same section (v0.14.0).
-    private static readonly string[] TakenColumns = { "col.hpLost", "col.fromAllies" };
+    private static readonly string[] TakenColumns = { "col.hpLost", "col.fromAllies", "col.maxHp" };
 
     private static readonly Section[] Sections =
     {
@@ -65,8 +67,9 @@ public static class Overlay
             return cols.Count > 0 ? cols : new[] { "col.noDebuff" };
         }, s => s.DebuffsApplied.Values.Sum(t => t.Stacks)),
         new("missed", MissedRow, MissedColumnsShown, s => -(s.MissedTotal * 100 + s.MissedByKind.GetValueOrDefault("energy"))),
-        new("coop", CoopRow, () => Visible("coop", new[] { "col.blockGiven", "col.saved", "col.takenForAllies", "col.enabled", "col.energyGiven", "col.cardsGiven", "col.friendly", "col.deaths" }),
+        new("coop", CoopRow, () => Visible("coop", new[] { "col.blockGiven", "col.saved", "col.takenForAllies", "col.enabled", "col.energyGiven", "col.cardsGiven", "col.friendly", "col.deaths", "col.chifumi" }),
             s => s.SavedForAllies + s.DamageEnabledAllies + s.BlockGivenToAllies * 0.01, CoopOnly: true),
+        new("rest", RestRow, () => _restColumns.Count > 0 ? _restColumns : new[] { "col.noRest" }, s => s.RestSiteChoices.Values.Sum(), RunOnly: true),
         new("other", OtherRow, () => Visible("other", new[] { "col.drawn", "col.played", "col.exhausted", "col.discarded", "col.potions" }),
             s => s.CardsPlayed),
     };
@@ -74,11 +77,12 @@ public static class Overlay
     /// What the settings menu can hide: every section, and its fixed columns (damage kinds and debuff effect included).
     internal static readonly (string Section, string[] Columns)[] Hideable =
     {
-        ("damage", new[] { "cat.cards", "cat.dot", "cat.powers", "cat.pet", "cat.orbs", "cat.relics", "cat.potions", "cat.other", "col.hpLost", "col.fromAllies" }),
+        ("damage", new[] { "cat.cards", "cat.dot", "cat.powers", "cat.pet", "cat.orbs", "cat.relics", "cat.potions", "cat.other", "col.hpLost", "col.fromAllies", "col.maxHp" }),
         ("protection", new[] { "col.byBlock", "col.byPet", "col.useless", "col.petHp" }),
         ("debuffs", new[] { "col.extraDamage", "col.avoided" }),
         ("missed", MissedColumns),
-        ("coop", new[] { "col.blockGiven", "col.saved", "col.takenForAllies", "col.enabled", "col.energyGiven", "col.cardsGiven", "col.friendly", "col.deaths" }),
+        ("coop", new[] { "col.blockGiven", "col.saved", "col.takenForAllies", "col.enabled", "col.energyGiven", "col.cardsGiven", "col.friendly", "col.deaths", "col.chifumi" }),
+        ("rest", Array.Empty<string>()),
         ("other", new[] { "col.drawn", "col.played", "col.exhausted", "col.discarded", "col.potions" }),
     };
 
@@ -174,6 +178,9 @@ public static class Overlay
             _panel.Visible = show;
             if (show) _lastSignature = "";
         }
+        if (!show || !inRun)
+            foreach (var w in DetachedWindows.Values)
+                if (GodotObject.IsInstanceValid(w.Panel)) w.Panel.Visible = false;
         if (!inRun)
         {
             CombatSummary.Hide();
@@ -289,7 +296,12 @@ public static class Overlay
         SyncVisibility();
         if (_panel == null || _body == null || !_panel.Visible) return;
         FitOnScreen();
-        if (_shrinkPending > 0 && --_shrinkPending == 0) _panel.ResetSize();
+        if (_shrinkPending > 0 && --_shrinkPending == 0)
+        {
+            _panel.ResetSize();
+            foreach (var w in DetachedWindows.Values)
+                if (GodotObject.IsInstanceValid(w.Panel)) w.Panel.ResetSize();
+        }
 
         foreach (var (key, b) in ScopeButtons)
         {
@@ -329,6 +341,8 @@ public static class Overlay
         foreach (var key in ScopeButtons.Keys) ScopeButtons[key].Visible = true;
 
         var engine = Capture.Engine;
+        // Max HP and campfire choices come from the game's map history (read again only when it changed).
+        if (!engine.InCombat) Patches.RunHistoryPatches.Read(Patches.CombatFlowPatches.CurrentRun);
         var combats = CombatList(engine);
         // A new combat brings the Combat scope back to the latest one.
         if (combats.Count != _combatCount)
@@ -354,10 +368,11 @@ public static class Overlay
             child.QueueFree();
         }
         _panel.CallDeferred(Control.MethodName.ResetSize);
+        foreach (var w in DetachedWindows.Values) w.Clear();
 
         if (shownCombat != null && combats.Count > 1) _body.AddChild(BuildCombatPicker(shownCombat, combats.Count));
-        // Co-op: the group's composition and its record, during the first fight and in the Run tab.
-        if ((CurrentScope == Scope.Run || (engine.Combats.Count == 0 && engine.CurrentCombat != null)) &&
+        // Co-op: the group's composition and its record, during the first fight and in the Run tab (setting, off by default).
+        if (Cfg.ShowGroupLine && (CurrentScope == Scope.Run || (engine.Combats.Count == 0 && engine.CurrentCombat != null)) &&
             CompositionWindow.CurrentLine() is { Length: > 0 } group)
         {
             var line = MakeLabel(group, Muted);
@@ -369,6 +384,7 @@ public static class Overlay
         if (stats.Count == 0)
         {
             _body.AddChild(MakeLabel(Loc.T("empty"), Muted));
+            HideEmptyDetached();
             return;
         }
 
@@ -376,12 +392,17 @@ public static class Overlay
         _damageColumns = DamageColumns(stats);
         _debuffColumns = stats.Values.SelectMany(x => x.DebuffsApplied)
             .GroupBy(kv => DebuffColumn(kv.Key)).OrderByDescending(g => g.Sum(kv => kv.Value.Stacks)).Select(g => g.Key).ToList();
+        _restColumns = stats.Values.SelectMany(x => x.RestSiteChoices).GroupBy(kv => kv.Key)
+            .OrderByDescending(g => g.Sum(kv => kv.Value)).ThenBy(g => g.Key, StringComparer.Ordinal).Select(g => $"Rest:{g.Key}").ToList();
         _solo = players.Count == 1;
         _anyPetHp = stats.Values.Any(x => x.PetHpGiven > 0);
         foreach (var section in Sections)
         {
-            if (Cfg.Hidden.Contains($"section:{section.Key}") || (section.CoopOnly && _solo)) continue;
-            var open = Cfg.OpenSections.Contains(section.Key);
+            if (Cfg.Hidden.Contains($"section:{section.Key}") || (section.CoopOnly && _solo) || (section.RunOnly && CurrentScope != Scope.Run)) continue;
+            // A detached section has its own window (v0.17.0); in co-op its table is always open.
+            var detached = Cfg.Detached.Contains(section.Key);
+            var target = detached ? DetachedBody(section.Key) : _body;
+            var open = (detached && !_solo) || Cfg.OpenSections.Contains(section.Key);
             var header = MakeButton($"{(open ? "▾" : "▸")} {Loc.T($"section.{section.Key}")}");
             header.Alignment = HorizontalAlignment.Left;
             header.AddThemeColorOverride("font_color", Accent);
@@ -399,18 +420,109 @@ public static class Overlay
                 // Solo: the table is always shown, without the name column; opening the section adds its details.
                 var id = players[0];
                 var cells = section.Row(id, stats[id]);
-                _body.AddChild(BuildSoloTable(section, header, cells, Fold));
+                target.AddChild(BuildSoloTable(section, header, ShownColumns(section, stats), cells, Fold));
                 var detail = cells.FirstOrDefault(c => c.Tooltip != "")?.Tooltip ?? "";
-                if (open && detail != "") _body.AddChild(BuildDetail(Accent, detail, 320));
+                if (open && detail != "") target.AddChild(BuildDetail(Accent, detail, 320));
                 continue;
             }
             if (!open)
             {
-                _body.AddChild(header);
+                target.AddChild(header);
                 continue;
             }
             var ranked = players.OrderByDescending(id => section.Rank(stats[id])).ThenBy(id => id).ToList();
-            _body.AddChild(BuildTable(section, header, engine, stats, ranked));
+            target.AddChild(BuildTable(section, header, ShownColumns(section, stats), engine, stats, ranked));
+        }
+        HideEmptyDetached();
+    }
+
+    /// The section's columns, without those where every player shows 0 (setting, on by default; v0.17.0).
+    private static IReadOnlyList<string> ShownColumns(Section section, IReadOnlyDictionary<ulong, PlayerStats> stats)
+    {
+        var columns = section.Columns();
+        if (!Cfg.HideZeroColumns || columns.Count <= 1) return columns;
+        var rows = stats.Select(kv => section.Row(kv.Key, kv.Value)).ToList();
+        var kept = columns.Where(col => col == "col.total" || rows.Any(cells => !IsZero(CellFor(cells, col).Text))).ToList();
+        return kept.Count > 0 ? kept : columns.Take(1).ToList();
+    }
+
+    private static bool IsZero(string text) => text is "0" or "-" or "0/0" or "+0" or "" || text.StartsWith("0 (");
+
+    // ---------- Detached sections (v0.17.0) ----------
+
+    /// A section shown in its own window, dragged by its background; its position is saved.
+    private sealed class DetachedWindow(PanelContainer panel, VBoxContainer body)
+    {
+        public PanelContainer Panel { get; } = panel;
+        public VBoxContainer Body { get; } = body;
+        public bool Dragging { get; set; }
+
+        public void Clear()
+        {
+            if (!GodotObject.IsInstanceValid(Body)) return;
+            foreach (var child in Body.GetChildren())
+            {
+                Body.RemoveChild(child);
+                child.QueueFree();
+            }
+            Panel.CallDeferred(Control.MethodName.ResetSize);
+        }
+    }
+
+    private static readonly Dictionary<string, DetachedWindow> DetachedWindows = new();
+
+    private static VBoxContainer DetachedBody(string key)
+    {
+        if (DetachedWindows.TryGetValue(key, out var existing) && GodotObject.IsInstanceValid(existing.Panel))
+        {
+            existing.Panel.Visible = true;
+            return existing.Body;
+        }
+        var panel = new PanelContainer { MouseDefaultCursorShape = Control.CursorShape.Move, Scale = Vector2.One * Cfg.Scale };
+        panel.AddThemeStyleboxOverride("panel", WindowStyle(Cfg.Opacity));
+        var body = new VBoxContainer();
+        body.AddThemeConstantOverride("separation", 1);
+        panel.AddChild(body);
+        // Where the player left it, else below the main panel, one step lower per window.
+        var main = PanelRect ?? new Rect2(Cfg.X, Cfg.Y, 330, 100);
+        panel.Position = Cfg.DetachedPositions.TryGetValue(key, out var pos) ? new Vector2(pos.X, pos.Y)
+            : new Vector2(main.Position.X, main.End.Y + 8 + 40 * DetachedWindows.Count);
+        var window = new DetachedWindow(panel, body);
+        panel.GuiInput += e => Capture.Safe("Overlay.DragDetached", () =>
+        {
+            switch (e)
+            {
+                case InputEventMouseButton { ButtonIndex: MouseButton.Left } mb:
+                    window.Dragging = mb.Pressed;
+                    if (!mb.Pressed)
+                    {
+                        Cfg.DetachedPositions[key] = (panel.Position.X, panel.Position.Y);
+                        Cfg.Save();
+                    }
+                    break;
+                case InputEventMouseMotion mm when window.Dragging:
+                    panel.Position += mm.Relative;
+                    break;
+            }
+        });
+        _layer!.AddChild(panel);
+        DetachedWindows[key] = window;
+        return body;
+    }
+
+    /// Detached windows with nothing to show this time (section hidden, Run-only outside the Run tab…) are hidden; the
+    /// others are kept on screen.
+    private static void HideEmptyDetached()
+    {
+        foreach (var (key, w) in DetachedWindows)
+        {
+            if (!GodotObject.IsInstanceValid(w.Panel)) continue;
+            w.Panel.Visible = Cfg.Detached.Contains(key) && w.Body.GetChildCount() > 0;
+            if (!w.Panel.Visible || w.Dragging) continue;
+            var screen = w.Panel.GetViewportRect().Size;
+            var size = w.Panel.Size * w.Panel.Scale;
+            var target = new Vector2(Math.Clamp(w.Panel.Position.X, 0, Math.Max(0, screen.X - size.X)), Math.Clamp(w.Panel.Position.Y, 0, Math.Max(0, screen.Y - size.Y)));
+            if (w.Panel.Position != target) w.Panel.Position = target;
         }
     }
 
@@ -468,9 +580,8 @@ public static class Overlay
         cells.FirstOrDefault(c => c.Column == column) ?? new Cell(column, "-", cells.FirstOrDefault()?.Tooltip ?? "");
 
     /// Solo: the section title sits on the column-name line, the values on the line below.
-    private static Control BuildSoloTable(Section section, Button title, IReadOnlyList<Cell> cells, Action fold)
+    private static Control BuildSoloTable(Section section, Button title, IReadOnlyList<string> columns, IReadOnlyList<Cell> cells, Action fold)
     {
-        var columns = section.Columns();
         var grid = new GridContainer { Columns = columns.Count + 1 };
         grid.AddThemeConstantOverride("h_separation", 12);
         grid.AddThemeConstantOverride("v_separation", 0);
@@ -496,10 +607,9 @@ public static class Overlay
 
     /// Co-op: the section title and the column names share the first line; one line per player, best first.
     /// A player's details open right under their line.
-    private static Control BuildTable(Section section, Button title, StatsEngine engine, IReadOnlyDictionary<ulong, PlayerStats> stats,
-        List<ulong> players)
+    private static Control BuildTable(Section section, Button title, IReadOnlyList<string> columns, StatsEngine engine,
+        IReadOnlyDictionary<ulong, PlayerStats> stats, List<ulong> players)
     {
-        var columns = section.Columns();
         var grid = new GridContainer { Columns = columns.Count + 1 };
         grid.AddThemeConstantOverride("h_separation", 10);
         grid.AddThemeConstantOverride("v_separation", 0);
@@ -604,10 +714,15 @@ public static class Overlay
                   + (s.DebuffsReceived.Count == 0 ? "" : Block($"{Loc.T("tip.debuffsReceived")}:\n{Powers(s.DebuffsReceived)}"));
         var byColumn = s.DamageBySource.GroupBy(kv => DamageColumn(kv.Key)).ToDictionary(g => g.Key, g => g.Sum(kv => kv.Value));
         var totalText = _solo ? N(s.DamageDealt) : $"{N(s.DamageDealt)} ({share:P0})";
+        // Max HP over the run (v0.17.0): net change, gained and lost in the details.
+        var maxHp = s.MaxHpGained - s.MaxHpLost;
+        if (s.MaxHpGained + s.MaxHpLost > 0)
+            tip += Block($"{Loc.T("col.maxHp")}: {Line(("tip.maxHpGained", s.MaxHpGained, false), ("tip.maxHpLost", s.MaxHpLost, false))}");
         return new[] { new Cell("col.total", totalText, tip) }
             .Concat(_damageColumns.Select(c => new Cell(c, N(byColumn.GetValueOrDefault(c)), tip)))
             .Append(new Cell("col.hpLost", N(s.HpLost), tip))
-            .Append(new Cell("col.fromAllies", N(s.HpLostFromAllies), tip)).ToArray();
+            .Append(new Cell("col.fromAllies", N(s.HpLostFromAllies), tip))
+            .Append(new Cell("col.maxHp", maxHp > 0 ? $"+{N(maxHp)}" : N(maxHp), tip)).ToArray();
     }
 
     /// Damage columns: direct (cards), then each damage-over-time debuff by name (Poison, Doom…), then the other kinds.
@@ -640,7 +755,17 @@ public static class Overlay
     }
 
     private static string ColumnName(string column) =>
-        column.StartsWith("cat.") || column.StartsWith("col.") ? Loc.T(column) : GameNames.Of(column);
+        column.StartsWith("cat.") || column.StartsWith("col.") ? Loc.T(column)
+        : column.StartsWith("Rest:") ? GameNames.RestSiteOption(column[5..]) : GameNames.Of(column);
+
+    /// Campfire choices of the run (v0.17.0): one column per option chosen by someone (Rest, Smith, Mend…), times chosen.
+    private static IReadOnlyList<Cell> RestRow(ulong id, PlayerStats s)
+    {
+        var tip = s.RestSiteChoices.Count == 0 ? Loc.T("tip.none")
+            : string.Join('\n', s.RestSiteChoices.OrderByDescending(kv => kv.Value).Select(kv => $"{GameNames.RestSiteOption(kv.Key)}: {N(kv.Value)}"));
+        return _restColumns.Select(c => new Cell(c, N(s.RestSiteChoices.GetValueOrDefault(c[5..])), tip))
+            .Append(new Cell("col.noRest", "-", tip)).ToArray();
+    }
 
     private static IReadOnlyList<Cell> ProtectionRow(ulong id, PlayerStats s)
     {
@@ -754,7 +879,8 @@ public static class Overlay
             new Cell("col.energyGiven", N(s.EnergyGiven), tip),
             new Cell("col.cardsGiven", N(s.CardsGiven), tip),
             new Cell("col.friendly", N(s.FriendlyDamage), tip),
-            new Cell("col.deaths", N(s.Deaths), tip)
+            new Cell("col.deaths", N(s.Deaths), tip),
+            new Cell("col.chifumi", $"{N(s.ChifumiWon)}/{N(s.ChifumiPlayed)}", tip)
         };
     }
 
@@ -786,7 +912,9 @@ public static class Overlay
             $"{kv.Value.DebuffsReceived.Count}:{kv.Value.FriendlyDamage + kv.Value.SelfDamage:F1}:{kv.Value.FriendlyDebuffs.Count}:" +
             $"{kv.Value.HealingSelf + kv.Value.HealingAllies:F1}:{kv.Value.PetHpGiven:F1}:{kv.Value.WastedPlays.Count}:{kv.Value.Kills}:" +
             $"{kv.Value.DamageEnabledSelf + kv.Value.DamageEnabledAllies:F1}:{kv.Value.MissedLethals}:{kv.Value.WeakAttacks}:{kv.Value.EnergyGiven + kv.Value.CardsGiven + kv.Value.OrbsGiven + kv.Value.TakenForAllies:F1}:{kv.Value.MissedEntries.Count}:{kv.Value.Deaths}:" +
-            $"{kv.Value.CardsDrawn + kv.Value.CardsPlayed + kv.Value.CardsExhausted + kv.Value.CardsDiscarded + kv.Value.PotionsUsed}"));
+            $"{kv.Value.CardsDrawn + kv.Value.CardsPlayed + kv.Value.CardsExhausted + kv.Value.CardsDiscarded + kv.Value.PotionsUsed}:" +
+            $"{kv.Value.MaxHpGained}:{kv.Value.MaxHpLost}:{kv.Value.RestSiteChoices.Values.Sum()}:{kv.Value.RestSiteChoices.Count}:{kv.Value.ChifumiWon}:{kv.Value.ChifumiPlayed}")) +
+        $"|{Cfg.HideZeroColumns}|{Cfg.ShowGroupLine}|{string.Join(',', Cfg.Detached)}";
 
     internal static string N(double v) => Math.Round(v).ToString("0", CultureInfo.InvariantCulture);
 

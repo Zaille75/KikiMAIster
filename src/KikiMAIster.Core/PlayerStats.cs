@@ -87,7 +87,7 @@ public sealed class PlayerStats
     public Dictionary<string, double> MissedByKind { get; } = new();
     public List<MissedEntry> MissedEntries { get; } = new();
     /// Worse choices: weak attacks + smaller block, Pen Nib on a weak attack, block below Orichalcum, growing card not played.
-    public double MissedChoices => WeakAttacks + new[] { "smallBlock", "penNib", "orichalcum", "order", "orderBlock" }.Sum(k => MissedByKind.GetValueOrDefault(k));
+    public double MissedChoices => WeakAttacks + new[] { "smallBlock", "penNib", "orichalcum", "order", "orderBlock", "orderSlow" }.Sum(k => MissedByKind.GetValueOrDefault(k));
     /// Block card plays whose block was wasted (gâché, rule F3), counted once per play (saved with the run).
     public double WastedPlayCount { get; set; }
     /// "Gâché" misplays (v0.13.1): wasted block card plays + growing cards never played in a fight.
@@ -123,6 +123,16 @@ public sealed class PlayerStats
     public double CardsExhausted { get; set; }
     public double CardsDiscarded { get; set; }
     public double PotionsUsed { get; set; }
+
+    // Run history (read from the game's own map history, run scope only: spec 01-metrics §C4)
+    /// Max HP gained and lost during the run (events, relics, cards…).
+    public double MaxHpGained { get; set; }
+    public double MaxHpLost { get; set; }
+    /// Campfire choices, by the game's option id ("HEAL", "SMITH", "MEND"…): how many times each.
+    public Dictionary<string, double> RestSiteChoices { get; } = new();
+    /// Rock-paper-scissors when several players picked the same treasure relic: fights won / fought.
+    public double ChifumiWon { get; set; }
+    public double ChifumiPlayed { get; set; }
 
     // D. Damage taken
     public double HpLostFromEnemies { get; set; }

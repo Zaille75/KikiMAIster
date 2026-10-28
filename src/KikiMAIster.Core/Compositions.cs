@@ -44,11 +44,40 @@ public sealed class Compositions
         _tallies[(ascension, key)] = new Tally(t.Played + 1, t.Won + (victory ? 1 : 0));
     }
 
-    /// Compositions played with this number of players, most played first.
-    public IEnumerable<(string Key, Tally Tally)> Played(int players, int? ascension = null) =>
-        _tallies.Keys.Select(k => k.Key).Distinct().Where(k => Members(k).Count == players)
-            .Select(k => (Key: k, Tally: Get(k, ascension))).Where(x => x.Tally.Played > 0)
-            .OrderByDescending(x => x.Tally.Played).ThenBy(x => x.Key, StringComparer.Ordinal);
+    /// How the played compositions are listed (spec 02-ui v0.17.0): by games or by win rate, in either direction.
+    public enum Order { Games, WinRate }
+
+    /// Compositions played with this number of players, most played first (or as asked; ties: the other figure, then the name).
+    public IEnumerable<(string Key, Tally Tally)> Played(int players, int? ascension = null, Order order = Order.Games, bool descending = true)
+    {
+        var list = _tallies.Keys.Select(k => k.Key).Distinct().Where(k => Members(k).Count == players)
+            .Select(k => (Key: k, Tally: Get(k, ascension))).Where(x => x.Tally.Played > 0);
+        Func<(string Key, Tally Tally), double> first = order == Order.Games ? x => x.Tally.Played : x => x.Tally.WinRate;
+        Func<(string Key, Tally Tally), double> second = order == Order.Games ? x => x.Tally.WinRate : x => x.Tally.Played;
+        var sorted = descending ? list.OrderByDescending(first).ThenByDescending(second) : list.OrderBy(first).ThenBy(second);
+        return sorted.ThenBy(x => x.Key, StringComparer.Ordinal);
+    }
+
+    /// A finished run as the game's history knows it: its players (ids), their characters, ascension and result.
+    public sealed record Run(IReadOnlyList<ulong> Players, IReadOnlyList<string> Characters, int Ascension, bool Victory);
+
+    /// The tallies of the runs played by exactly this group of players (any order; spec 02-ui v0.17.0).
+    public static Compositions OfGroup(IEnumerable<Run> runs, IReadOnlyCollection<ulong> group)
+    {
+        var c = new Compositions();
+        var wanted = group.ToHashSet();
+        foreach (var run in runs.Where(r => r.Players.Count == wanted.Count && r.Players.ToHashSet().SetEquals(wanted)))
+            c.Add(run.Characters, run.Ascension, run.Victory);
+        return c;
+    }
+
+    /// The tallies of every run.
+    public static Compositions Of(IEnumerable<Run> runs)
+    {
+        var c = new Compositions();
+        foreach (var run in runs) c.Add(run.Characters, run.Ascension, run.Victory);
+        return c;
+    }
 
     /// Every possible composition for this number of players (a character can be taken several times).
     public static IEnumerable<string> AllPossible(IReadOnlyList<string> characters, int players)

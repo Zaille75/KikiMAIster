@@ -14,9 +14,13 @@ public sealed class BlockLedger
 
     public double Total => _layers.Sum(l => l.Amount);
 
-    public void Add(ulong giverId, double amount, int round, int playId = 0)
+    /// First: the layer counts as the oldest one (block known in advance, e.g. Plating at the end of the turn).
+    public void Add(ulong giverId, double amount, int round, int playId = 0, bool first = false)
     {
-        if (amount > 0) _layers.AddLast(new Layer(giverId, round, playId) { Amount = amount });
+        if (amount <= 0) return;
+        var layer = new Layer(giverId, round, playId) { Amount = amount };
+        if (first) _layers.AddFirst(layer);
+        else _layers.AddLast(layer);
     }
 
     /// Takes up to `amount` from the oldest layers. Returns what was taken from each layer.

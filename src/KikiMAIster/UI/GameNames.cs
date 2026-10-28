@@ -29,8 +29,24 @@ public static class GameNames
         return name;
     }
 
+    /// A campfire option's name in the game language ("HEAL" → "Repos"), as the game's run history shows it.
+    public static string RestSiteOption(string optionId) => Of($"RestSite:{optionId}");
+
     private static string Resolve(string key)
     {
+        if (key.StartsWith("RestSite:"))
+        {
+            try
+            {
+                var text = new LocString("rest_site_ui", $"OPTION_{key[9..]}.name").GetFormattedText();
+                if (!string.IsNullOrWhiteSpace(text)) return text;
+            }
+            catch (Exception e)
+            {
+                ModLog.Error("rest site name", e);
+            }
+            return key[9..];
+        }
         // A stat loss from a temporary power: "Force − (Toucher affaiblissant)".
         var at = key.IndexOf('@');
         if (at > 0) return $"{Of(key[..at])} ({Of(key[(at + 1)..])})";

@@ -94,13 +94,38 @@ public static class SettingsMenu
             Cfg.Save();
         }));
 
+        _content.AddChild(Check(Loc.T("settings.hideZero"), Cfg.HideZeroColumns, on =>
+        {
+            Cfg.HideZeroColumns = on;
+            Changed();
+        }));
+        _content.AddChild(Check(Loc.T("settings.groupLine"), Cfg.ShowGroupLine, on =>
+        {
+            Cfg.ShowGroupLine = on;
+            Changed();
+        }));
+
         _content.AddChild(Overlay.MakeLabel(Loc.T("settings.shown"), Overlay.Accent));
         foreach (var (section, columns) in Overlay.Hideable)
         {
             var sectionKey = $"section:{section}";
             var visible = !Cfg.Hidden.Contains(sectionKey);
-            _content.AddChild(Check(Loc.T($"section.{section}"), visible, on => Set(sectionKey, on)));
-            if (!visible) continue;
+            // The section's checkbox, then "own window" (v0.17.0: a detached section can be placed anywhere).
+            var line = new HBoxContainer();
+            line.AddChild(Check(Loc.T($"section.{section}"), visible, on => Set(sectionKey, on)));
+            if (visible)
+            {
+                var detach = Check(Loc.T("settings.detach"), Cfg.Detached.Contains(section), on =>
+                {
+                    if (on) Cfg.Detached.Add(section);
+                    else Cfg.Detached.Remove(section);
+                    Changed();
+                }, small: true);
+                detach.TooltipText = Loc.T("settings.detachTip");
+                line.AddChild(detach);
+            }
+            _content.AddChild(line);
+            if (!visible || columns.Length == 0) continue;
             // A grid, not a flow container: its size is known at once, so the window's background fits the text.
             var row = new HBoxContainer();
             row.AddChild(new Control { CustomMinimumSize = new Vector2(16, 0) });

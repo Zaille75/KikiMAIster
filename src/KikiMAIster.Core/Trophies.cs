@@ -8,8 +8,12 @@ public static class Trophies
 {
     /// LowerIsBetter: the smallest value wins (only counted for a victory, else an early defeat would win).
     /// CoopOnly: needs allies. Fun: a "shame" trophy (most wasted…), shown after the others.
+    /// VictoryOnly: only counted (and shown) for a victory, like every LowerIsBetter category.
     public sealed record Category(string Key, Func<PlayerStats, double> Value, bool LowerIsBetter = false, bool CoopOnly = false,
-        bool Fun = false);
+        bool Fun = false, bool VictoryOnly = false)
+    {
+        public bool NeedsVictory => LowerIsBetter || VictoryOnly;
+    }
 
     public static readonly Category[] All =
     {
@@ -26,10 +30,12 @@ public static class Trophies
         new("trophy.energy", s => s.EnergyGiven, CoopOnly: true),
         new("trophy.cards", s => s.CardsGiven, CoopOnly: true),
         new("trophy.untouched", s => s.HpLost, LowerIsBetter: true),
+        new("trophy.maxHpGained", s => s.MaxHpGained),
         new("trophy.useless", s => s.UnusedBlock, Fun: true),
         new("trophy.missed", s => s.MissedTotal, Fun: true),
         new("trophy.friendly", s => s.FriendlyDamage + s.MissedByKind.GetValueOrDefault("allyBlockKept"), CoopOnly: true, Fun: true),
         new("trophy.deaths", s => s.Deaths, CoopOnly: true, Fun: true),
+        new("trophy.maxHpLost", s => s.MaxHpLost, Fun: true, VictoryOnly: true),
     };
 
     /// The winner of a category (null when nobody scored, or for a tie at 0).
@@ -73,7 +79,7 @@ public sealed class RecordBook
     public sealed record Update(HashSet<string> NewRecords, HashSet<(string Category, ulong Player)> NewPersonal,
         HashSet<(string Category, string Character)> NewCharacter);
 
-    /// Adds a finished run (co-op when it has 2+ players). Lower-is-better categories only count a victory. Zero values never make a record.
+    /// Adds a finished run (co-op when it has 2+ players). Lower-is-better and victory-only categories only count a victory. Zero values never make a record.
     /// Characters: each player's character ("IRONCLAD"…); players without one get no character record.
     public Update Add(IReadOnlyDictionary<ulong, PlayerStats> run, IReadOnlyDictionary<ulong, string> names, bool victory, string date,
         IReadOnlyDictionary<ulong, string>? characters = null)
@@ -83,7 +89,7 @@ public sealed class RecordBook
         var mode = Mode(coop);
         foreach (var c in Trophies.All)
         {
-            if (c.LowerIsBetter && !victory) continue;
+            if (c.NeedsVictory && !victory) continue;
             if (c.CoopOnly && run.Count < 2) continue;
             foreach (var (id, s) in run)
             {
@@ -109,6 +115,14 @@ public sealed class RecordBook
             }
         }
         return update;
+    }
+
+    /// Clears a category's records (all-time, personal, per character), solo and co-op: a value found to be wrong.
+    public void Clear(string category)
+    {
+        foreach (var key in _entries.Keys.Where(k => k.StartsWith($"{category}.", StringComparison.Ordinal) ||
+                                                     k.StartsWith($"coop.{category}.", StringComparison.Ordinal)).ToList())
+            _entries.Remove(key);
     }
 
     private static bool Beats(Trophies.Category c, double v, Entry? old) =>

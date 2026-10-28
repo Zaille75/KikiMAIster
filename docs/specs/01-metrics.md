@@ -132,6 +132,13 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
 ## C3. Other stats (v0.9.0)
 Cards drawn, played, exhausted, discarded; potions used.
 
+## C4. Run stats outside combat (v0.17.0)
+| Stat | Definition |
+|---|---|
+| Max HP | Max HP gained and lost during the run (events, relics, cards…), per player. Read from the game's own map history, so it is complete after Save & Quit or a crash and never counted twice. Shown as the net change ("PV max" column of Dégâts, Run tab); trophies **Culturiste** (most gained) and **Peau sur les os** (most lost, victory only). |
+| Campfire choices | How many times each player chose each campfire option (Rest, Smith, Mend, Lift, Dig…), read from the game's map history. Section "Feux de camp" (Run tab). |
+| Chifumi | When several players pick the same treasure relic, the game settles it with rock-paper-scissors (random moves). The winner beats every other player of that fight. Per run: fights won / fought (Coop section). Across runs: for every pair of players, wins of each against the other (trophies window), saved in `KikiMAIster.chifumi.cfg`. A reloaded treasure room is not counted twice. |
+
 ## E0. Missed opportunities (v0.9.0)
 | Stat | Definition |
 |---|---|
@@ -151,6 +158,8 @@ Cards drawn, played, exhausted, discarded; potions used.
 | Number of hits (v0.13.4, audit of every attack) | Damage estimates use the game's own hit count: the "Repeat" value, the game's computed hits ("CalculatedHits": En miettes = 1 + times the player lost HP this fight, Barrage…), 2 for the cards that always hit twice, 1–2 for Dismantle (Vulnerable). Cards whose hits depend on something the mod does not compute (Whirlwind, Fiend Fire, X-cost…) are never compared for weak attacks; for missed lethal they count 1 hit (minimum). |
 | Wrong order (v0.14.0) | A card or potion that boosts later plays was used **after** a play it could have boosted, in the same turn, although it was already in hand (a potion: in the belt) when that play was made: **Vulnerable** put on an enemy that had none (the attacks that hit that enemy earlier lose 50% of their damage), **Strength** gained (each earlier attack hit loses that much), **Dexterity** gained (each earlier block gain loses that much). The earlier play must have been a choice (not auto-played) with no effect besides damage / block. Damage is only lost on enemies still alive at the end of the turn (capped at their HP + block); block is only lost when the block at the end of the turn was below the incoming attack (capped at the difference). Counted once per (earlier play, boosting card) in "Choix", with the damage or block lost in the details. |
 | Invulnerable phase (v0.14.0) | An enemy the game shows with infinite HP (Waterfall Giant about to explode) is not an enemy left to kill: missed lethal ignores it, and when it is the only enemy left, unused energy and relic triggers are not counted that turn. |
+| Cards kept on purpose (v0.17.0, rule validated by Zaille75) | Not playing a card is never a misplay when the player may keep it on purpose: a card that is **retained** (Retain, or the whole hand is kept: Main retenue, Runic Pyramid-like effects), or a card with a **Star cost** (Stars are not refilled each turn). Such a card is never the alternative of a wasted block, the "stronger attack" of a weak attack, the "bigger block" of a smaller block, a card that unused energy could have paid, or a card that would have triggered a relic. Missed lethal still uses them (winning the fight is always worth it), but only when the player has enough Stars. |
+| Slow (v0.17.0) | Slow (Bygone Effigy): each card played this turn makes that enemy take 10% more attack damage. A **non-attack card** played after an attack that hit the Slowed enemy, while it was already in hand when the attack was played, is a wrong order: that attack lost 10% of its base damage on that enemy (raw ÷ (1 + 0.1 × cards before) × 0.1). Same rules as wrong order (the attack did nothing besides damage, the enemy is still alive at the end of the turn). Counted in "Choix" (kind "orderSlow"). |
 | Weak attack | An attack played on an enemy while a stronger attack (game's damage on the same enemy, same cost or cheaper) stayed in hand until the end of the turn. Not counted when the played attack could kill its target or did something besides damage (debuff, draw…). |
 
 ## E. Later extensions (not in v1)
@@ -257,3 +266,7 @@ the player could already absorb, which is exactly your example. It is also easy 
   block left at the end of the turn minus the incoming attack must cover it (Thorns × hits; on all enemies for an attack
   on all enemies, else the enemy with the least Thorns). Otherwise not playing it was right, and the block is useless.
 - **F5 (v0.4.6).** An **Ethereal** block card is never wasted either (not playing it would have lost it anyway).
+- **F9 (v0.17.0) — Plating (Blindage).** Plating gives its block at the end of the turn, and the amount is known in
+  advance. Its layer counts as the **oldest** one: it absorbs first. So a block card the Plating made unnecessary (the
+  Plating alone covered the attack) absorbs nothing and can be wasted (if a useful card stayed in hand, rule F3).
+  Before v0.17.0 the card's block absorbed first and the Plating's block was counted as useless instead.
