@@ -1,4 +1,4 @@
-# Handoff — state of the project (2026-10-27, v0.16.8)
+# Handoff — state of the project (2026-10-28, v0.16.8)
 
 Read this first in a new conversation, then `CLAUDE.md`, `docs/specs/01-metrics.md` and `docs/specs/02-ui.md`.
 The conversation of 2026-10-27 turned the 27 feedback points of the first co-op games into v0.8.0 → v0.13.4, then
@@ -105,8 +105,33 @@ wrong-order misses, Waterfall Giant invulnerable phase, fights kept across Save 
   - A creature removed by the game with huge HP (e.g. 999999878 in "Géant de la Cascade") is logged as damage from nobody. It is not credited to a player, but it could be filtered out.
   - The last fight of the co-op log (Crabe César) ended as a defeat. Zaille75 hasn't confirmed this.
 
+## Path to v1.0 (agreed 2026-10-28, besides refining the mod)
+Order: test → default branch → release prep → publish → maintenance. The GitHub backup is done (private `origin`).
+
+**What Claude needs from Zaille75, step by step:**
+1. **In-game test (blocks everything):** one full **co-op** run with v0.16.8 (nothing co-op since v0.8.0 is checked in
+   game: Permis, Encaissés, Ange gardien, per-ally details, co-op trophies/records, compositions), ideally plus one solo
+   run. Then "log transferred" + screenshots of anything odd. Run-end = "full run without data loss" (roadmap phase 4).
+2. **Default (non-beta) branch:** copy the non-beta game DLLs into `lib/default/` (same files as `lib/beta/`:
+   `sts2.dll` and its dependencies from the game's `data_sts2_windows_x86_64` folder). Then Claude runs
+   `./build.sh default` and fixes the patches that no longer match. Skip if the beta becomes the default version soon.
+3. **Release prep decisions:**
+   - an icon (an image Zaille75 likes, or Claude draws a simple one);
+   - license (suggest MIT; game files are never shipped);
+   - public name and one-line description (EN + FR);
+   - whether the GitHub repo becomes public at release.
+   Claude then writes README (EN + FR: what it shows, install, F7 / F8 keys, works when friends don't have it),
+   CHANGELOG, sets version 1.0.0.
+4. **Publishing:** which sites (GitHub release, Nexus Mods, Steam Workshop if StS2 accepts mods there). Claude checks
+   each site's requirements first; Zaille75 creates the accounts / uploads where a login is needed.
+5. **Maintenance after each game patch:** Zaille75 copies the new DLLs into `lib/beta/` (and `lib/default/`), Claude
+   rebuilds (PatchCheck flags broken hooks), fixes them, re-syncs `BlockAlternatives.HitCount`, bumps the version.
+
+Optional roadmap items (only if asked): JSON export, end-of-run Totals / Per act tabs, MVP line, opacity / scale /
+hotkey settings, chart history across Save & Quit.
+
 ## Open topics for the next conversation
-- Zaille75 tests v0.13.4 in co-op and sends the log ("log transferred").
+- Zaille75 tests v0.16.8 in co-op and sends the log ("log transferred"), see "Path to v1.0" step 1.
 - **Trophy list:** v0.15.0 co-op additions validated by Zaille75 (Bouclier humain, Dynamo, Croupier; Forteresse = own only;
   Traître includes ally HP that a kept ally block card could have saved; Tank and pets given to allies credited). Not tested in game.
 - Chart: "remove the blocked stats" was read as removing the "Évités" chart; Zaille75 said he would check.
