@@ -33,10 +33,10 @@ public static class Trophies
         new("trophy.cards", s => s.CardsGiven, CoopOnly: true),
         new("trophy.untouched", s => s.HpLost, LowerIsBetter: true),
         new("trophy.maxHpGained", s => s.MaxHpGained),
-        // Mirror of the Bricklayer (v0.17.28): the smallest share of useless block, among players who made at least 30 block.
-        new("trophy.efficientBlock", s => Math.Round(100 * s.UnusedBlock / (s.BlockGainedSelf + s.BlockGivenToAllies)), LowerIsBetter: true,
-            Eligible: s => s.BlockGainedSelf + s.BlockGivenToAllies >= 30),
+        // Mirror of the Bricklayer (v0.17.28): the least useless block (victory only).
+        new("trophy.efficientBlock", s => s.UnusedBlock, LowerIsBetter: true),
         new("trophy.useless", s => s.UnusedBlock, Fun: true),
+        new("trophy.energySurplus", s => s.EnergySurplus, Fun: true),
         new("trophy.missed", s => s.MissedTotal, Fun: true),
         new("trophy.friendly", s => s.FriendlyDamage + s.MissedByKind.GetValueOrDefault("allyBlockKept"), CoopOnly: true, Fun: true),
         new("trophy.deaths", s => s.Deaths, CoopOnly: true, Fun: true),

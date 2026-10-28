@@ -132,6 +132,8 @@ public sealed class PlayerStats
     public double CardsExhausted { get; set; }
     public double CardsDiscarded { get; set; }
     public double PotionsUsed { get; set; }
+    /// Energy lost at the end of a turn with nothing useful to spend it on (v0.17.29: trophy "Batterie pleine").
+    public double EnergySurplus { get; set; }
 
     // Run history (read from the game's own map history, run scope only: spec 01-metrics §C4)
     /// Max HP gained and lost during the run (events, relics, cards…).

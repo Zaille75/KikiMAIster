@@ -193,5 +193,6 @@ public sealed record AllyBlockCardKept(Actor Player, string Card, int Block, boo
 public sealed record MissedEntry(int Round, string Kind, IReadOnlyList<string> Args, double Amount, int Combat = 0);
 
 /// Help that is not damage or block (spec 01-metrics §C2): Kind "energy" (energy given), "cards" (cards drawn, created
-/// or brought to an ally's hand), "orbs" (orbs channeled for an ally), "taken" (damage taken instead of allies: Intercept).
+/// or brought to an ally's hand), "orbs" (orbs channeled for an ally), "taken" (damage taken instead of allies: Intercept),
+/// "energySurplus" (not help: energy lost with nothing useful to spend it on, counted for the player themself).
 public sealed record HelpGiven(Actor Giver, string Kind, double Amount) : StatEvent;

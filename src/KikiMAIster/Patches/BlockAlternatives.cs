@@ -450,6 +450,11 @@ public static class BlockAlternatives
                 .OrderByDescending(c => c.EnergyCost.CostsX ? energy : Cost(c)).Take(3).Select(Key);
             Capture.Emit(new MissedChance(actor, "energy", new[] { N(energy) }.Concat(playable).ToArray(), energy));
         }
+        // Energy lost with nothing useful to spend it on (v0.17.29): no card left, or only block when the attack is already
+        // covered, or only attacks the enemy punishes. Not a miss; counted for the trophy "Batterie pleine".
+        else if (energy > 0 && Hook.ShouldPlayerResetEnergy(combat, player) && player.GetRelic<PaelsTears>() == null &&
+                 (nothingToKill || !hand.Any(c => Affordable(c) && !(blockCovered && c.GainsBlock && c.Type == CardType.Skill) && !PunishedAttack(c))))
+            Capture.Emit(new HelpGiven(actor, "energySurplus", energy));
 
         // Pael's Tears gives energy next turn for energy left: energy spent on a useless card (at any time in the turn)
         // would have been left.
