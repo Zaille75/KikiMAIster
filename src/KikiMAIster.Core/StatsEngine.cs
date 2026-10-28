@@ -17,6 +17,10 @@ public sealed class StatsEngine
     private readonly Dictionary<int, bool> _hadAlternative = new();
     /// Block cards kept in hand at the end of the player turn, and the HP lost to enemies since.
     private readonly Dictionary<ulong, (string Card, int Block, double Lost)> _blockKept = new();
+    /// La grande manœuvre kept this round, and the HP lost since; then, when HP were lost, the round after it: the miss
+    /// only counts if no HP were lost then (v0.17.23).
+    private readonly Dictionary<ulong, (string Card, int Block, double Lost)> _riskyKept = new();
+    private readonly Dictionary<ulong, (string Card, int Block, double Saved, double LostAfter)> _riskyWait = new();
     /// Block cards for allies kept in hand at the end of the turn, and the HP each ally lost to enemies since.
     private readonly Dictionary<ulong, (string Card, int Block, bool All, Dictionary<ulong, double> Lost)> _allyBlockKept = new();
     /// Each player's pet HP by who gave them (Legion of Bone gives pets to allies): owner → giver → HP.
@@ -151,6 +155,7 @@ public sealed class StatsEngine
                 });
                 break;
             case MissedChance m when m.Player.IsPlayerSide && m.Amount > 0: AddMissed(m.Player.PlayerId, m.Kind, m.Args, m.Amount); break;
+            case BlockCardKept { Risky: true } k when k.Player.IsPlayerSide && k.Block > 0: _riskyKept[k.Player.PlayerId] = (k.Card, k.Block, 0); break;
             case BlockCardKept k when k.Player.IsPlayerSide && k.Block > 0: _blockKept[k.Player.PlayerId] = (k.Card, k.Block, 0); break;
             case AllyBlockCardKept k when k.Player.IsPlayerSide && k.Block > 0:
                 _allyBlockKept[k.Player.PlayerId] = (k.Card, k.Block, k.AllAllies, new());
@@ -290,7 +295,7 @@ public sealed class StatsEngine
     private void OnCombatEnded(CombatEnded c)
     {
         FlushDefense();
-        ResolveBlockKept();
+        ResolveBlockKept(combatEnded: true);
         // Block left at the end of combat counts as wasted / useless help (spec §F, decision F2).
         foreach (var (owner, ledger) in _block)
             foreach (var layer in ledger.Clear())
@@ -316,6 +321,8 @@ public sealed class StatsEngine
         _choices.Clear();
         _blockKept.Clear();
         _allyBlockKept.Clear();
+        _riskyKept.Clear();
+        _riskyWait.Clear();
         _petHp.Clear();
         _playDepth.Clear();
         _playDamage.Clear();
@@ -473,6 +480,8 @@ public sealed class StatsEngine
         {
             Each(owner, s => s.HpLostFromEnemies += d.Hp);
             if (_blockKept.TryGetValue(owner, out var kept)) _blockKept[owner] = kept with { Lost = kept.Lost + d.Hp };
+            if (_riskyKept.TryGetValue(owner, out var risky)) _riskyKept[owner] = risky with { Lost = risky.Lost + d.Hp };
+            if (_riskyWait.TryGetValue(owner, out var wait)) _riskyWait[owner] = wait with { LostAfter = wait.LostAfter + d.Hp };
             foreach (var (giver, allyKept) in _allyBlockKept)
                 if (giver != owner) allyKept.Lost[owner] = allyKept.Lost.GetValueOrDefault(owner) + d.Hp;
         }
@@ -830,8 +839,23 @@ public sealed class StatsEngine
         });
 
     /// A block card kept in hand while HP was then lost to enemies: the HP it could have saved (spec §E0).
-    private void ResolveBlockKept()
+    private void ResolveBlockKept(bool combatEnded = false)
     {
+        // La grande manœuvre: the round after the HP loss went by without HP lost → playing it would have been safe.
+        foreach (var (id, (card, block, saved, lostAfter)) in _riskyWait)
+            if (lostAfter <= 0) AddMissed(id, "blockKept", new[] { card, block.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                saved.ToString("0", System.Globalization.CultureInfo.InvariantCulture) }, saved);
+        _riskyWait.Clear();
+        foreach (var (id, (card, block, lost)) in _riskyKept)
+        {
+            var saved = Math.Min(block, lost);
+            if (saved <= 0) continue;
+            // The fight is over: nothing could get through any more.
+            if (combatEnded) AddMissed(id, "blockKept", new[] { card, block.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                lost.ToString("0", System.Globalization.CultureInfo.InvariantCulture) }, saved);
+            else _riskyWait[id] = (card, block, saved, 0);
+        }
+        _riskyKept.Clear();
         foreach (var (id, (card, block, lost)) in _blockKept)
         {
             var saved = Math.Min(block, lost);

@@ -180,7 +180,9 @@ public sealed record MissedChance(Actor Player, string Kind, IReadOnlyList<strin
 
 /// End of a player turn with a playable block card kept in hand: if the player then loses HP to enemies before the
 /// next round, min(HP lost, Block) counts as "HP that could have been saved" (kind "blockKept").
-public sealed record BlockCardKept(Actor Player, string Card, int Block) : StatEvent;
+/// Risky (v0.17.23, La grande manœuvre: any attack getting through afterwards kills): counted only if HP were lost this
+/// round and none the next one.
+public sealed record BlockCardKept(Actor Player, string Card, int Block, bool Risky = false) : StatEvent;
 
 /// End of a player turn with a playable block card for allies kept in hand (Lift, Rally…), an ally being alive: the HP
 /// allies then lose to enemies before the next round could have been saved, up to Block (kind "allyBlockKept").

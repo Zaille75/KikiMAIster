@@ -459,9 +459,15 @@ public static class BlockAlternatives
             GrowingAffordable.Add(growing);
 
         // Block for one ally (Lift…) does not protect the player: only the ally check below.
-        var kept = hand.Where(c => c.GainsBlock && Affordable(c) && (c.TargetType != TargetType.AnyAlly || c is Mimic)).Select(c => (Card: c, Block: EstimateBlock(c)))
+        // La grande manœuvre is followed on its own (its block comes with a deadly risk): see below.
+        var kept = hand.Where(c => c.GainsBlock && Affordable(c) && c is not TheGambit && (c.TargetType != TargetType.AnyAlly || c is Mimic))
+            .Select(c => (Card: c, Block: EstimateBlock(c)))
             .Where(x => x.Block > 0).OrderByDescending(x => x.Block).FirstOrDefault();
         if (kept.Card != null) Capture.Emit(new BlockCardKept(actor, Key(kept.Card), kept.Block));
+        // La grande manœuvre kept in hand (v0.17.23): a miss only if HP were lost this round and none the next one (with
+        // its power, any attack getting through would have killed the player).
+        if (hand.FirstOrDefault(c => c is TheGambit && Affordable(c)) is { } gambit && player.Creature.GetPower<TheGambitPower>() == null)
+            Capture.Emit(new BlockCardKept(actor, Key(gambit), EstimateBlock(gambit), Risky: true));
 
         // A block card for allies (Lift, Rally…) kept in hand while an ally is alive: their HP lost may have been avoidable.
         if (combat.Players.Any(p => p != player && p.Creature.IsAlive))
@@ -491,7 +497,7 @@ public static class BlockAlternatives
         var blockNeeded = surplus < 0 && blockCards.Count > 0;
         bool WorthPlaying(CardModel c, bool free)
         {
-            if (IsStatusOrCurse(c) || !PlayableExceptEnergy(c) || KeptOnPurpose(c, combat)) return false;
+            if (IsStatusOrCurse(c) || !PlayableExceptEnergy(c) || KeptOnPurpose(c, combat) || c is TheGambit) return false;
             if (!free && (!energyLost || !Affordable(c))) return false;
             if (c.Type == CardType.Attack && (ThornsDamage(c, creature) > Math.Max(0, surplus) || !DealsDamage(c, combat) || PunishedAttack(c))) return false;
             if (blockNeeded && !c.GainsBlock && !free && Cost(c) + blockCards.Min(Cost) > energy) return false;
@@ -574,7 +580,7 @@ public static class BlockAlternatives
             var block = EstimateBlock(played);
             if (block <= 0) return null;
             var cost = Cost(played);
-            var best = hand.Where(c => c != played && c.GainsBlock && !c.EnergyCost.CostsX && Cost(c) <= cost && PlayableExceptEnergy(c))
+            var best = hand.Where(c => c != played && c.GainsBlock && c is not TheGambit && !c.EnergyCost.CostsX && Cost(c) <= cost && PlayableExceptEnergy(c))
                 .Select(c => (Card: c, Block: EstimateBlock(c))).Where(x => x.Block > block)
                 .OrderByDescending(x => x.Block).FirstOrDefault();
             return best.Card == null ? null : (best.Card, best.Block, block);

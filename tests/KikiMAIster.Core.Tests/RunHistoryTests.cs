@@ -157,4 +157,22 @@ public class RunHistoryTests : TestBase
         Assert.Equal("Card:STRIKE", s.WastedPlays[0].Choice.Alternative);
         Assert.Equal(5, s.BlockUnusedBySource["Card:DEFEND"]);
     }
+
+    [Fact]
+    public void GambitKept_CountsOnlyIfTheNextRoundLosesNoHp()
+    {
+        Engine.Handle(new BlockCardKept(A, "Card:THE_GAMBIT", 50, Risky: true));
+        EnemyHits(A, 0, 7);
+        Engine.Handle(new RoundStarted(2));
+        Assert.Equal(0, Combat(IdA).AvoidableHp);
+        EnemyHits(A, 0, 3); // the next round: with its power, this hit would have killed
+        Engine.Handle(new RoundStarted(3));
+        Assert.Equal(0, Combat(IdA).AvoidableHp);
+
+        Engine.Handle(new BlockCardKept(A, "Card:THE_GAMBIT", 50, Risky: true));
+        EnemyHits(A, 0, 6);
+        Engine.Handle(new RoundStarted(4));
+        Engine.Handle(new RoundStarted(5)); // no HP lost: playing it was safe
+        Assert.Equal(6, Combat(IdA).AvoidableHp);
+    }
 }
