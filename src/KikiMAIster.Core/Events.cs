@@ -205,5 +205,6 @@ public sealed record MissedEntry(int Round, string Kind, IReadOnlyList<string> A
 
 /// Help that is not damage or block (spec 01-metrics §C2): Kind "energy" (energy given), "cards" (cards drawn, created
 /// or brought to an ally's hand), "orbs" (orbs channeled for an ally), "taken" (damage taken instead of allies: Intercept),
-/// "energySurplus" (not help: energy lost with nothing useful to spend it on, counted for the player themself).
+/// "energySurplus" (not help: energy lost with nothing useful to spend it on, counted for the player themself),
+/// "energyUseless" (not help: energy spent on a card that did nothing useful, v0.17.37).
 public sealed record HelpGiven(Actor Giver, string Kind, double Amount) : StatEvent;

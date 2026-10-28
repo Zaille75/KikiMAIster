@@ -38,3 +38,17 @@ public class Feedback0_17_36Tests : TestBase
         Assert.Equal(2, book.Best("trophy.curses", coop: true)!.Value);
     }
 }
+
+public class Feedback0_17_37Tests : TestBase
+{
+    [Fact]
+    public void BatteriePleine_CountsSpareAndUselessEnergy()
+    {
+        Engine.Handle(new HelpGiven(A, "energySurplus", 2));
+        Engine.Handle(new HelpGiven(A, "energyUseless", 1));
+        var run = new Dictionary<ulong, PlayerStats> { [IdA] = Engine.Get(Scope.Run, IdA) };
+        var book = new RecordBook();
+        book.Add(run, new Dictionary<ulong, string> { [IdA] = "Kiki" }, victory: false, "2026-10-28");
+        Assert.Equal(3, book.Best("trophy.energySurplus", coop: false)!.Value);
+    }
+}

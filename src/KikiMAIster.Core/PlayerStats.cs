@@ -137,6 +137,9 @@ public sealed class PlayerStats
     public double PotionsUsed { get; set; }
     /// Energy lost at the end of a turn with nothing useful to spend it on (v0.17.29: trophy "Batterie pleine").
     public double EnergySurplus { get; set; }
+    /// Energy spent for nothing (v0.17.37): paid for a block card whose block was not needed (block at the end of the turn
+    /// minus its block still covers the attack) or a card whose only effect was a useless debuff.
+    public double EnergyUseless { get; set; }
 
     // Run history (read from the game's own map history, run scope only: spec 01-metrics §C4)
     /// Max HP gained and lost during the run (events, relics, cards…).

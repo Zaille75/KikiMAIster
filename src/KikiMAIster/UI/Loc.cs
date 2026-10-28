@@ -168,6 +168,8 @@ public static class Loc
         ["col.discarded"] = ("Discarded", "Défaussées"),
         ["col.potions"] = ("Potions", "Potions"),
         ["col.energySurplus"] = ("Spare energy", "Énergie en trop"),
+        ["col.energyUseless"] = ("Energy for nothing", "Énergie pour rien"),
+        ["tip.col.energyUseless"] = ("Energy spent on a card that did nothing useful: block that was not needed, a debuff that wore off unused", "Énergie dépensée pour une carte qui n'a servi à rien : armure pas nécessaire, affaiblissement sans effet"),
         ["tip.col.energySurplus"] = ("Energy left at the end of the turn with nothing useful to spend it on (not a mistake)", "Énergie restée en fin de tour sans rien d'utile à jouer (pas une erreur)"),
 
         ["tip.intoBlock"] = ("into block", "dans l'armure"),
@@ -289,7 +291,7 @@ public static class Loc
         ["trophy.efficientBlock.tip"] = ("Least useless block (victory only)", "Le moins d'armure inutile (victoire seulement)"),
         ["trophy.useless"] = ("Bricklayer", "Maçon du dimanche"),
         ["trophy.energySurplus"] = ("Fully charged", "Batterie pleine"),
-        ["trophy.energySurplus.tip"] = ("Most energy left at the end of turns with nothing useful to spend it on", "Le plus d'énergie restée en fin de tour sans rien d'utile à jouer"),
+        ["trophy.energySurplus.tip"] = ("Most energy left with nothing useful to spend it on, or spent for nothing", "Le plus d'énergie restée sans rien d'utile à jouer ou dépensée pour rien"),
         ["trophy.useless.tip"] = ("Most useless block", "Le plus d'armure inutile"),
         ["trophy.missed"] = ("Daydreamer", "Distrait"),
         ["trophy.missed.tip"] = ("Most missed opportunities", "Le plus d'occasions manquées"),

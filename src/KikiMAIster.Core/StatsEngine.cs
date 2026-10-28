@@ -195,6 +195,7 @@ public sealed class StatsEngine
                         case "orbs": s.OrbsGiven += h.Amount; break;
                         case "taken": s.TakenForAllies += h.Amount; break;
                         case "energySurplus": s.EnergySurplus += h.Amount; break;
+                        case "energyUseless": s.EnergyUseless += h.Amount; break;
                     }
                 });
                 break;

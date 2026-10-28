@@ -36,7 +36,7 @@ public static class Trophies
         // Mirror of the Bricklayer (v0.17.28): the least useless block (victory only).
         new("trophy.efficientBlock", s => s.UnusedBlock, LowerIsBetter: true),
         new("trophy.useless", s => s.UnusedBlock, Fun: true),
-        new("trophy.energySurplus", s => s.EnergySurplus, Fun: true),
+        new("trophy.energySurplus", s => s.EnergySurplus + s.EnergyUseless, Fun: true),
         new("trophy.missed", s => s.MissedTotal, Fun: true),
         new("trophy.friendly", s => s.FriendlyDamage + s.MissedByKind.GetValueOrDefault("allyBlockKept"), CoopOnly: true, Fun: true),
         new("trophy.deaths", s => s.Deaths, CoopOnly: true, Fun: true),

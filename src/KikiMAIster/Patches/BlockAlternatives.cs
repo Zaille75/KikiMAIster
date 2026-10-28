@@ -599,6 +599,9 @@ public static class BlockAlternatives
         // Pael's Tears gives energy next turn for energy left: energy spent on a useless card (at any time in the turn)
         // would have been left.
         var uselessPlays = UselessPlays(player);
+        // Energy spent for nothing this turn (v0.17.37): paid for a block that was not needed or a useless debuff.
+        var spentForNothing = uselessPlays.Sum(p => p.EnergySpent);
+        if (spentForNothing > 0) Capture.Emit(new HelpGiven(actor, "energyUseless", spentForNothing));
         if (energy == 0 && player.GetRelic<PaelsTears>() is { } tears && uselessPlays.FirstOrDefault() is { } useless)
             Capture.Emit(new MissedChance(actor, "paelsTears", new[] { $"Relic:{Capture.IdOf(tears)}", Key(useless.Card) }));
 
