@@ -356,7 +356,7 @@ public static class BlockAlternatives
             // An attack into Thorns is an alternative only if the block left would still have covered the Thorns damage.
             var alternative = state == null || play.HadOtherEffect || play.Ethereal ? null : play.UsefulCardsInHand.FirstOrDefault(c =>
                 !used.Contains(c) && state.Hand.Cards.Contains(c) && !KeptOnPurpose(c, combat) && Cost(c) <= budget && PlayableExceptEnergy(c) &&
-                ThornsDamage(c, creature) <= Math.Max(0, surplus));
+                ThornsDamage(c, creature) <= Math.Max(0, surplus) && !PunishedAttack(c));
             if (alternative != null) used.Add(alternative);
             ModLog.Info($"block play {play.Id}: other effect {play.HadOtherEffect}, ethereal {play.Ethereal}, energy budget {budget}, useful cards in hand when played: " +
                         $"[{string.Join(", ", play.UsefulCardsInHand.Select(c => Capture.IdOf(c)))}] → alternative: " +
@@ -436,7 +436,7 @@ public static class BlockAlternatives
         var blockCovered = player.Creature.Block >= IncomingDamage(player.Creature);
         // An Exhaust card (Feu follet…) is gone once played: keeping it for later is a choice (v0.17.18).
         bool WouldHelp(CardModel c) => Affordable(c) && !KeptOnPurpose(c, combat) && !(blockCovered && c.GainsBlock && c.Type == CardType.Skill) &&
-                                       !c.Keywords.Contains(CardKeyword.Exhaust);
+                                       !c.Keywords.Contains(CardKeyword.Exhaust) && !PunishedAttack(c);
         if (energy > 0 && !nothingToKill && hand.Any(WouldHelp) && Hook.ShouldPlayerResetEnergy(combat, player) &&
             player.GetRelic<PaelsTears>() == null)
         {
@@ -493,7 +493,7 @@ public static class BlockAlternatives
         {
             if (IsStatusOrCurse(c) || !PlayableExceptEnergy(c) || KeptOnPurpose(c, combat)) return false;
             if (!free && (!energyLost || !Affordable(c))) return false;
-            if (c.Type == CardType.Attack && (ThornsDamage(c, creature) > Math.Max(0, surplus) || !DealsDamage(c, combat))) return false;
+            if (c.Type == CardType.Attack && (ThornsDamage(c, creature) > Math.Max(0, surplus) || !DealsDamage(c, combat) || PunishedAttack(c))) return false;
             if (blockNeeded && !c.GainsBlock && !free && Cost(c) + blockCards.Min(Cost) > energy) return false;
             return true;
         }
@@ -748,6 +748,18 @@ public static class BlockAlternatives
     {
         card.CanPlay(out var reason, out _);
         return (reason & UnplayableReason.StarCostTooHigh) != UnplayableReason.None;
+    }
+
+    /// An attack the enemies punish like Thorns (v0.17.20): Personal Hive (Apicultueur) adds a Dazed to the deck per hit.
+    /// Single target: punished only if every enemy it could hit punishes and it would kill none of them; all enemies:
+    /// punished if any of them punishes (unless it kills every punishing one). Not playing it is then a choice.
+    private static bool PunishedAttack(CardModel card)
+    {
+        if (card.Type != CardType.Attack || card.CombatState is not { } cs) return false;
+        var enemies = cs.HittableEnemies.Where(e => e.HpDisplay == HpDisplay.Normal).ToList();
+        if (enemies.Count == 0) return false;
+        bool Punishes(Creature e) => e.HasPower<PersonalHivePower>() && EstimateDamage(card, e) < e.CurrentHp + e.Block;
+        return card.TargetType == TargetType.AllEnemies ? enemies.Any(Punishes) : enemies.All(Punishes);
     }
 
     private static int Cost(CardModel card) => Math.Max(0, card.EnergyCost.GetWithModifiers(CostModifiers.All));

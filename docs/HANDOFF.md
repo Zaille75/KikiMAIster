@@ -146,8 +146,8 @@ hotkey settings, chart history across Save & Quit.
   27 (Max's many "À l'attaque !" in Affaiblissements; then clear that record: `RecordBook.Clear("trophy.debuffs")`).
 - New trophy names (Culturiste, Peau sur les os) are proposals.
 - Solo Necrobinder run (v0.17.8, `logs/2026-10-28_v0.17.8_solo_necrobinder_15fights.log`, death fight 15 Ovicoptère):
-  no errors. Fixed: extra damage (Dégâts + / Permis) counted block and overkill (v0.17.19). Asked Zaille75: should
-  attacks into Personal Hive (Apicultueur: each hit adds Dazed) be excluded like Thorns from the energy / gâché checks?
+  no errors. Fixed: extra damage (Dégâts + / Permis) counted block and overkill (v0.17.19). Personal Hive
+  (Apicultueur) now treated like Thorns (v0.17.20, validated).
 - v0.17.4–0.17.6 (pet rules, Zaille75): debuff-saved pet HP count once the pet died and the owner lost HP; Déchaînement /
   Protecteur damage from Osty HP saved/given by an ally is Permis; Sacrifice block from ally-given Osty HP is "Armure
   permise" and what it stops is PV sauvés. Answered (v0.17.7): Ralenti stays in Choix; trophy names OK; self-debuffs

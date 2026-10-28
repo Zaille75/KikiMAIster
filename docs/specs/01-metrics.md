@@ -299,6 +299,10 @@ the player could already absorb, which is exactly your example. It is also easy 
     Death's Door, Evil Eye, I Am Invincible, Mad Science (block version, unless its rider does something). An attack is an alternative only if the player could afford the Thorns damage it causes: the
   block left at the end of the turn minus the incoming attack must cover it (Thorns × hits; on all enemies for an attack
   on all enemies, else the enemy with the least Thorns). Otherwise not playing it was right, and the block is useless.
+- **F7b (v0.17.20, Zaille75) — punishing enemies, like Thorns.** An attack on an enemy with Personal Hive (Apicultueur:
+  each hit adds a Dazed to the deck) is never counted as a card that should have been played (alternative of a wasted
+  block, unused energy, relic trigger): a single-target attack only when every enemy it could hit has it, an attack on
+  all enemies when any of them has it — unless the attack would kill those enemies.
 - **F5 (v0.4.6).** An **Ethereal** block card is never wasted either (not playing it would have lost it anyway).
 - **F9 (v0.17.0) — Plating (Blindage).** Plating gives its block at the end of the turn, and the amount is known in
   advance. Its layer counts as the **oldest** one: it absorbs first. So a block card the Plating made unnecessary (the
