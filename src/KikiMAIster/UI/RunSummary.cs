@@ -207,7 +207,7 @@ public static class RunSummary
                     Overlay.PlayerColor(w.Id)));
                 // Hovering the winning value shows every player's score (v0.17.0).
                 var value = Overlay.MakeLabel(Overlay.N(w.Value), Overlay.Text, HorizontalAlignment.Right);
-                value.TooltipText = Loc.T("run.others") + ":\n" + string.Join('\n', run
+                value.TooltipText = Loc.T("run.others") + ":\n" + string.Join('\n', run.Where(kv => c.CanWin(kv.Value))
                     .Select(kv => (Id: kv.Key, Value: c.Value(kv.Value)))
                     .OrderBy(x => c.LowerIsBetter ? x.Value : -x.Value).ThenBy(x => x.Id)
                     .Select(x => $"{engine.Players.GetValueOrDefault(x.Id)?.Name ?? x.Id.ToString(CultureInfo.InvariantCulture)}: {Overlay.N(x.Value)}"));

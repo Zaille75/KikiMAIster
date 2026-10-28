@@ -244,6 +244,8 @@ public static class Loc
         ["trophy.maxHpGained.tip"] = ("Most Max HP gained during the run", "Le plus de PV max gagnés pendant la partie"),
         ["trophy.maxHpLost"] = ("Wasting away", "Peau sur les os"),
         ["trophy.maxHpLost.tip"] = ("Most Max HP lost during the run (victory only)", "Le plus de PV max perdus pendant la partie (victoire seulement)"),
+        ["trophy.efficientBlock"] = ("Master builder", "Maître d'œuvre"),
+        ["trophy.efficientBlock.tip"] = ("Smallest share of useless block (% of the block made, at least 30 block; victory only)", "La plus petite part d'armure inutile (% de l'armure faite, au moins 30 d'armure ; victoire seulement)"),
         ["trophy.useless"] = ("Bricklayer", "Maçon du dimanche"),
         ["trophy.useless.tip"] = ("Most useless block", "Le plus d'armure inutile"),
         ["trophy.missed"] = ("Daydreamer", "Distrait"),

@@ -115,4 +115,22 @@ public class TrophyTests
         Assert.Null(book.Best("trophy.damage", coop: true, ascension: 10));
         Assert.Null(book.Best("trophy.damage", coop: true));
     }
+
+    [Fact]
+    public void MasterBuilder_SmallestUselessShare_AmongBlockers()
+    {
+        var c = Trophies.All.First(x => x.Key == "trophy.efficientBlock");
+        var run = new Dictionary<ulong, PlayerStats>
+        {
+            [1] = new() { BlockGainedSelf = 100, UselessBlock = 20 },
+            [2] = new() { BlockGainedSelf = 50, UselessBlock = 5 },
+            [3] = new() { BlockGainedSelf = 10 }, // too little block to compete
+        };
+        Assert.Equal((2UL, 10.0), Trophies.Winner(c, run));
+        var book = new RecordBook();
+        book.Add(run, Names, victory: false, "2026-10-28");
+        Assert.Null(book.Best("trophy.efficientBlock", coop: true));
+        book.Add(run, Names, victory: true, "2026-10-28");
+        Assert.Equal(10, book.Best("trophy.efficientBlock", coop: true)!.Value);
+    }
 }

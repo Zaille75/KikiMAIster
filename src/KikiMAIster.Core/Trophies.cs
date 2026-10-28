@@ -9,9 +9,11 @@ public static class Trophies
     /// LowerIsBetter: the smallest value wins (only counted for a victory, else an early defeat would win).
     /// CoopOnly: needs allies. Fun: a "shame" trophy (most wasted…), shown after the others.
     /// VictoryOnly: only counted (and shown) for a victory, like every LowerIsBetter category.
+    /// Eligible: who can win it (null = everyone).
     public sealed record Category(string Key, Func<PlayerStats, double> Value, bool LowerIsBetter = false, bool CoopOnly = false,
-        bool Fun = false, bool VictoryOnly = false)
+        bool Fun = false, bool VictoryOnly = false, Func<PlayerStats, bool>? Eligible = null)
     {
+        public bool CanWin(PlayerStats s) => Eligible?.Invoke(s) ?? true;
         public bool NeedsVictory => LowerIsBetter || VictoryOnly;
     }
 
@@ -31,6 +33,9 @@ public static class Trophies
         new("trophy.cards", s => s.CardsGiven, CoopOnly: true),
         new("trophy.untouched", s => s.HpLost, LowerIsBetter: true),
         new("trophy.maxHpGained", s => s.MaxHpGained),
+        // Mirror of the Bricklayer (v0.17.28): the smallest share of useless block, among players who made at least 30 block.
+        new("trophy.efficientBlock", s => Math.Round(100 * s.UnusedBlock / (s.BlockGainedSelf + s.BlockGivenToAllies)), LowerIsBetter: true,
+            Eligible: s => s.BlockGainedSelf + s.BlockGivenToAllies >= 30),
         new("trophy.useless", s => s.UnusedBlock, Fun: true),
         new("trophy.missed", s => s.MissedTotal, Fun: true),
         new("trophy.friendly", s => s.FriendlyDamage + s.MissedByKind.GetValueOrDefault("allyBlockKept"), CoopOnly: true, Fun: true),
@@ -42,7 +47,8 @@ public static class Trophies
     public static (ulong Id, double Value)? Winner(Category c, IReadOnlyDictionary<ulong, PlayerStats> run)
     {
         if (run.Count == 0 || (c.CoopOnly && run.Count < 2)) return null;
-        var ranked = run.Select(kv => (Id: kv.Key, Value: c.Value(kv.Value)));
+        var ranked = run.Where(kv => c.CanWin(kv.Value)).Select(kv => (Id: kv.Key, Value: c.Value(kv.Value))).ToList();
+        if (ranked.Count == 0) return null;
         var best = c.LowerIsBetter ? ranked.OrderBy(x => x.Value).ThenBy(x => x.Id).First()
             : ranked.OrderByDescending(x => x.Value).ThenBy(x => x.Id).First();
         return !c.LowerIsBetter && best.Value <= 0 ? null : best;
@@ -102,6 +108,7 @@ public sealed class RecordBook
                 if (c.CoopOnly && run.Count < 2) continue;
                 foreach (var (id, s) in run)
                 {
+                    if (!c.CanWin(s)) continue;
                     var v = c.Value(s);
                     if (!c.LowerIsBetter && v <= 0) continue;
                     var entry = new Entry(v, names.GetValueOrDefault(id, id.ToString(Inv)), date);
