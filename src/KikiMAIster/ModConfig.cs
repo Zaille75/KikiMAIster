@@ -20,6 +20,9 @@ public sealed class ModConfig
     /// Summary window position; negative = default (top center).
     public float SummaryX { get; set; } = -1;
     public float SummaryY { get; set; } = -1;
+    /// Settings window position; negative = next to the panel.
+    public float SettingsX { get; set; } = -1;
+    public float SettingsY { get; set; } = -1;
     /// Sections and columns hidden in the settings: "section:<key>" and "col:<section>:<column>".
     public HashSet<string> Hidden { get; set; } = new();
     /// Summary chart: per-round values instead of cumulative totals.
@@ -81,6 +84,8 @@ public sealed class ModConfig
                     case "autoSummary": c.AutoSummary = v == "true"; break;
                     case "summaryX": c.SummaryX = float.Parse(v, CultureInfo.InvariantCulture); break;
                     case "summaryY": c.SummaryY = float.Parse(v, CultureInfo.InvariantCulture); break;
+                    case "settingsX": c.SettingsX = Float(v, -1); break;
+                    case "settingsY": c.SettingsY = Float(v, -1); break;
                     case "hidden": c.Hidden = v.Split(',', StringSplitOptions.RemoveEmptyEntries).ToHashSet(); break;
                     case "chartPerRound": c.ChartPerRound = v == "true"; break;
                     case "hideZeroColumns": c.HideZeroColumns = v == "true"; break;
@@ -124,6 +129,7 @@ public sealed class ModConfig
                 $"scope={Scope}", $"opacity={Opacity.ToString(ci)}", $"scale={Scale.ToString(ci)}",
                 $"language={Language}", $"autoSummary={(AutoSummary ? "true" : "false")}",
                 $"summaryX={SummaryX.ToString(CultureInfo.InvariantCulture)}", $"summaryY={SummaryY.ToString(CultureInfo.InvariantCulture)}",
+                $"settingsX={SettingsX.ToString(ci)}", $"settingsY={SettingsY.ToString(ci)}",
                 $"hidden={string.Join(',', Hidden)}", $"chartPerRound={(ChartPerRound ? "true" : "false")}",
                 $"hideZeroColumns={(HideZeroColumns ? "true" : "false")}", $"showGroupLine={(ShowGroupLine ? "true" : "false")}",
                 $"compoOrder={CompoOrder}", $"compoDescending={(CompoDescending ? "true" : "false")}",

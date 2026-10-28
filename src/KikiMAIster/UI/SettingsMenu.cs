@@ -9,13 +9,33 @@ public static class SettingsMenu
     private static PanelContainer? _panel;
     private static VBoxContainer? _content;
     private static bool _rebuildPending;
+    private static bool _dragging;
 
     private static ModConfig Cfg => ModConfig.Current;
 
     public static void Attach(CanvasLayer layer)
     {
-        _panel = new PanelContainer { Visible = false };
+        // Dragged by its background (v0.17.12); where it was left is remembered.
+        _panel = new PanelContainer { Visible = false, MouseDefaultCursorShape = Control.CursorShape.Move };
         _panel.AddThemeStyleboxOverride("panel", Overlay.WindowStyle(Math.Max(Cfg.Opacity, 0.92f)));
+        _panel.GuiInput += e => Capture.Safe("SettingsMenu.Drag", () =>
+        {
+            switch (e)
+            {
+                case InputEventMouseButton { ButtonIndex: MouseButton.Left } mb:
+                    _dragging = mb.Pressed;
+                    if (!mb.Pressed)
+                    {
+                        Cfg.SettingsX = _panel.Position.X;
+                        Cfg.SettingsY = _panel.Position.Y;
+                        Cfg.Save();
+                    }
+                    break;
+                case InputEventMouseMotion mm when _dragging:
+                    _panel.Position += mm.Relative;
+                    break;
+            }
+        });
         _content = new VBoxContainer();
         _content.AddThemeConstantOverride("separation", 2);
         _panel.AddChild(_content);
@@ -45,8 +65,13 @@ public static class SettingsMenu
         }
         Rebuild();
         _panel.Visible = true;
-        // Next to the panel, on its right (or on its left when there is no room).
         var screen = _panel.GetViewportRect().Size;
+        if (Cfg.SettingsX >= 0)
+        {
+            _panel.Position = new Vector2(Math.Clamp(Cfg.SettingsX, 0, Math.Max(0, screen.X - 360)), Math.Clamp(Cfg.SettingsY, 0, Math.Max(0, screen.Y - 100)));
+            return;
+        }
+        // Next to the panel, on its right (or on its left when there is no room).
         var rect = Overlay.PanelRect ?? new Rect2(20, 160, 330, 100);
         var x = rect.End.X + 8;
         if (x + 360 > screen.X) x = Math.Max(0, rect.Position.X - 368);
@@ -72,13 +97,13 @@ public static class SettingsMenu
         header.AddChild(close);
         _content.AddChild(header);
 
-        // Language: auto (game language) / English / French.
+        // Language: English / French (the mod only speaks these two; until one is picked it follows the game).
         var lang = new HBoxContainer();
         lang.AddChild(Overlay.MakeLabel(Loc.T("settings.language"), Overlay.Text));
-        foreach (var (code, label) in new[] { ("auto", Loc.T("settings.auto")), ("en", "English"), ("fr", "Français") })
+        foreach (var (code, label) in new[] { ("en", "English"), ("fr", "Français") })
         {
             var b = Overlay.MakeButton(label);
-            b.AddThemeColorOverride("font_color", Cfg.Language == code ? Overlay.Accent : Overlay.Muted);
+            b.AddThemeColorOverride("font_color", Loc.French == (code == "fr") ? Overlay.Accent : Overlay.Muted);
             b.Pressed += () => Capture.Safe("SettingsMenu.Language", () =>
             {
                 Cfg.Language = code;
