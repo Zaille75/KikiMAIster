@@ -39,6 +39,7 @@ public static class CombatFlowPatches
         _combatOpen = false;
         DamagePatches.FlushPending();
         BlockAlternatives.ResolveCombat();
+        BlockAndPowerPatches.Reset();
         Capture.Emit(new CombatEnded(victory));
         RunHistoryPatches.Read(CurrentRun);
         Summary.LogCombat(Capture.Engine);
@@ -134,6 +135,7 @@ public static class CombatFlowPatches
             if (side != CombatSide.Player) return;
             DamagePatches.FlushPending();
             Capture.Emit(new RoundStarted(combatState.RoundNumber));
+            BlockAndPowerPatches.GiveNextTurnHelp();
         });
     }
 

@@ -91,11 +91,12 @@ public static class BlockAndPowerPatches
             if (power is StrengthPower && amount > 0 && power.Owner.IsPlayer && Capture.CardPlays.TryPeek(out var play) &&
                 play.Card is Dominate && play.Target is { IsEnemy: true } target)
                 Capture.Emit(new StrengthBorrowed(Capture.ToActor(power.Owner), Capture.ToActor(target), ModelDb.GetId<VulnerablePower>().Entry, (double)amount));
-            // Esquisse & co.: cards or energy promised to an ally for their next turn are help given now (v0.17.1); the
-            // draw or energy itself, next turn, has no acting player and is not counted again.
+            // Esquisse & co.: cards or energy promised to an ally for their next turn. Counted as help only when that turn
+            // comes (the fight goes on and the ally is alive, v0.17.2); the draw or energy itself has no acting player
+            // and is not counted again.
             if (amount > 0 && power is DrawCardsNextTurnPower or EnergyNextTurnPower && power.Owner.IsPlayer &&
                 applier is { IsPlayer: true } helper && helper != power.Owner)
-                Capture.Emit(new HelpGiven(Capture.ToActor(helper), power is DrawCardsNextTurnPower ? "cards" : "energy", (double)amount));
+                NextTurnHelp.Add((helper, power.Owner, power is DrawCardsNextTurnPower ? "cards" : "energy", (double)amount));
             var id = Capture.IdOf(power);
             var value = (double)amount;
             // À l'attaque ! marks an enemy so that Osty's hits summon: the game calls it a debuff, but it does nothing
@@ -178,7 +179,23 @@ public static class BlockAndPowerPatches
     /// before the new amount is set, so the history alone cannot tell a first application from added turns.
     private static readonly HashSet<PowerModel> Stacking = new(ReferenceEqualityComparer.Instance);
 
-    public static void Reset() => Stacking.Clear();
+    /// Help promised for the ally's next turn (Esquisse…): giver, ally, kind, amount.
+    private static readonly List<(Creature Giver, Creature Ally, string Kind, double Amount)> NextTurnHelp = new();
+
+    /// The players' next turn starts: the promised help is given to allies still alive.
+    public static void GiveNextTurnHelp()
+    {
+        foreach (var (giver, ally, kind, amount) in NextTurnHelp.Where(h => h.Ally.IsAlive))
+            Capture.Emit(new HelpGiven(Capture.ToActor(giver), kind, amount));
+        NextTurnHelp.Clear();
+    }
+
+    /// Combat start or end: help promised for a turn that never came is dropped.
+    public static void Reset()
+    {
+        Stacking.Clear();
+        NextTurnHelp.Clear();
+    }
 
     [HarmonyPatch(typeof(PowerCmd), nameof(PowerCmd.ModifyAmount))]
     public static class PowerModify
