@@ -346,6 +346,8 @@ public static class BlockAlternatives
     public static void ResolveTurn(ICombatState combat)
     {
         ResolveMissedChances(combat);
+        foreach (var player in combat.Players.Where(p => p.Creature.IsAlive))
+            Capture.Safe("free cards", () => FreeCardsLeft(combat, player));
         var used = new HashSet<CardModel>();
         // Newest block plays first (v0.17.25): block is used oldest first, so the last block played is the one most likely
         // left unused — it gets the alternative (3 Défense with one Neutralisation in hand: the third one is gâché).
@@ -358,6 +360,7 @@ public static class BlockAlternatives
             // An attack into Thorns is an alternative only if the block left would still have covered the Thorns damage.
             var alternative = state == null || play.HadOtherEffect || play.Ethereal ? null : play.UsefulCardsInHand.FirstOrDefault(c =>
                 !used.Contains(c) && state.Hand.Cards.Contains(c) && !KeptOnPurpose(c, combat) && Cost(c) <= budget && PlayableExceptEnergy(c) &&
+                !IsFree(c) && // a free card left in hand is its own miss (FreeCardsLeft), not the reason a block was wasted
                 ThornsDamage(c, creature) <= Math.Max(0, surplus) && !PunishedAttack(c));
             if (alternative != null) used.Add(alternative);
             ModLog.Info($"block play {play.Id}: other effect {play.HadOtherEffect}, ethereal {play.Ethereal}, energy budget {budget}, useful cards in hand when played: " +
@@ -510,6 +513,23 @@ public static class BlockAlternatives
             if (MissedRelicTrigger(relic, plays, hand, energy, WorthPlaying))
                 Capture.Emit(new MissedChance(actor, "relic", new[] { $"Relic:{Capture.IdOf(relic)}" }));
         }
+    }
+
+    /// A card that costs nothing to play (0 energy, no Stars, not X).
+    private static bool IsFree(CardModel c) => !c.EnergyCost.CostsX && Cost(c) == 0 && c.CurrentStarCost <= 0 && !c.HasStarCostX;
+
+    /// A useful free card (attack, or skill/power without block: Neutralisation…) left in hand at the end of the turn is a
+    /// misplay counted in "Gâché" (v0.17.26), unless it is kept on purpose (Retain, Stars, Exhaust), punished (Thorns
+    /// the block cannot afford, Personal Hive), deals no damage, or there is nothing left to hit.
+    private static void FreeCardsLeft(ICombatState combat, Player player)
+    {
+        if (player.PlayerCombatState is not { } st || RealEnemies(combat).Count == 0) return;
+        var creature = player.Creature;
+        var surplus = creature.Block - IncomingDamage(creature);
+        foreach (var c in st.Hand.Cards.Where(c => IsFree(c) && IsUseful(c) && !IsStatusOrCurse(c) && PlayableExceptEnergy(c) &&
+                                                   !KeptOnPurpose(c, combat) && !c.Keywords.Contains(CardKeyword.Exhaust) && !PunishedAttack(c) &&
+                                                   (c.Type != CardType.Attack || (DealsDamage(c, combat) && ThornsDamage(c, creature) <= Math.Max(0, surplus)))))
+            Capture.Emit(new MissedChance(Capture.ToActor(player), "freeCard", new[] { Key(c) }));
     }
 
     /// Cards the player paid energy for this turn that did nothing useful: a block card with no other effect whose block

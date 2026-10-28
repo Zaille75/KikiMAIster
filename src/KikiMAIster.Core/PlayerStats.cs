@@ -95,8 +95,8 @@ public sealed class PlayerStats
     public double MissedChoices => WeakAttacks + new[] { "smallBlock", "penNib", "orichalcum", "order", "orderBlock", "orderSlow", "growth", "tent" }.Sum(k => MissedByKind.GetValueOrDefault(k));
     /// Block card plays whose block was wasted (gâché, rule F3), counted once per play (saved with the run).
     public double WastedPlayCount { get; set; }
-    /// "Gâché" misplays: wasted block card plays (growing cards never played moved to Choix in v0.17.7).
-    public double MissedWasted => WastedPlayCount;
+    /// "Gâché" misplays: wasted block card plays + useful free cards left in hand (v0.17.26; growing cards: Choix).
+    public double MissedWasted => WastedPlayCount + MissedByKind.GetValueOrDefault("freeCard");
     /// Every missed opportunity counted once (trophies).
     public double MissedTotal => MissedLethals + MissedWasted + MissedChoices + MissedByKind.GetValueOrDefault("relic") + MissedByKind.GetValueOrDefault("paelsTears") +
                                  MissedByKind.GetValueOrDefault("potion") + (MissedByKind.GetValueOrDefault("blockKept") > 0 ? 1 : 0) +
