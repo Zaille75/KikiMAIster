@@ -273,7 +273,8 @@ the player could already absorb, which is exactly your example. It is also easy 
   - At the end of the player's turn, each block **card** played that turn is checked. It "had an alternative" if an
     attack card that was in hand when it was played is still in hand, is playable (only energy aside), and costs no more
     than the block card's energy + the energy left at the end of the turn. One attack can serve as the alternative of
-    only one block card.
+    only one block card. **v0.17.25:** the alternatives go to the newest block plays first (block is used oldest first, so the newest
+    is the one left unused).
   - Unused block from a card with an alternative → **wasted** ("gâché"), **only if that card's block absorbed nothing**
     (v0.16.8): block that stopped part of the damage was needed (without it, HP or the pet's HP would have been lost),
     so its leftover is overshoot → useless. Everything else → **useless** ("inutile"):

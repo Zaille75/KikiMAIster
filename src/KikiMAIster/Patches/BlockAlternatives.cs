@@ -347,7 +347,9 @@ public static class BlockAlternatives
     {
         ResolveMissedChances(combat);
         var used = new HashSet<CardModel>();
-        foreach (var play in ThisTurn.Where(p => p.GaveBlock))
+        // Newest block plays first (v0.17.25): block is used oldest first, so the last block played is the one most likely
+        // left unused — it gets the alternative (3 Défense with one Neutralisation in hand: the third one is gâché).
+        foreach (var play in ThisTurn.Where(p => p.GaveBlock).Reverse())
         {
             var state = play.Owner.PlayerCombatState;
             var budget = play.EnergySpent + (state?.Energy ?? 0);
