@@ -89,7 +89,7 @@ public sealed class PlayerStats
     public Dictionary<string, double> MissedByKind { get; } = new();
     public List<MissedEntry> MissedEntries { get; } = new();
     /// Worse choices: weak attacks + smaller block, Pen Nib on a weak attack, block below Orichalcum, growing card not played.
-    public double MissedChoices => WeakAttacks + new[] { "smallBlock", "penNib", "orichalcum", "order", "orderBlock", "orderSlow", "growth" }.Sum(k => MissedByKind.GetValueOrDefault(k));
+    public double MissedChoices => WeakAttacks + new[] { "smallBlock", "penNib", "orichalcum", "order", "orderBlock", "orderSlow", "growth", "tent" }.Sum(k => MissedByKind.GetValueOrDefault(k));
     /// Block card plays whose block was wasted (gâché, rule F3), counted once per play (saved with the run).
     public double WastedPlayCount { get; set; }
     /// "Gâché" misplays: wasted block card plays (growing cards never played moved to Choix in v0.17.7).

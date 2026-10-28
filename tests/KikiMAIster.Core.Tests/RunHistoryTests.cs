@@ -129,4 +129,14 @@ public class RunHistoryTests : TestBase
         var general = Compositions.PerPlayer(runs, new ulong[] { 1, 2, 3 }, 3, groupOnly: false, null);
         Assert.Equal(2, general[(1, "IRONCLAD")].Count);
     }
+
+    [Fact]
+    public void OutsideCombat_OnlyTheRunCounts()
+    {
+        Engine.Handle(new CombatEnded(true));
+        Engine.Handle(new MissedChance(A, "tent", new[] { "Relic:MINIATURE_TENT", "RestSite:SMITH" }));
+        Assert.Equal(1, Engine.Get(Scope.Run, IdA).MissedChoices);
+        Assert.Equal(0, Engine.LastCombat!.Stats[IdA].MissedChoices);
+        Assert.Equal(0, Engine.Get(Scope.Run, IdA).MissedEntries[^1].Combat);
+    }
 }

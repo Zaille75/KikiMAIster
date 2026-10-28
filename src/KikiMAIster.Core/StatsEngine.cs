@@ -822,7 +822,8 @@ public sealed class StatsEngine
         Each(playerId, s =>
         {
             PlayerStats.Add(s.MissedByKind, kind, amount);
-            s.MissedEntries.Add(new MissedEntry(Round, kind, args, amount, _combatNumber));
+            // Outside combat (campfire): no fight or round to show.
+            s.MissedEntries.Add(InCombat ? new MissedEntry(Round, kind, args, amount, _combatNumber) : new MissedEntry(0, kind, args, amount));
         });
 
     /// A block card kept in hand while HP was then lost to enemies: the HP it could have saved (spec §E0).
@@ -850,6 +851,13 @@ public sealed class StatsEngine
 
     private void Each(ulong playerId, Action<PlayerStats> update)
     {
+        // Outside combat (campfire, events, map) only the run counts: the combat scope still holds the last finished
+        // combat (v0.17.14).
+        if (!InCombat)
+        {
+            update(Stats(Scope.Run, playerId));
+            return;
+        }
         // Live events never go to the frozen previous turn.
         foreach (var scope in _stats.Keys)
             if (scope != Scope.PreviousTurn) update(Stats(scope, playerId));

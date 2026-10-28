@@ -863,6 +863,9 @@ public static class Overlay
             lines.Add($"{At(m.Combat, m.Round)} · " + (m.Kind == "energy" && m.Args.Count > 1
                 // Unused energy: "2 energy left unused (Strike, Bash could be played)".
                 ? string.Format(Loc.T("why.energyCards"), m.Args[0], string.Join(", ", m.Args.Skip(1).Select(GameNames.Of)))
+                // Miniature Tent: "Tente miniature : parti sans Repos, Forge".
+                : m.Kind == "tent" && m.Args.Count > 1
+                ? string.Format(Loc.T("why.tent"), GameNames.Of(m.Args[0]), string.Join(", ", m.Args.Skip(1).Select(GameNames.Of)))
                 : string.Format(Loc.T($"why.{m.Kind}"), m.Args.Select(a => (object)(a.Contains(':') ? GameNames.Of(a) : a)).ToArray())));
         var tip = lines.Count == 0 ? (s.MissedTotal > 0 ? "" : Loc.T("tip.none")) : string.Join('\n', lines);
         double K(string kind) => s.MissedByKind.GetValueOrDefault(kind);
@@ -881,7 +884,8 @@ public static class Overlay
 
     /// "T9" in a fight's tab, "C3 T9" (fight 3, round 9) in the Run tab.
     private static string At(int combat, int round) =>
-        CurrentScope == Scope.Run && combat > 0 ? string.Format(Loc.T("why.atRun"), combat, round) : string.Format(Loc.T("why.at"), round);
+        combat == 0 && round == 0 ? Loc.T("why.outside")
+        : CurrentScope == Scope.Run && combat > 0 ? string.Format(Loc.T("why.atRun"), combat, round) : string.Format(Loc.T("why.at"), round);
 
     private static IReadOnlyList<Cell> CoopRow(ulong id, PlayerStats s)
     {
