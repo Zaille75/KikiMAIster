@@ -119,6 +119,10 @@ public enum DebuffCredit { CurrentTurn, RemainingTurns, Stacks, Direct }
 /// due to the pet's current HP (Déchaînement) or max HP (Protecteur); PetHp = its current HP at the hit.
 public sealed record PetHpAttack(Actor Pet, double FromCurrentHp, double FromMaxHp, double PetHp) : StatEvent;
 
+/// The block just gained by Receiver was computed from its pet's max HP (Sacrifice: 3 × max HP, v0.17.6): the allies
+/// who gave the pet HP enabled that block, in the same proportions.
+public sealed record PetHpBlock(Actor Receiver) : StatEvent;
+
 /// A player gave Strength to another player (Blaze…): those points count for the giver for the rest of the combat.
 public sealed record StrengthGiven(Actor Player, Actor Giver, double Amount) : StatEvent;
 

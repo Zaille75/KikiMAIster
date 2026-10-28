@@ -279,4 +279,17 @@ public class PetHpAttackTests : TestBase
         Engine.Handle(new PetHpAttack(petB, 0, 8, 8));
         Assert.Equal(3.5, Combat(IdC).DamageEnabledAllies, 6);
     }
+
+    [Fact]
+    public void Sacrifice_BlockFromPetHpGivenByAnAlly_IsEnabledThenSaved()
+    {
+        Engine.Handle(new PetHpGiven(B, 6, B));
+        Engine.Handle(new PetHpGiven(C, 2, B));
+        Engine.Handle(new BlockGained(B, B, 24, Source.Card("SACRIFICE"), PlayId: 3));
+        Engine.Handle(new PetHpBlock(B));
+        Assert.Equal(6, Combat(IdC).BlockEnabledForAllies, 6);
+        EnemyHits(B, 8, 0);
+        Assert.Equal(2, Combat(IdC).SavedForAllies, 6);
+        Assert.Equal(8, Combat(IdB).PreventedOwnBlock, 6);
+    }
 }

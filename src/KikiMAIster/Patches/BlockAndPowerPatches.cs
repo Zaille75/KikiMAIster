@@ -57,6 +57,9 @@ public static class BlockAndPowerPatches
             PendingGiver.Remove(receiver);
             var giver = call?.Giver != null ? Capture.ToActor(call.Giver) : Capture.ToActor(receiver);
             Capture.Emit(new BlockGained(Capture.ToActor(receiver), giver, amount, call?.Source ?? Source.Unknown, call?.PlayId ?? 0));
+            // Sacrifice: its block comes from the pet's max HP (allies who gave those HP enabled it).
+            if (call?.Source is { Kind: SourceKind.Card } src && src.Id == ModelDb.GetId<Sacrifice>().Entry)
+                Capture.Emit(new PetHpBlock(Capture.ToActor(receiver)));
             BlockAlternatives.OnBlockGained(call?.PlayId ?? 0, amount);
         });
     }

@@ -91,6 +91,7 @@ public sealed class StatsEngine
             }
             case DebuffEffect x: OnDebuffEffect(x); break;
             case PetHpAttack a when a.Pet.IsPlayerSide && a.Pet.PlayerId != 0: OnPetHpAttack(a); break;
+            case PetHpBlock b when b.Receiver.Kind == ActorKind.Player: OnPetHpBlock(b.Receiver.PlayerId); break;
             case StrengthBorrowed b: OnStrengthBorrowed(b); break;
             case StrengthUsed u: OnStrengthUsed(u); break;
             case StrengthGiven g when g.Amount > 0 && g.Player.Kind == ActorKind.Player && g.Giver.IsPlayerSide:
@@ -375,6 +376,13 @@ public sealed class StatsEngine
             ConsumeBlock(owner, d.Blocked, (layer, taken) =>
             {
                 layer.Absorbed += taken;
+                // Block an ally enabled (Sacrifice from pet HP they gave): what it stopped is HP they saved.
+                foreach (var (ally, share) in layer.Enablers ?? new Dictionary<ulong, double>())
+                    Each(ally, s =>
+                    {
+                        s.SavedByEnabledBlock += taken * share;
+                        PlayerStats.Add(s.SavedPerAlly, AllyKey(owner), taken * share);
+                    });
                 Each(layer.GiverId, s =>
                 {
                     if (layer.GiverId == owner) s.PreventedOwnBlock += taken;
@@ -616,6 +624,19 @@ public sealed class StatsEngine
         }
         if (a.FromMaxHp > 0 && given != null && givenTotal > 0)
             foreach (var (giver, hp) in given) Enable(giver, a.FromMaxHp * hp / givenTotal, "Pet");
+    }
+
+    /// Sacrifice: block = 3 × the pet's max HP. The allies who gave the pet HP enabled their share of it; the pet is gone.
+    private void OnPetHpBlock(ulong owner)
+    {
+        var given = _petHp.GetValueOrDefault(owner);
+        var total = given?.Values.Sum() ?? 0;
+        _petHp.Remove(owner);
+        if (given == null || total <= 0 || Ledger(owner).Last is not { } layer) return;
+        var shares = given.Where(kv => kv.Key != owner && kv.Value > 0).ToDictionary(kv => kv.Key, kv => kv.Value / total);
+        if (shares.Count == 0) return;
+        layer.Enablers = shares;
+        foreach (var (ally, share) in shares) Each(ally, s => s.BlockEnabledForAllies += layer.Amount * share);
     }
 
     /// Avoided damage with no hit after it (the hit was cancelled): only what the block would not have stopped.

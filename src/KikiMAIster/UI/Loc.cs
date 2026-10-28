@@ -117,6 +117,8 @@ public static class Loc
         ["tip.helpBy"] = ("By", "Par"),
         ["col.deaths"] = ("Deaths", "Morts"),
         ["col.chifumi"] = ("Chifumi", "Chifumi"),
+        ["col.blockEnabled"] = ("Block enabled", "Armure permise"),
+        ["tip.col.blockEnabled"] = ("Block allies gained thanks to you (Sacrifice from pet HP you gave); what it stopped counts in HP saved", "Armure gagnée par les alliés grâce à toi (Sacrifice avec des PV de familier que tu as donnés) ; ce qu'elle arrête compte dans PV sauvés"),
         ["tip.col.chifumi"] = ("Rock-paper-scissors for a relic several players picked: won / fought", "Pierre-feuille-ciseaux pour une relique choisie par plusieurs joueurs : gagnés / disputés"),
         ["tip.col.blockGiven"] = ("Block given to allies", "Armure donnée aux alliés"),
         ["tip.col.saved"] = ("HP saved for allies: your block on them, your Weak/Strength down, your heals", "PV sauvés aux alliés : ton armure sur eux, tes Faiblesse/Force −, tes soins"),

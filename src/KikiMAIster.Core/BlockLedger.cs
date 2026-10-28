@@ -8,11 +8,16 @@ public sealed class BlockLedger
         public double Amount { get; set; }
         /// Damage this layer already absorbed (its leftover is then overshoot, never a misplay).
         public double Absorbed { get; set; }
+        /// Allies who made this block possible, with their share (Sacrifice: block from pet max HP they gave, v0.17.6).
+        public Dictionary<ulong, double>? Enablers { get; set; }
     }
 
     private readonly LinkedList<Layer> _layers = new();
 
     public double Total => _layers.Sum(l => l.Amount);
+
+    /// The newest layer (null when empty).
+    public Layer? Last => _layers.Last?.Value;
 
     /// First: the layer counts as the oldest one (block known in advance, e.g. Plating at the end of the turn).
     public void Add(ulong giverId, double amount, int round, int playId = 0, bool first = false)

@@ -90,6 +90,10 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
   Vulnerable… are shared in proportion) is "Permis" for the allies behind those HP: HP an ally's debuffs saved on the pet
   during its current life (current HP only), then the rest by who gave the pet its HP (summon, heal, max HP: same
   proportions as the damage the pet absorbs, rule §D2). The owner's own share credits nobody.
+- **Block from the pet's HP (v0.17.6, Zaille75):** Sacrifice gives 3 × Osty's **max** HP as block. The allies who gave
+  Osty HP enabled their share of that block (same proportions): Coop column **"Armure permise"**, and what that block
+  then stops counts in their "PV sauvés" (the owner keeps the full block in his own protection, like Permis for
+  damage). HP saved by debuffs are current HP: they do not change max HP, so they never change Sacrifice's block.
 
 ## C. Protection & support
 

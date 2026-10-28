@@ -104,7 +104,11 @@ public sealed class PlayerStats
     /// The same help per ally (key: the ally's player id): HP saved for them, extra damage they dealt thanks to this player.
     public Dictionary<string, double> SavedPerAlly { get; } = new();
     public Dictionary<string, double> EnabledPerAlly { get; } = new();
-    public double SavedForAllies => PreventedForAllies + PreventedByDebuffsAllies + HealingAllies + PetAbsorbedForAllies;
+    public double SavedForAllies => PreventedForAllies + PreventedByDebuffsAllies + HealingAllies + PetAbsorbedForAllies + SavedByEnabledBlock;
+    /// Block an ally could gain thanks to this player (Sacrifice: from pet HP this player gave, v0.17.6), and the damage
+    /// that block then stopped (part of HP saved for allies).
+    public double BlockEnabledForAllies { get; set; }
+    public double SavedByEnabledBlock { get; set; }
     public double Deaths { get; set; }
     /// Help that is not damage or block: energy, cards (drawn, created, brought to hand), orbs given to allies, and
     /// damage taken instead of allies (Intercept).

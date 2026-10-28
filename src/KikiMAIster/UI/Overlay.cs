@@ -67,7 +67,7 @@ public static class Overlay
             return cols.Count > 0 ? cols : new[] { "col.noDebuff" };
         }, s => s.DebuffsApplied.Values.Sum(t => t.Stacks)),
         new("missed", MissedRow, MissedColumnsShown, s => -(s.MissedTotal * 100 + s.MissedByKind.GetValueOrDefault("energy"))),
-        new("coop", CoopRow, () => Visible("coop", new[] { "col.blockGiven", "col.saved", "col.takenForAllies", "col.enabled", "col.energyGiven", "col.cardsGiven", "col.friendly", "col.deaths", "col.chifumi" }),
+        new("coop", CoopRow, () => Visible("coop", new[] { "col.blockGiven", "col.blockEnabled", "col.saved", "col.takenForAllies", "col.enabled", "col.energyGiven", "col.cardsGiven", "col.friendly", "col.deaths", "col.chifumi" }),
             s => s.SavedForAllies + s.DamageEnabledAllies + s.BlockGivenToAllies * 0.01, CoopOnly: true),
         new("rest", RestRow, () => _restColumns.Count > 0 ? _restColumns : new[] { "col.noRest" }, s => s.RestSiteChoices.Values.Sum(), RunOnly: true),
         new("other", OtherRow, () => Visible("other", new[] { "col.drawn", "col.played", "col.exhausted", "col.discarded", "col.potions" }),
@@ -81,7 +81,7 @@ public static class Overlay
         ("protection", new[] { "col.byBlock", "col.byPet", "col.useless", "col.petHp" }),
         ("debuffs", new[] { "col.extraDamage", "col.avoided" }),
         ("missed", MissedColumns),
-        ("coop", new[] { "col.blockGiven", "col.saved", "col.takenForAllies", "col.enabled", "col.energyGiven", "col.cardsGiven", "col.friendly", "col.deaths", "col.chifumi" }),
+        ("coop", new[] { "col.blockGiven", "col.blockEnabled", "col.saved", "col.takenForAllies", "col.enabled", "col.energyGiven", "col.cardsGiven", "col.friendly", "col.deaths", "col.chifumi" }),
         ("rest", Array.Empty<string>()),
         ("other", new[] { "col.drawn", "col.played", "col.exhausted", "col.discarded", "col.potions" }),
     };
@@ -880,7 +880,8 @@ public static class Overlay
             new Cell("col.cardsGiven", N(s.CardsGiven), tip),
             new Cell("col.friendly", N(s.FriendlyDamage), tip),
             new Cell("col.deaths", N(s.Deaths), tip),
-            new Cell("col.chifumi", $"{N(s.ChifumiWon)}/{N(s.ChifumiPlayed)}", tip)
+            new Cell("col.chifumi", $"{N(s.ChifumiWon)}/{N(s.ChifumiPlayed)}", tip),
+            new Cell("col.blockEnabled", N(s.BlockEnabledForAllies), tip)
         };
     }
 
@@ -913,7 +914,7 @@ public static class Overlay
             $"{kv.Value.HealingSelf + kv.Value.HealingAllies:F1}:{kv.Value.PetHpGiven:F1}:{kv.Value.WastedPlays.Count}:{kv.Value.Kills}:" +
             $"{kv.Value.DamageEnabledSelf + kv.Value.DamageEnabledAllies:F1}:{kv.Value.MissedLethals}:{kv.Value.WeakAttacks}:{kv.Value.EnergyGiven + kv.Value.CardsGiven + kv.Value.OrbsGiven + kv.Value.TakenForAllies:F1}:{kv.Value.MissedEntries.Count}:{kv.Value.Deaths}:" +
             $"{kv.Value.CardsDrawn + kv.Value.CardsPlayed + kv.Value.CardsExhausted + kv.Value.CardsDiscarded + kv.Value.PotionsUsed}:" +
-            $"{kv.Value.MaxHpGained}:{kv.Value.MaxHpLost}:{kv.Value.RestSiteChoices.Values.Sum()}:{kv.Value.RestSiteChoices.Count}:{kv.Value.ChifumiWon}:{kv.Value.ChifumiPlayed}")) +
+            $"{kv.Value.MaxHpGained}:{kv.Value.MaxHpLost}:{kv.Value.RestSiteChoices.Values.Sum()}:{kv.Value.RestSiteChoices.Count}:{kv.Value.ChifumiWon}:{kv.Value.ChifumiPlayed}:{kv.Value.BlockEnabledForAllies:F1}:{kv.Value.SavedForAllies:F1}")) +
         $"|{Cfg.HideZeroColumns}|{Cfg.ShowGroupLine}|{string.Join(',', Cfg.Detached)}";
 
     internal static string N(double v) => Math.Round(v).ToString("0", CultureInfo.InvariantCulture);
