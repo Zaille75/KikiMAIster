@@ -434,7 +434,9 @@ public static class BlockAlternatives
         // Cards kept on purpose (Retain, Star cost) are left out: not playing them is a choice (spec §E0, v0.17.0).
         // So is a block card when the block already covers the incoming attack (v0.17.1).
         var blockCovered = player.Creature.Block >= IncomingDamage(player.Creature);
-        bool WouldHelp(CardModel c) => Affordable(c) && !KeptOnPurpose(c, combat) && !(blockCovered && c.GainsBlock && c.Type == CardType.Skill);
+        // An Exhaust card (Feu follet…) is gone once played: keeping it for later is a choice (v0.17.18).
+        bool WouldHelp(CardModel c) => Affordable(c) && !KeptOnPurpose(c, combat) && !(blockCovered && c.GainsBlock && c.Type == CardType.Skill) &&
+                                       !c.Keywords.Contains(CardKeyword.Exhaust);
         if (energy > 0 && !nothingToKill && hand.Any(WouldHelp) && Hook.ShouldPlayerResetEnergy(combat, player) &&
             player.GetRelic<PaelsTears>() == null)
         {
