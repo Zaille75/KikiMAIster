@@ -146,6 +146,20 @@ public sealed class PlayerStats
     public double HpLostOutside { get; set; }
     /// HP healed outside fights (events, campfires, relics…, v0.17.35).
     public double HealedOutside { get; set; }
+    /// HP lost / healed by events just before the fight they start (v0.17.36), already in the totals above; keys: floors seen.
+    public double PreFightHpLost { get; set; }
+    public double PreFightHealed { get; set; }
+    public Dictionary<string, double> PreFightFloors { get; } = new();
+    /// Gold and curses over the run (v0.17.36, run scope, from the game's map history).
+    public double GoldGained { get; set; }
+    public double GoldSpent { get; set; }
+    public double GoldLost { get; set; }
+    public double GoldStolen { get; set; }
+    public double GoldPeak { get; set; }
+    public double GoldNow { get; set; }
+    public double CursesGained { get; set; }
+    public double CursesRemoved { get; set; }
+    public double Purchases { get; set; }
     /// Both by kind of floor: "event", "restSite", "other".
     public Dictionary<string, double> HpLostOutsideBy { get; } = new();
     public Dictionary<string, double> HealedOutsideBy { get; } = new();

@@ -10,7 +10,8 @@ Summary by version line. The detailed notes of every version are in [docs/specs/
 - **Compositions:** every composition listed, sorted by games or win rate; "this group of players" stats from the
   game's run history; a table of who played what (2 players: my character × my partner's; 3–4 players: each player ×
   character); never-played / never-won suggestions with a random pick; opens by itself in the lobby, can be folded.
-- **New stats:** useless block split into avoidable / unavoidable ("29/12"), HP lost and healed outside fights, campfire choices, Max HP gained / lost (trophies Culturiste and Peau sur les os), rock-paper-scissors
+- **New stats:** useless block split into avoidable / unavoidable ("29/12"), HP lost and healed outside fights, gold and curses (trophies Chercheur d'or, Panier percé, Radin,
+  Chat noir), campfire choices, Max HP gained / lost (trophies Culturiste and Peau sur les os), rock-paper-scissors
   for relics across runs, self-inflicted damage, block enabled for allies (Sacrifice), campfire heals for allies.
 - **Pets:** HP saved on a pet (by debuffs or block) only count once it dies and its owner loses HP; attacks that grow
   with the pet's HP credit the allies behind those HP.

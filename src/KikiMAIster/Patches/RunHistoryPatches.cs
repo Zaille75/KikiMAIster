@@ -3,7 +3,9 @@ using HarmonyLib;
 using KikiMAIster.Core;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.TreasureRelicPicking;
+using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Saves.Runs;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
 
@@ -21,7 +23,7 @@ public static class RunHistoryPatches
     {
         if (run == null) return;
         var totals = run.Players.ToDictionary(p => p.NetId, _ => (Gained: 0, Lost: 0, Choices: new Dictionary<string, double>(),
-            HpLost: new Dictionary<string, double>(), Healed: new Dictionary<string, double>()));
+            HpLost: new Dictionary<string, double>(), Healed: new Dictionary<string, double>(), Eco: new double[9]));
         foreach (var act in run.MapPointHistory)
             foreach (var point in act)
             {
@@ -37,18 +39,54 @@ public static class RunHistoryPatches
                     t.Lost += entry.MaxHpLost;
                     if (!fight && entry.DamageTaken > 0) t.HpLost[kind] = t.HpLost.GetValueOrDefault(kind) + entry.DamageTaken;
                     if (!fight && entry.HpHealed > 0) t.Healed[kind] = t.Healed.GetValueOrDefault(kind) + entry.HpHealed;
+                    // Gold and curses (v0.17.36): gained, spent, lost, stolen, peak, now, curses gained / removed, purchases.
+                    t.Eco[0] += entry.GoldGained;
+                    t.Eco[1] += entry.GoldSpent;
+                    t.Eco[2] += entry.GoldLost;
+                    t.Eco[3] += entry.GoldStolen;
+                    t.Eco[4] = Math.Max(t.Eco[4], entry.CurrentGold);
+                    t.Eco[5] = entry.CurrentGold;
+                    t.Eco[6] += entry.CardsGained.Count(IsCurse);
+                    t.Eco[7] += entry.CardsRemoved.Count(IsCurse);
+                    t.Eco[8] += entry.BoughtRelics.Count + entry.BoughtPotions.Count + entry.BoughtColorless.Count;
                     foreach (var choice in entry.RestSiteChoices) t.Choices[choice] = t.Choices.GetValueOrDefault(choice) + 1;
                     totals[entry.PlayerId] = t;
                 }
             }
         var signature = string.Join(';', totals.OrderBy(kv => kv.Key).Select(kv =>
-            $"{kv.Key}:{kv.Value.Gained}:{kv.Value.Lost}:{Sig(kv.Value.HpLost)}:{Sig(kv.Value.Healed)}:{string.Join(',', kv.Value.Choices.OrderBy(r => r.Key, StringComparer.Ordinal).Select(r => $"{r.Key}={r.Value}"))}"));
+            $"{kv.Key}:{kv.Value.Gained}:{kv.Value.Lost}:{Sig(kv.Value.HpLost)}:{Sig(kv.Value.Healed)}:{string.Join(',', kv.Value.Eco)}:{string.Join(',', kv.Value.Choices.OrderBy(r => r.Key, StringComparer.Ordinal).Select(r => $"{r.Key}={r.Value}"))}"));
         if (signature == _signature) return;
         _signature = signature;
         foreach (var p in run.Players)
         {
             var t = totals[p.NetId];
-            Capture.Emit(new RunHistoryRead(Capture.ToActor(p), t.Gained, t.Lost, t.Choices, t.HpLost, t.Healed));
+            var e = t.Eco;
+            Capture.Emit(new RunHistoryRead(Capture.ToActor(p), t.Gained, t.Lost, t.Choices, t.HpLost, t.Healed,
+                new RunEconomy(e[0], e[1], e[2] + e[3], e[3], e[4], e[5], e[6], e[7], e[8])));
+        }
+    });
+
+    /// A curse card, except the Ascender's Bane every player gets from the ascension level (not a choice).
+    private static bool IsCurse(SerializableCard card) =>
+        card.Id is { } id && id.Entry != "ASCENDERS_BANE" && ModelDb.GetByIdOrNull<CardModel>(id)?.Type == CardType.Curse;
+
+    /// An event that starts a fight (heal 22 then fight…): the history counts the whole floor as a fight, so the event's
+    /// own HP change is read when the fight starts: HP now minus HP at the end of the previous floor (v0.17.36).
+    public static void PreFight(IRunState run) => Capture.Safe("RunHistory.PreFight", () =>
+    {
+        if (run.CurrentMapPointHistoryEntry is not { } current || !current.Rooms.Any(r => r.RoomType == RoomType.Event)) return;
+        var points = run.MapPointHistory.SelectMany(a => a).ToList();
+        var index = points.IndexOf(current);
+        if (index < 1) return;
+        var previous = points[index - 1];
+        foreach (var player in run.Players)
+        {
+            var before = previous.GetEntry(player.NetId).CurrentHp;
+            var delta = player.Creature.CurrentHp - before;
+            ModLog.Info($"event before the fight, floor {run.TotalFloor}: player {player.NetId} HP {before} → {player.Creature.CurrentHp}");
+            if (delta == 0) continue;
+            Capture.Emit(new PreFightEvent(Capture.ToActor(player), $"{RunStore.KeyOf(run)}:{run.TotalFloor.ToString(CultureInfo.InvariantCulture)}",
+                Math.Max(0, -delta), Math.Max(0, delta)));
         }
     });
 

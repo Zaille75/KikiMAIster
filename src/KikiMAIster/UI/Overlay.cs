@@ -75,6 +75,7 @@ public static class Overlay
         new("coop", CoopRow, () => Visible("coop", new[] { "col.blockGiven", "col.blockEnabled", "col.saved", "col.takenForAllies", "col.enabled", "col.energyGiven", "col.cardsGiven", "col.friendly", "col.deaths", "col.chifumi" }),
             s => s.SavedForAllies + s.DamageEnabledAllies + s.BlockGivenToAllies * 0.01, CoopOnly: true),
         new("rest", RestRow, () => _restColumns.Count > 0 ? _restColumns : new[] { "col.noRest" }, s => s.RestSiteChoices.Values.Sum(), RunOnly: true),
+        new("gold", GoldRow, () => Visible("gold", new[] { "col.goldGained", "col.goldSpent", "col.goldLost", "col.goldNow", "col.cursesGained", "col.cursesRemoved" }), s => s.GoldGained, RunOnly: true),
         new("other", OtherRow, () => Visible("other", new[] { "col.drawn", "col.played", "col.exhausted", "col.discarded", "col.potions", "col.energySurplus" }),
             s => s.CardsPlayed),
     };
@@ -88,6 +89,7 @@ public static class Overlay
         ("missed", MissedColumns),
         ("coop", new[] { "col.blockGiven", "col.blockEnabled", "col.saved", "col.takenForAllies", "col.enabled", "col.energyGiven", "col.cardsGiven", "col.friendly", "col.deaths", "col.chifumi" }),
         ("rest", Array.Empty<string>()),
+        ("gold", new[] { "col.goldGained", "col.goldSpent", "col.goldLost", "col.goldNow", "col.cursesGained", "col.cursesRemoved" }),
         ("other", new[] { "col.drawn", "col.played", "col.exhausted", "col.discarded", "col.potions", "col.energySurplus" }),
     };
 
@@ -817,6 +819,21 @@ public static class Overlay
             .Append(new Cell("col.noRest", "-", tip)).ToArray();
     }
 
+    /// Gold and curses over the run (v0.17.36), from the game's map history.
+    private static IReadOnlyList<Cell> GoldRow(ulong id, PlayerStats s)
+    {
+        var tip = Line(("tip.goldPeak", s.GoldPeak, false), ("tip.goldStolen", s.GoldStolen, false), ("tip.purchases", s.Purchases, false));
+        return new[]
+        {
+            new Cell("col.goldGained", N(s.GoldGained), tip),
+            new Cell("col.goldSpent", N(s.GoldSpent), tip),
+            new Cell("col.goldLost", N(s.GoldLost), tip),
+            new Cell("col.goldNow", N(s.GoldNow), tip),
+            new Cell("col.cursesGained", N(s.CursesGained), tip),
+            new Cell("col.cursesRemoved", N(s.CursesRemoved), tip)
+        };
+    }
+
     private static IReadOnlyList<Cell> ProtectionRow(ulong id, PlayerStats s)
     {
         // What the table does not show (v0.17.17): block gained / given / received, each block source, pet, relics…
@@ -967,7 +984,7 @@ public static class Overlay
             $"{kv.Value.HealingSelf + kv.Value.HealingAllies:F1}:{kv.Value.PetHpGiven:F1}:{kv.Value.WastedPlays.Count}:{kv.Value.Kills}:" +
             $"{kv.Value.DamageEnabledSelf + kv.Value.DamageEnabledAllies:F1}:{kv.Value.MissedLethals}:{kv.Value.WeakAttacks}:{kv.Value.EnergyGiven + kv.Value.CardsGiven + kv.Value.OrbsGiven + kv.Value.TakenForAllies:F1}:{kv.Value.MissedEntries.Count}:{kv.Value.Deaths}:" +
             $"{kv.Value.CardsDrawn + kv.Value.CardsPlayed + kv.Value.CardsExhausted + kv.Value.CardsDiscarded + kv.Value.PotionsUsed + kv.Value.EnergySurplus}:" +
-            $"{kv.Value.MaxHpGained}:{kv.Value.MaxHpLost}:{kv.Value.RestSiteChoices.Values.Sum()}:{kv.Value.RestSiteChoices.Count}:{kv.Value.ChifumiWon}:{kv.Value.ChifumiPlayed}:{kv.Value.BlockEnabledForAllies:F1}:{kv.Value.SavedForAllies:F1}")) +
+            $"{kv.Value.MaxHpGained}:{kv.Value.MaxHpLost}:{kv.Value.HpLostOutside}:{kv.Value.HealedOutside}:{kv.Value.GoldGained}:{kv.Value.GoldSpent}:{kv.Value.GoldLost}:{kv.Value.GoldNow}:{kv.Value.CursesGained}:{kv.Value.CursesRemoved}:{kv.Value.UnavoidableBlock:F1}:{kv.Value.RestSiteChoices.Values.Sum()}:{kv.Value.RestSiteChoices.Count}:{kv.Value.ChifumiWon}:{kv.Value.ChifumiPlayed}:{kv.Value.BlockEnabledForAllies:F1}:{kv.Value.SavedForAllies:F1}")) +
         $"|{Cfg.HideZeroColumns}|{Cfg.ShowGroupLine}|{string.Join(',', Cfg.Detached)}";
 
     /// Rounded, never "-0" (a tiny negative rounding error).

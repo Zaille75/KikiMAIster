@@ -139,6 +139,11 @@ Optional roadmap items (only if asked): JSON export, end-of-run Totals / Per act
 hotkey settings, chart history across Save & Quit.
 
 ## Open topics for the next conversation
+- **Event outcomes not tracked yet (audit v0.17.35, decision pending with Zaille75):** cards gained / removed, upgrades,
+  transforms, enchantments, relics gained / lost / traded, potions gained / thrown away, which event option was chosen,
+  who decided in the 8 shared co-op events (JungleMazeAdventure, DenseVegetation, MorphicGrove, PunchOff,
+  TheLanternKey, BattlewornDummy, FakeMerchant, WarHistorianRepy). All in the game's map history. Gold and curses done
+  in v0.17.36; HP lost / healed in v0.17.34–36.
 - **v0.17.1:** the log (`logs/2026-10-27_v0.16.8_coop_regent_necrobinder_after_crash.log`) only covers the session
   after the crash (fights 9–15: it was overwritten at the restart). Fixed from it: 10, 15, 22, 23, 27. Answered 13:
   run totals were restored from the file saved after fight 8, so the crashed attempt never reached the Partie stats.

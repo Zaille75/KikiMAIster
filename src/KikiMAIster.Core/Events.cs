@@ -165,7 +165,17 @@ public sealed record ChifumiFought(string FightId, Actor Winner, IReadOnlyList<A
 /// (option id → times), HP lost and healed outside fights by kind of floor ("event", "restSite", "other"; v0.17.34–35).
 /// Replaces the previous values (the history is complete each time).
 public sealed record RunHistoryRead(Actor Player, double MaxHpGained, double MaxHpLost, IReadOnlyDictionary<string, double> RestSiteChoices,
-    IReadOnlyDictionary<string, double>? HpLostOutside = null, IReadOnlyDictionary<string, double>? HealedOutside = null) : StatEvent;
+    IReadOnlyDictionary<string, double>? HpLostOutside = null, IReadOnlyDictionary<string, double>? HealedOutside = null,
+    RunEconomy? Economy = null) : StatEvent;
+
+/// Gold and curses over the run so far, from the game's map history (v0.17.36). Lost: lost + stolen. Peak: most gold held
+/// at the end of a floor. Now: gold held at the end of the last floor. Purchases: relics, potions and colorless cards bought.
+public sealed record RunEconomy(double GoldGained, double GoldSpent, double GoldLost, double GoldStolen, double GoldPeak, double GoldNow,
+    double CursesGained, double CursesRemoved, double Purchases);
+
+/// HP lost or healed by an event just before the fight it starts (heal 22 then fight…, v0.17.36): the player's HP when the
+/// fight starts minus their HP at the end of the previous floor. Key: the floor, counted once (fight reloaded…).
+public sealed record PreFightEvent(Actor Player, string Key, double Lost, double Healed) : StatEvent;
 
 /// A missed lethal turn, kept for its explanation (not saved with the run). Combat: the fight's number in the run.
 public sealed record MissedLethalTurn(int Round, IReadOnlyList<string> Cards, int EnemiesHp, int Combat = 0);

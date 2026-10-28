@@ -41,6 +41,11 @@ public static class Trophies
         new("trophy.friendly", s => s.FriendlyDamage + s.MissedByKind.GetValueOrDefault("allyBlockKept"), CoopOnly: true, Fun: true),
         new("trophy.deaths", s => s.Deaths, CoopOnly: true, Fun: true),
         new("trophy.maxHpLost", s => s.MaxHpLost, Fun: true, VictoryOnly: true),
+        // Gold and curses (v0.17.36).
+        new("trophy.goldGained", s => s.GoldGained),
+        new("trophy.goldSpent", s => s.GoldSpent, Fun: true),
+        new("trophy.goldLeft", s => s.GoldNow, Fun: true),
+        new("trophy.curses", s => s.CursesGained, Fun: true),
     };
 
     /// The winner of a category (null when nobody scored, or for a tie at 0).

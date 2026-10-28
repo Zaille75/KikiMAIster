@@ -119,6 +119,7 @@ public static class CombatFlowPatches
             BlockAlternatives.Reset();
             BlockAndPowerPatches.Reset();
             _combatOpen = true;
+            RunHistoryPatches.PreFight(runState);
             if (combatState?.Encounter is { } encounter)
                 Capture.Safe("rest before the boss", () => RestSitePatches.OnCombatStarted(runState, encounter.RoomType));
             KikiMAIster.UI.Overlay.EnsureAttached("combat start");

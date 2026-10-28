@@ -219,9 +219,33 @@ public sealed class StatsEngine
                 s.HpLostOutside = s.HpLostOutsideBy.Values.Sum();
                 s.HealedOutsideBy.Clear();
                 foreach (var (k, v) in h.HealedOutside ?? new Dictionary<string, double>()) s.HealedOutsideBy[k] = v;
-                s.HealedOutside = s.HealedOutsideBy.Values.Sum();
+                AddPreFight(s);
+                if (h.Economy is { } eco)
+                {
+                    s.GoldGained = eco.GoldGained;
+                    s.GoldSpent = eco.GoldSpent;
+                    s.GoldLost = eco.GoldLost;
+                    s.GoldStolen = eco.GoldStolen;
+                    s.GoldPeak = eco.GoldPeak;
+                    s.GoldNow = eco.GoldNow;
+                    s.CursesGained = eco.CursesGained;
+                    s.CursesRemoved = eco.CursesRemoved;
+                    s.Purchases = eco.Purchases;
+                }
                 s.RestSiteChoices.Clear();
                 foreach (var (k, v) in h.RestSiteChoices) s.RestSiteChoices[k] = v;
+                break;
+            }
+            case PreFightEvent p when p.Player.IsPlayerSide && p.Player.PlayerId != 0:
+            {
+                var s = Stats(Scope.Run, p.Player.PlayerId);
+                if (!s.PreFightFloors.TryAdd(p.Key, 1)) break;
+                s.PreFightHpLost += p.Lost;
+                s.PreFightHealed += p.Healed;
+                if (p.Lost > 0) PlayerStats.Add(s.HpLostOutsideBy, "event", p.Lost);
+                if (p.Healed > 0) PlayerStats.Add(s.HealedOutsideBy, "event", p.Healed);
+                s.HpLostOutside += p.Lost;
+                s.HealedOutside += p.Healed;
                 break;
             }
             case BlockPlayResolved r:
@@ -229,6 +253,15 @@ public sealed class StatsEngine
                 if (r.Choice != null) _choices[r.PlayId] = (Round, r.Choice);
                 break;
         }
+    }
+
+    /// The history skips floors with a fight: what an event did just before its fight is added on top (v0.17.36).
+    private static void AddPreFight(PlayerStats s)
+    {
+        if (s.PreFightHpLost > 0) PlayerStats.Add(s.HpLostOutsideBy, "event", s.PreFightHpLost);
+        if (s.PreFightHealed > 0) PlayerStats.Add(s.HealedOutsideBy, "event", s.PreFightHealed);
+        s.HpLostOutside = s.HpLostOutsideBy.Values.Sum();
+        s.HealedOutside = s.HealedOutsideBy.Values.Sum();
     }
 
     private void OnRunStarted()
