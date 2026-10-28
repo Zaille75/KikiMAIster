@@ -63,7 +63,7 @@ public static class BlockAndPowerPatches
                 Capture.Emit(new PetHpBlock(Capture.ToActor(receiver)));
             BlockAlternatives.OnBlockGained(call?.PlayId ?? 0, amount);
             if (call?.Source is { Kind: SourceKind.Orb } orb && orb.Id == ModelDb.GetId<FrostOrb>().Entry && receiver.Player is { } owner)
-                BlockAlternatives.OnOrbTriggered(owner, null);
+                BlockAlternatives.OnOrbTriggered(owner, null, "orderBlock");
         });
     }
 

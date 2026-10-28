@@ -81,6 +81,7 @@ public static class Loc
         ["why.order"] = ("{0} before {1}: {2} damage lost", "{0} avant {1} : {2} dégâts perdus"),
         ["why.orderBlock"] = ("{0} before {1}: {2} block lost", "{0} avant {1} : {2} armure perdue"),
         ["why.orderPotion"] = ("{0} before {1}: {2} damage wasted (the potion alone killed it)", "{0} avant {1} : {2} dégâts inutiles (la potion seule le tuait)"),
+        ["why.orderDark"] = ("{0} before {1}: {2} damage not stored by the Dark orb", "{0} avant {1} : {2} dégâts de moins stockés par l'orbe de ténèbres"),
         ["why.orderSlow"] = ("{0} before {1}: {2} damage lost (Slow)", "{0} avant {1} : {2} dégâts perdus (Ralenti)"),
         ["why.at"] = ("T{0}", "T{0}"),
         ["why.outside"] = ("Campfire", "Feu de camp"),

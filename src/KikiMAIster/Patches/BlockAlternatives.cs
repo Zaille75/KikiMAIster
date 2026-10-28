@@ -55,9 +55,10 @@ public static class BlockAlternatives
         public List<(Creature Target, int Raw, int Slow)> Hits { get; } = new();
         /// Number of times this play gave block (Dexterity counts once per gain).
         public int BlockGains { get; set; }
-        /// Orbs this play triggered (evoke or passive) that Focus boosts: Lightning hits (with their enemy) and Frost
-        /// block (no enemy), for the wrong-order check of a later Focus (v0.17.32).
-        public List<Creature?> OrbTriggers { get; } = new();
+        /// Orbs this play triggered (evoke or passive) that Focus boosts, for the wrong-order check of a later Focus
+        /// (v0.17.32): Lightning / Glass hits ("order", with their enemy), Frost block ("orderBlock"), Dark charging
+        /// ("orderDark": its stored damage). Plasma gives energy, which Focus does not change.
+        public List<(Creature? Enemy, string Kind)> OrbTriggers { get; } = new();
     }
 
     /// Damage or block a later card or potion would have added to an earlier play of the turn (wrong order, spec §E0).
@@ -176,14 +177,12 @@ public static class BlockAlternatives
                     foreach (var g in e.Hits.GroupBy(h => h.Target))
                         OrderLosses.Add(new OrderLoss(e, boost, "order", g.Key, (double)amount * g.Count()));
                 break;
-            // Focus gained after orbs fired this turn (Potion de focalisation after an evoke): each Lightning hit lost
-            // that much damage, each Frost trigger that much block (v0.17.32).
+            // Focus gained after orbs fired this turn (Potion de focalisation after an evoke): each orb hit lost that much
+            // damage, each Frost trigger that much block, each Dark charge that much stored damage (v0.17.32).
             case FocusPower when power.Owner == player.Creature:
                 foreach (var e in earlier)
-                    foreach (var enemy in e.OrbTriggers)
-                        OrderLosses.Add(enemy != null
-                            ? new OrderLoss(e, boost, "order", enemy, (double)amount)
-                            : new OrderLoss(e, boost, "orderBlock", null, (double)amount));
+                    foreach (var (enemy, kind) in e.OrbTriggers)
+                        OrderLosses.Add(new OrderLoss(e, boost, kind, enemy, (double)amount));
                 break;
             case DexterityPower when power.Owner == player.Creature:
                 foreach (var e in earlier.Where(p => p.GaveBlock && p.BlockGains > 0 && !p.HadOtherEffect))
@@ -245,7 +244,10 @@ public static class BlockAlternatives
         {
             var (early, boost, kind) = g.Key;
             double lost;
-            if (kind is "order" or "orderSlow")
+            // Dark orb charged: the damage it stores is lost whatever the enemies left.
+            if (kind == "orderDark")
+                lost = g.Sum(o => o.Extra);
+            else if (kind is "order" or "orderSlow")
                 lost = g.GroupBy(o => o.Enemy!).Sum(e => e.Key.IsAlive ? Math.Min(e.Sum(o => o.Extra), e.Key.CurrentHp + e.Key.Block) : 0);
             else
             {
@@ -283,10 +285,11 @@ public static class BlockAlternatives
         }
     }
 
-    /// An orb Focus boosts fired during the player's own card play (Lightning on an enemy, Frost block: null).
-    public static void OnOrbTriggered(Player owner, Creature? enemy)
+    /// An orb Focus boosts fired during the player's own card play. Kind: "order" (hit on that enemy), "orderBlock"
+    /// (Frost block), "orderDark" (Dark orb charged).
+    public static void OnOrbTriggered(Player owner, Creature? enemy, string kind = "order")
     {
-        if (InProgress.TryPeek(out var play) && play != null && play.Owner == owner) play.OrbTriggers.Add(enemy);
+        if (InProgress.TryPeek(out var play) && play != null && play.Owner == owner) play.OrbTriggers.Add((enemy, kind));
     }
 
     public static void OnBlockGained(int playId, int amount)

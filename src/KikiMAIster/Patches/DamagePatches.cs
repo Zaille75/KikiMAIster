@@ -185,7 +185,10 @@ public static class DamagePatches
         if (card is Unleash or Protector && dealer is { IsPet: true } pet && target.IsEnemy && r.UnblockedDamage > 0)
             Capture.Safe("pet HP attack", () => ReportPetHpAttack(card, pet, r.UnblockedDamage));
         if (card != null) BlockAlternatives.OnHit(card, target, r.BlockedDamage + r.UnblockedDamage, dealer);
-        if (source is { Kind: SourceKind.Orb } orb && orb.Id == ModelDb.GetId<LightningOrb>().Entry && target.IsEnemy && dealer?.Player is { } orbOwner)
+        // Orb hits Focus boosts (Lightning, Glass). A Dark orb's evoke deals what it stored before: Focus gained now
+        // would not change it (its charging is checked in DarkCharged).
+        if (source is { Kind: SourceKind.Orb } orb && (orb.Id == ModelDb.GetId<LightningOrb>().Entry || orb.Id == ModelDb.GetId<GlassOrb>().Entry) &&
+            target.IsEnemy && dealer?.Player is { } orbOwner)
             BlockAlternatives.OnOrbTriggered(orbOwner, target);
     }
 
@@ -251,5 +254,13 @@ public static class DamagePatches
         // HP lost count as self-inflicted, from allies or from enemies (v0.17.7).
         else if (!target.IsEnemy && power.Applier != null) applier = power.Applier;
         return call with { DotPowerId = Capture.IdOf(power), DotApplier = applier };
+    }
+
+    /// A Dark orb charging (its passive) during a card play: a later Focus would have stored more damage (v0.17.32).
+    [HarmonyPatch(typeof(DarkOrb), nameof(DarkOrb.Passive))]
+    public static class DarkCharged
+    {
+        public static void Prefix(DarkOrb __instance) => Capture.Safe("DarkOrb.Passive", () =>
+            BlockAlternatives.OnOrbTriggered(__instance.Owner, null, "orderDark"));
     }
 }
