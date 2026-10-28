@@ -76,10 +76,13 @@ public static class BlockAlternatives
     private static readonly HashSet<CardModel> GrowingAffordable = new(ReferenceEqualityComparer.Instance);
     private static readonly HashSet<CardModel> GrowingPlayed = new(ReferenceEqualityComparer.Instance);
     private static readonly List<OrderLoss> OrderLosses = new();
+    /// Cards the player chose this turn that lowered their own Strength (Amitié: −2 Strength for +1 energy), and by how much.
+    private static readonly List<(Play Play, double Loss)> StrengthDrops = new();
 
     public static void Reset()
     {
         OrderLosses.Clear();
+        StrengthDrops.Clear();
         ThisTurn.Clear();
         InProgress.Clear();
         FrontHand.Clear();
@@ -126,6 +129,14 @@ public static class BlockAlternatives
     /// player chose or a potion, after plays of the same turn it would have boosted (and while it was already in hand).
     private static void CheckOrder(PowerModel power, decimal amount, bool stacked)
     {
+        // A card lowering its player's own Strength (Amitié): attacks played after it, that were already in hand, lose
+        // that much per hit (v0.17.15); checked when they hit (OnHit).
+        if (amount < 0 && power is StrengthPower && InProgress.TryPeek(out var dropping) && dropping != null &&
+            power.Owner == dropping.Owner.Creature && Capture.CallingModelType() is { } dropCaller && typeof(CardModel).IsAssignableFrom(dropCaller))
+        {
+            StrengthDrops.Add((dropping, (double)-amount));
+            return;
+        }
         if (amount <= 0 || power is not (VulnerablePower or StrengthPower or DexterityPower)) return;
         InProgress.TryPeek(out var play);
         Player? player;
@@ -170,11 +181,15 @@ public static class BlockAlternatives
     }
 
     /// A hit of the card play in progress on an enemy (for the wrong-order check).
-    public static void OnHit(CardModel card, Creature target, int raw)
+    public static void OnHit(CardModel card, Creature target, int raw, Creature? dealer = null)
     {
         if (raw <= 0 || !target.IsEnemy || !InProgress.TryPeek(out var play) || play == null || play.Card != card) return;
         var slow = target.GetPower<SlowPower>() is { } power ? (int)power.DynamicVars["SlowAmount"].BaseValue : -1;
         play.Hits.Add((target, raw, slow));
+        // Hit by the player after a Strength drop it could have been played before (Osty does not use Strength).
+        if (dealer != play.Owner.Creature) return;
+        foreach (var (drop, loss) in StrengthDrops.Where(d => d.Play.Owner == play.Owner && d.Play.HandAtPlay.Contains(card)))
+            OrderLosses.Add(new OrderLoss(drop, Key(card), "order", target, Math.Min(loss, raw)));
     }
 
     /// Slow (Bygone Effigy): each card played this turn makes the enemy take 10% more attack damage. A non-attack card
@@ -213,6 +228,7 @@ public static class BlockAlternatives
             Capture.Emit(new MissedChance(Capture.ToActor(early.Owner), kind, new[] { Key(early.Card), boost, N(amount) }));
         }
         OrderLosses.Clear();
+        StrengthDrops.Clear();
     }
 
     /// A real attack hit was increased by Vulnerable on this enemy: the play that applied it did something.

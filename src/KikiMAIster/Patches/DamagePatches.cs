@@ -169,7 +169,7 @@ public static class DamagePatches
         if (card != null && target.IsEnemy && r.UnblockedDamage > 0) CreditHelpers(card, dealer, target, r.UnblockedDamage);
         if (card is Unleash or Protector && dealer is { IsPet: true } pet && target.IsEnemy && r.UnblockedDamage > 0)
             Capture.Safe("pet HP attack", () => ReportPetHpAttack(card, pet, r.UnblockedDamage));
-        if (card != null) BlockAlternatives.OnHit(card, target, r.BlockedDamage + r.UnblockedDamage);
+        if (card != null) BlockAlternatives.OnHit(card, target, r.BlockedDamage + r.UnblockedDamage, dealer);
     }
 
     /// Damage of a card an ally created for the dealer (Blade Symphony, Largesse, Outrage…), or of the extra plays an
