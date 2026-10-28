@@ -48,12 +48,33 @@ public static class DebuffEffectPatches
     /// Set while the mod computes its own damage previews (missed lethal…), which must never be reported.
     public static bool Computing;
 
+    // The two game branches: the beta passes the CardPlay to damage modifiers, the main branch does not.
+#if GAME_DEFAULT
+    private static decimal Mult(AbstractModel m, Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? card, CardPlay? _) =>
+        m.ModifyDamageMultiplicative(target, amount, props, dealer, card);
+    private static decimal Additive(AbstractModel m, Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? card, CardPlay? _) =>
+        m.ModifyDamageAdditive(target, amount, props, dealer, card);
+#else
+    private static decimal Mult(AbstractModel m, Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? card, CardPlay? play) =>
+        m.ModifyDamageMultiplicative(target, amount, props, dealer, card, play);
+    private static decimal Additive(AbstractModel m, Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? card, CardPlay? play) =>
+        m.ModifyDamageAdditive(target, amount, props, dealer, card, play);
+#endif
+
     [HarmonyPatch(typeof(Hook), nameof(Hook.ModifyDamage))]
     public static class ModifyDamage
     {
+#if GAME_DEFAULT
+        // The main branch has no CardPlay in damage modifiers.
+        public static void Postfix(Creature? target, Creature? dealer, ValueProp props, CardModel? cardSource,
+            CardPreviewMode previewMode, decimal __result, ref IEnumerable<AbstractModel> modifiers)
+        {
+            CardPlay? cardPlay = null;
+#else
         public static void Postfix(Creature? target, Creature? dealer, ValueProp props, CardModel? cardSource, CardPlay? cardPlay,
             CardPreviewMode previewMode, decimal __result, ref IEnumerable<AbstractModel> modifiers)
         {
+#endif
             if (Computing || previewMode != CardPreviewMode.None || target == null || dealer == null) return;
             var mods = modifiers;
             if (mods is not ICollection<AbstractModel> { Count: > 0 }) return;
@@ -64,7 +85,7 @@ public static class DebuffEffectPatches
                 var damage = (double)__result;
                 // Vulnerable multiplier of this hit (1 if none): the other effects are measured before it.
                 var vulnFactor = mods.OfType<VulnerablePower>().Where(v => v.Owner == target)
-                    .Select(v => (double)v.ModifyDamageMultiplicative(target, __result, props, dealer, cardSource, cardPlay))
+                    .Select(v => (double)Mult(v, target, __result, props, dealer, cardSource, cardPlay))
                     .DefaultIfEmpty(1).First();
                 if (vulnFactor <= 0) vulnFactor = 1;
                 // Bully: +ExtraDamage per Vulnerable stack, shared by the players whose Vulnerable turns are on the target.
@@ -83,7 +104,7 @@ public static class DebuffEffectPatches
                         // Vulnerable on an enemy: extra damage for the player (or pet) hitting it.
                         case VulnerablePower v when v.Owner == target && target.IsEnemy && target.HpDisplay == HpDisplay.Normal:
                         {
-                            var factor = (double)v.ModifyDamageMultiplicative(target, __result, props, dealer, cardSource, cardPlay);
+                            var factor = (double)Mult(v, target, __result, props, dealer, cardSource, cardPlay);
                             if (factor > 1)
                             {
                                 Add(effects, target, v, dealer, damage - damage / factor, offense: true, fifo: true);
@@ -94,7 +115,7 @@ public static class DebuffEffectPatches
                         // Weak on an enemy attacking a player or pet: damage it did not deal.
                         case WeakPower w when w.Owner == dealer && dealer.IsEnemy:
                         {
-                            var factor = (double)w.ModifyDamageMultiplicative(target, __result, props, dealer, cardSource, cardPlay);
+                            var factor = (double)Mult(w, target, __result, props, dealer, cardSource, cardPlay);
                             // The game drops the fraction of the final damage: 6 × 0.75 = 4.5 hits for 4, so Weak avoided 2.
                             if (factor is > 0 and < 1) Add(effects, dealer, w, target, Math.Floor(damage / factor) - Math.Floor(damage), offense: false, fifo: true);
                             break;
@@ -120,7 +141,7 @@ public static class DebuffEffectPatches
                         // Intercept: the interceptor takes its allies' hits (multiplier = 1 + covered allies).
                         case InterceptPower ip when ip.Owner == target && dealer.IsEnemy:
                         {
-                            var factor = (double)ip.ModifyDamageMultiplicative(target, __result, props, dealer, cardSource, cardPlay);
+                            var factor = (double)Mult(ip, target, __result, props, dealer, cardSource, cardPlay);
                             if (factor > 1) effects.Add(new HelpGiven(Capture.ToActor(target), "taken", damage - damage / factor));
                             break;
                         }
@@ -128,14 +149,14 @@ public static class DebuffEffectPatches
                         case TankPower tp when tp.Owner == target && dealer.IsEnemy &&
                                                target.CombatState?.GetTeammatesOf(target).Any(t => t != target && t.IsAlive && t.IsPlayer) == true:
                         {
-                            var factor = (double)tp.ModifyDamageMultiplicative(target, __result, props, dealer, cardSource, cardPlay);
+                            var factor = (double)Mult(tp, target, __result, props, dealer, cardSource, cardPlay);
                             if (factor > 1) effects.Add(new HelpGiven(Capture.ToActor(target), "taken", damage - damage / factor));
                             break;
                         }
                         // …and its allies (Guarded) take 50% less: HP saved for them by the Tank's player.
                         case GuardedPower g when g.Owner == target && dealer.IsEnemy && g.Applier is { IsPlayer: true } guard && guard != target:
                         {
-                            var factor = (double)g.ModifyDamageMultiplicative(target, __result, props, dealer, cardSource, cardPlay);
+                            var factor = (double)Mult(g, target, __result, props, dealer, cardSource, cardPlay);
                             if (factor is > 0 and < 1)
                                 effects.Add(new DebuffEffect(Capture.ToActor(target), Capture.IdOf(g), Capture.ToActor(target), Math.Floor(damage / factor) - Math.Floor(damage),
                                     Offense: false, Credit: DebuffCredit.Direct, Applier: Capture.ToActor(guard)));
@@ -155,8 +176,8 @@ public static class DebuffEffectPatches
         private static void AddApplied(List<StatEvent> effects, PowerModel p, Creature applier, Creature target, Creature dealer,
             ValueProp props, CardModel? cardSource, CardPlay? cardPlay, decimal result, double vulnFactor)
         {
-            var factor = (double)p.ModifyDamageMultiplicative(target, result, props, dealer, cardSource, cardPlay);
-            var additive = (double)p.ModifyDamageAdditive(target, result, props, dealer, cardSource, cardPlay);
+            var factor = (double)Mult(p, target, result, props, dealer, cardSource, cardPlay);
+            var additive = (double)Additive(p, target, result, props, dealer, cardSource, cardPlay);
             var damage = (double)result;
             var dealerSide = Capture.ToActor(dealer);
             var offense = (p.Owner == target && target.IsEnemy && target.HpDisplay == HpDisplay.Normal && dealerSide.IsPlayerSide) ||

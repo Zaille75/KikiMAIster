@@ -279,22 +279,22 @@ public static class BlockAlternatives
     public static void OnPlayStarted(CardPlay cardPlay)
     {
         if (IsGrowing(cardPlay.Card)) GrowingPlayed.Add(cardPlay.Card);
-        if (!TurnPlays.TryGetValue(cardPlay.Player, out var counts)) TurnPlays[cardPlay.Player] = counts = new();
+        if (!TurnPlays.TryGetValue(Capture.PlayerOf(cardPlay), out var counts)) TurnPlays[Capture.PlayerOf(cardPlay)] = counts = new();
         counts[cardPlay.Card.Type] = counts.GetValueOrDefault(cardPlay.Card.Type) + 1;
-        var hand = cardPlay.Player.PlayerCombatState?.Hand.Cards;
+        var hand = Capture.PlayerOf(cardPlay).PlayerCombatState?.Hand.Cards;
         if (cardPlay.IsAutoPlay || hand == null)
         {
             InProgress.Push(null);
             return;
         }
         // Not checked at turn start: the hand before this first card is still the front hand.
-        if (!FrontHand.ContainsKey(cardPlay.Player))
-            FrontHand[cardPlay.Player] = FindLethal(cardPlay.Player, hand.Append(cardPlay.Card).Distinct().ToList(),
-                (cardPlay.Player.PlayerCombatState?.Energy ?? 0) + cardPlay.Resources.EnergySpent);
+        if (!FrontHand.ContainsKey(Capture.PlayerOf(cardPlay)))
+            FrontHand[Capture.PlayerOf(cardPlay)] = FindLethal(Capture.PlayerOf(cardPlay), hand.Append(cardPlay.Card).Distinct().ToList(),
+                (Capture.PlayerOf(cardPlay).PlayerCombatState?.Energy ?? 0) + cardPlay.Resources.EnergySpent);
         var play = new Play
         {
             Id = ++_nextId,
-            Owner = cardPlay.Player,
+            Owner = Capture.PlayerOf(cardPlay),
             Card = cardPlay.Card,
             EnergySpent = cardPlay.Resources.EnergySpent,
             Ethereal = cardPlay.Card.Keywords.Contains(CardKeyword.Ethereal),
@@ -305,7 +305,7 @@ public static class BlockAlternatives
             UsefulCardsInHand = hand.Where(c => c != cardPlay.Card && IsUseful(c)).ToList(),
             HandAtPlay = hand.Where(c => c != cardPlay.Card).ToList()
         };
-        var energyBefore = (cardPlay.Player.PlayerCombatState?.Energy ?? 0) + cardPlay.Resources.EnergySpent;
+        var energyBefore = (Capture.PlayerOf(cardPlay).PlayerCombatState?.Energy ?? 0) + cardPlay.Resources.EnergySpent;
         if (cardPlay.Card.Type == CardType.Attack && cardPlay.Target is { IsEnemy: true } target)
         {
             if (IsDoubledByPenNib(cardPlay)) play.PenNibBetter = StrongerAttack(cardPlay.Card, target, hand, energyBefore, doubled: true);
@@ -554,14 +554,14 @@ public static class BlockAlternatives
     /// Cards that grow each time they are played (card audit, spec §E0): playing them is never a waste, and not playing
     /// them when affordable is a missed opportunity.
     internal static bool IsGrowing(CardModel c) =>
-        c is GeneticAlgorithm or TheScythe or TheBall or Claw or Maul or Rampage;
+        c is GeneticAlgorithm or TheScythe or Claw or Maul or Rampage || c.Id.Entry == "THE_BALL"; // The Ball: beta only
 
     private static bool IsStatusOrCurse(CardModel c) => c.Type is CardType.Status or CardType.Curse;
 
     /// Pen Nib picks the attack to double before the play starts.
     private static bool IsDoubledByPenNib(CardPlay cardPlay)
     {
-        var nib = cardPlay.Player.GetRelic<PenNib>();
+        var nib = Capture.PlayerOf(cardPlay).GetRelic<PenNib>();
         if (nib == null) return false;
         return Traverse.Create(nib).Property("AttackToDouble").GetValue<CardModel>() == cardPlay.Card;
     }
@@ -683,8 +683,13 @@ public static class BlockAlternatives
         DebuffEffectPatches.Computing = true;
         try
         {
+#if GAME_DEFAULT
+            damage = Hook.ModifyDamage(owner.RunState, card.CombatState, target, dealer, v.BaseValue, props, card,
+                ModifyDamageHookType.All, CardPreviewMode.None, out _);
+#else
             damage = Hook.ModifyDamage(owner.RunState, card.CombatState, target, dealer, v.BaseValue, props, card, null,
                 ModifyDamageHookType.All, CardPreviewMode.None, out _);
+#endif
         }
         finally
         {

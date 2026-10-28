@@ -140,7 +140,11 @@ public static class CombatFlowPatches
         });
     }
 
+#if GAME_DEFAULT
+    [HarmonyPatch(typeof(Hook), nameof(Hook.BeforeTurnEnd))] // renamed BeforeSideTurnEnd on the beta branch
+#else
     [HarmonyPatch(typeof(Hook), nameof(Hook.BeforeSideTurnEnd))]
+#endif
     public static class TurnEnd
     {
         public static void Prefix(ICombatState combatState, CombatSide side) => Capture.Safe("BeforeSideTurnEnd", () =>
@@ -286,9 +290,11 @@ public static class CombatFlowPatches
             var giver = creator ?? Capture.CurrentActingPlayer;
             // Âme sœur: the Soul copied into the ally's draw pile is "created" by that ally; it is the Soulbound
             // applier's gift (v0.17.1).
+#if !GAME_DEFAULT // Âme sœur: beta only
             if (card is Soul && card.Owner.Creature.GetPower<SoulboundPower>() is { } soulbound && soulbound.Applier?.Player is { } binder &&
                 binder != card.Owner && Traverse.Create(soulbound).Property("IsAddingSoul").GetValue<bool>())
                 giver = binder;
+#endif
             if (giver != null && card.Owner != giver)
             {
                 DamagePatches.GiftedCards.AddOrUpdate(card, giver);
@@ -314,7 +320,7 @@ public static class CombatFlowPatches
             BlockAlternatives.OnCardEffect(card);
             // A card brought back to an ally's hand (Tutor…); draws and created cards are counted by their own hooks.
             if (card.Pile?.Type == PileType.Hand && Capture.CurrentActingPlayer is { } giver && card.Owner != giver &&
-                (oldPile is PileType.Discard or PileType.Exhaust || (oldPile == PileType.Draw && Capture.CardPlays.TryPeek(out var play) && play.Card is Tutor)))
+                (oldPile is PileType.Discard or PileType.Exhaust || (oldPile == PileType.Draw && Capture.CardPlays.TryPeek(out var play) && play.Card.Id.Entry == "TUTOR"))) // Tutor: beta only
                 Capture.Emit(new HelpGiven(Capture.ToActor(giver), "cards", 1));
         });
     }

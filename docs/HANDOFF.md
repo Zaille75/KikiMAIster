@@ -112,9 +112,10 @@ Order: test → default branch → release prep → publish → maintenance. The
 1. **In-game test (blocks everything):** one full **co-op** run with v0.16.8 (nothing co-op since v0.8.0 is checked in
    game: Permis, Encaissés, Ange gardien, per-ally details, co-op trophies/records, compositions), ideally plus one solo
    run. Then "log transferred" + screenshots of anything odd. Run-end = "full run without data loss" (roadmap phase 4).
-2. **Default (non-beta) branch:** copy the non-beta game DLLs into `lib/default/` (same files as `lib/beta/`:
-   `sts2.dll`, `GodotSharp.dll`, `0Harmony.dll`, `release_info.json`; same game folders they came from for the beta). Then Claude runs
-   `./build.sh default` and fixes the patches that no longer match. Skip if the beta becomes the default version soon.
+2. **Default (main) branch — done (v0.17.22):** `lib/default/` holds the main branch v0.107.1 (decompiled in
+   `lib/default/decompiled/`, namespaces as folder names). `./build.sh default` → `dist/default/KikiMAIster/`. Branch
+   differences are `#if GAME_DEFAULT` blocks (spec 03-technical). The old beta files are kept in `lib/beta-v0.111.0/`.
+   Zaille75 switched his game to the main branch on 2026-10-28: give him the **default** install command.
 3. **Release prep (decided 2026-10-28, done):** icon `docs/images/icon.png` (drawn by `tools/icon/make_icon.py`),
    MIT license, README (English + French in one file), CHANGELOG, manifest description updated. Name stays
    KikiMAIster. The GitHub repo becomes public at 1.0 (checked: no game files, Steam IDs, login or server address in

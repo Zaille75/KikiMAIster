@@ -26,6 +26,19 @@ public static class RestSitePatches
         });
     }
 
+#if GAME_DEFAULT
+    /// Main branch: no "leaving" message; when the campfire screen closes, every player's options left are checked.
+    [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Nodes.Rooms.NRestSiteRoom), nameof(MegaCrit.Sts2.Core.Nodes.Rooms.NRestSiteRoom._ExitTree))]
+    public static class RoomLeft
+    {
+        public static void Prefix() => Capture.Safe("RestSite.RoomLeft", () =>
+        {
+            var sync = MegaCrit.Sts2.Core.Runs.RunManager.Instance.RestSiteSynchronizer;
+            foreach (var player in CombatFlowPatches.CurrentRun?.Players ?? Array.Empty<Player>())
+                Check(player, sync.GetOptionsForPlayer(player));
+        });
+    }
+#else
     [HarmonyPatch(typeof(RestSiteSynchronizer), nameof(RestSiteSynchronizer.BeforeLocalRestSiteExited))]
     public static class LocalLeft
     {
@@ -45,6 +58,7 @@ public static class RestSitePatches
             if (player != null) Check(player, __instance.GetOptionsForPlayer(player));
         });
     }
+#endif
 
     private static void Check(Player player, IReadOnlyList<RestSiteOption> left)
     {

@@ -67,8 +67,16 @@ public static class BlockAndPowerPatches
     [HarmonyPatch(typeof(CreatureCmd), nameof(CreatureCmd.LoseBlock))]
     public static class LoseBlock
     {
+#if GAME_DEFAULT
+        // The main branch does not say who removes the block: the player's own card being played counts as the remover.
+        public static void Prefix(Creature creature, decimal amount) => Capture.Safe("CreatureCmd.LoseBlock", () =>
+        {
+            var target = creature;
+            var remover = Capture.CurrentActingPlayer?.Creature;
+#else
         public static void Prefix(Creature target, decimal amount, Creature? remover) => Capture.Safe("CreatureCmd.LoseBlock", () =>
         {
+#endif
             if (CombatManager.Instance.IsOverOrEnding || target.IsDead || amount <= 0) return;
             var lost = (int)Math.Min(amount, target.Block);
             if (lost <= 0) return;

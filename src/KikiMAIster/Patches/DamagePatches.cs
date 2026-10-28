@@ -38,8 +38,13 @@ public static class DamagePatches
     }
 
     /// Every damage command funnels into this overload: remember who/what is dealing damage to each target.
+#if GAME_DEFAULT
+    [HarmonyPatch(typeof(CreatureCmd), nameof(CreatureCmd.Damage), typeof(PlayerChoiceContext), typeof(IEnumerable<Creature>),
+        typeof(decimal), typeof(ValueProp), typeof(Creature), typeof(CardModel))]
+#else
     [HarmonyPatch(typeof(CreatureCmd), nameof(CreatureCmd.Damage), typeof(PlayerChoiceContext), typeof(IEnumerable<Creature>),
         typeof(decimal), typeof(ValueProp), typeof(Creature), typeof(CardModel), typeof(CardPlay))]
+#endif
     public static class DamageCommand
     {
         public static void Prefix(IEnumerable<Creature>? targets, Creature? dealer, CardModel? cardSource) =>

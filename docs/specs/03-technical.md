@@ -61,3 +61,14 @@ Rule learned in the spike: patch the public `CombatHistory` wrappers, never the 
 - R2: How can we link a damage instance to its **source** (card, power, orb, relic)?
 - R3: Can we read block **owner/giver** when block is absorbed, so we can compute "prevented for allies"?
 - R4: Where do we hook the rewards and end-of-run screens?
+
+## Game branches (v0.17.22)
+The mod is built separately for each game branch: `./build.sh beta` (lib/beta, v0.111.0) and `./build.sh default`
+(lib/default, main branch v0.107.1), output in `dist/<branch>/KikiMAIster/`. The csproj defines `GAME_BETA` or
+`GAME_DEFAULT`; the few differences are under `#if`:
+- turn end hook: `Hook.BeforeTurnEnd` (main) / `Hook.BeforeSideTurnEnd` (beta);
+- damage modifiers and `Hook.ModifyDamage` take a `CardPlay` on the beta only; `CreatureCmd.Damage` likewise;
+- `CardPlay.Player` (beta) / `CardPlay.Card.Owner` (main); `CreatureCmd.LoseBlock` gives the remover on the beta only
+  (main: the player whose card is being played);
+- campfire leaving: the beta's "leave / skipped" messages, the main branch's `NRestSiteRoom._ExitTree`;
+- cards / powers that only exist on the beta (The Ball, Tutor, Soulbound) are matched by id or left out.
