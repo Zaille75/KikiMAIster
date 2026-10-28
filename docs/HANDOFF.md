@@ -13,6 +13,10 @@ wrong-order misses, Waterfall Giant invulnerable phase, fights kept across Save 
 ## How Zaille75 and Claude work
 - Zaille75 writes in English or French, plays in **French**, and doesn't code. He tests in game and sends feedback, screenshots, and logs.
 - **Log transfer:** when Zaille75 says "log transferred", he has copied his Windows log over `logs/KikiMAIster.log` on this machine.
+- **In-game reports (F9, v0.17.31, development builds):** Zaille75 sends everything to `logs/inbox/` (his `feedback/`
+  folder of reports + both logs). Each report folder has `message.txt`, `screenshot.png` (read it with the Read tool),
+  `state.txt`, `run.txt`, `log-tail.txt`. After reading, move them to `logs/feedback-<date>/`. The public 1.0 build must
+  use `-p:PublicRelease=true` (no F9 window).
   - Read it by grepping: `EVENT <Type>`, `===== COMBAT SUMMARY`, `block play N:` lines, and errors.
   - Then archive it as `logs/<date>_v<version>_<short-topic>.log`. `logs/` is git-ignored because it contains friends' Steam IDs.
 - **Every change:**

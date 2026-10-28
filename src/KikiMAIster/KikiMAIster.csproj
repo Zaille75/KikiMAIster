@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>KikiMAIster</AssemblyName>
-    <Version>0.17.30</Version>
+    <Version>0.17.31</Version>
     <RootNamespace>KikiMAIster</RootNamespace>
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <!-- Game branch to build against: beta (default) or default -->
@@ -13,6 +13,8 @@
     <GameLibDir>$(MSBuildThisFileDirectory)../../lib/$(GameBranch)/</GameLibDir>
     <!-- GAME_BETA / GAME_DEFAULT: the few places where the two game branches differ -->
     <DefineConstants>$(DefineConstants);GAME_$(GameBranch.ToUpperInvariant())</DefineConstants>
+    <!-- Development tools (F9 feedback window): left out of public builds with -p:PublicRelease=true -->
+    <DefineConstants Condition="'$(PublicRelease)' != 'true'">$(DefineConstants);DEV_TOOLS</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>

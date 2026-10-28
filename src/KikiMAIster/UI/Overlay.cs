@@ -144,6 +144,9 @@ public static class Overlay
         SettingsMenu.Attach(_layer);
         RunSummary.Attach(_layer);
         CompositionWindow.Attach(_layer);
+#if DEV_TOOLS
+        Dev.FeedbackWindow.Attach(_layer);
+#endif
         root.AddChild(_layer);
         Refresh();
         ModLog.Info($"overlay attached (inside tree: {_layer.IsInsideTree()}, visible: {_panel.Visible})");
