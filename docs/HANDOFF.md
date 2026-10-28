@@ -145,6 +145,12 @@ hotkey settings, chart history across Save & Quit.
   energy counted when the block was not needed), 23 (Esquisse not in "Cartes données"), 24 (missed lethal fight 4 T4),
   27 (Max's many "À l'attaque !" in Affaiblissements; then clear that record: `RecordBook.Clear("trophy.debuffs")`).
 - New trophy names (Culturiste, Peau sur les os) are proposals.
+- v0.17.4–0.17.6 (pet rules, Zaille75): debuff-saved pet HP count once the pet died and the owner lost HP; Déchaînement /
+  Protecteur damage from Osty HP saved/given by an ally is Permis; Sacrifice block from ally-given Osty HP is "Armure
+  permise" and what it stops is PV sauvés. **Asked, not answered:** should block that stops a hit on the pet also wait
+  for the pet's death (like debuffs)? Ralenti wrong order in Choix or Gâché? What did Kiki see when the game waited for
+  his end of turn (Mante Chapardeuse)? Boss-forced self-debuffs (Démon de la Connaissance: Mind Rot, Sloth…) show as
+  friendly fire on oneself: keep or leave out?
 - Zaille75 tests v0.16.8 in co-op and sends the log ("log transferred"), see "Path to v1.0" step 1.
 - **Trophy list:** v0.15.0 co-op additions validated by Zaille75 (Bouclier humain, Dynamo, Croupier; Forteresse = own only;
   Traître includes ally HP that a kept ally block card could have saved; Tank and pets given to allies credited). Not tested in game.
