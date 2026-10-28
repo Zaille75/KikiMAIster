@@ -81,6 +81,10 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
   Guarded…) counts only for the part that would have gone through the block without it. Example: Weak turns a 6 hit into
   4 on a player with 5 block: without Weak, 1 would have gone through → 1 saved, not 2. Weak's amount uses the game's
   rounding (6 × 0.75 = 4.5 hits for 4, so Weak avoided 2).
+- **Pet HP saved (v0.17.4, Zaille75):** when that hit was on a pet (Osty), the HP saved are the pet's, not the player's.
+  They are kept aside and count only if the pet **dies later in the same fight** and its owner then **loses HP to
+  enemies**: up to the HP the owner loses (without the saved HP, the pet would have died sooner and the owner would
+  have taken that much more). Otherwise they never count.
 
 ## C. Protection & support
 

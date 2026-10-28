@@ -56,6 +56,24 @@ public class DebuffEffectTests : TestBase
         Assert.Equal(1, Combat(IdA).SavedForAllies);
     }
 
+    /// The same hit on B's pet: its saved HP only count once the pet died and B then lost HP (v0.17.4).
+    [Fact]
+    public void Weak_OnPet_CountsOnlyAfterThePetDiedAndTheOwnerLostHp()
+    {
+        var petB = Actor.Pet(IdB, 11);
+        Power(A, Enemy, "WEAK_POWER", 1);
+        Block(B, B, 5);
+        Engine.Handle(new DebuffEffect(Enemy, "WEAK_POWER", petB, 2, Offense: false, Credit: DebuffCredit.CurrentTurn));
+        EnemyHits(petB, 4, 0);
+        Assert.Equal(0, Combat(IdA).SavedForAllies);
+
+        EnemyHits(B, 0, 3); // the pet is alive: nothing yet
+        Assert.Equal(0, Combat(IdA).SavedForAllies);
+        EnemyHits(petB, 0, 6, killed: true);
+        EnemyHits(B, 0, 3);
+        Assert.Equal(1, Combat(IdA).SavedForAllies);
+    }
+
     [Fact]
     public void StrengthDown_SharedByStacks_AcrossOrigins()
     {

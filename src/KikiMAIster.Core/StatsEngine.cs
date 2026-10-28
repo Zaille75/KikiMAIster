@@ -27,6 +27,10 @@ public sealed class StatsEngine
     private readonly Dictionary<ulong, double> _playDamage = new();
     /// Damage avoided by debuffs (Weak…) on the hit about to land, per player hit: resolved by that hit (v0.17.3).
     private readonly Dictionary<ulong, List<DebuffEffect>> _pendingDefense = new();
+    /// HP of a player's pet saved by debuffs (v0.17.4): only real once the pet died and its owner then loses HP in the
+    /// same fight. Owner → saved effects not yet credited; owners whose pet died since.
+    private readonly Dictionary<ulong, List<DebuffEffect>> _petSaved = new();
+    private readonly HashSet<ulong> _petDied = new();
     /// Rock-paper-scissors fights already counted in this run.
     private readonly HashSet<string> _chifumiFights = new();
 
@@ -276,6 +280,8 @@ public sealed class StatsEngine
         _playDepth.Clear();
         _playDamage.Clear();
         _pendingDefense.Clear();
+        _petSaved.Clear();
+        _petDied.Clear();
     }
 
     // ---------- Damage ----------
@@ -351,7 +357,9 @@ public sealed class StatsEngine
     private void OnDamageToPlayerSide(DamageDealt d)
     {
         var owner = d.Target.PlayerId;
-        ResolveDefense(owner, d.Blocked, d.Hp);
+        ResolveDefense(owner, d.Blocked, d.Hp, d.Target.Kind == ActorKind.Pet);
+        if (d.Target.Kind == ActorKind.Pet && d.Killed) _petDied.Add(owner);
+        else if (d.Target.Kind == ActorKind.Player && d.Dealer.IsEnemy && d.Hp > 0 && _petDied.Contains(owner)) ReleasePetSaved(owner, d.Hp);
 
         // Pets use their owner's block (the game blocks pet damage with the owner's block).
         if (d.Blocked > 0)
@@ -530,7 +538,7 @@ public sealed class StatsEngine
 
     /// Damage avoided by debuffs counts only for the HP it really saved (v0.17.3, spec §B2): what would have gone
     /// through the block without them. It is known when the hit lands: Blocked + Hp is the hit with the debuffs.
-    private void ResolveDefense(ulong owner, double blocked, double hp)
+    private void ResolveDefense(ulong owner, double blocked, double hp, bool pet = false)
     {
         if (!_pendingDefense.Remove(owner, out var effects)) return;
         var avoided = effects.Sum(e => e.Amount);
@@ -539,13 +547,37 @@ public sealed class StatsEngine
         var hpWithout = Math.Max(0, blocked + hp + avoided - blockBefore);
         var saved = Math.Clamp(hpWithout - hp, 0, avoided);
         if (saved <= 0) return;
-        foreach (var e in effects) CreditDebuffEffect(e with { Amount = e.Amount * saved / avoided });
+        var scaled = effects.Select(e => e with { Amount = e.Amount * saved / avoided }).ToList();
+        if (pet)
+        {
+            // The pet's HP: kept until the pet dies and its owner loses HP (ReleasePetSaved).
+            if (!_petSaved.TryGetValue(owner, out var kept)) _petSaved[owner] = kept = new();
+            kept.AddRange(scaled);
+            return;
+        }
+        foreach (var e in scaled) CreditDebuffEffect(e);
+    }
+
+    /// The pet died earlier in this fight and its owner just lost HP: without the pet HP the debuffs saved, the pet would
+    /// have died sooner and the owner would have lost that much more. Credits up to the HP lost, oldest first.
+    private void ReleasePetSaved(ulong owner, double hpLost)
+    {
+        if (!_petSaved.TryGetValue(owner, out var kept)) return;
+        while (hpLost > 0 && kept.Count > 0)
+        {
+            var e = kept[0];
+            var part = Math.Min(e.Amount, hpLost);
+            CreditDebuffEffect(e with { Amount = part });
+            hpLost -= part;
+            if (part >= e.Amount) kept.RemoveAt(0);
+            else kept[0] = e with { Amount = e.Amount - part };
+        }
     }
 
     /// Avoided damage with no hit after it (the hit was cancelled): only what the block would not have stopped.
     private void FlushDefense()
     {
-        foreach (var owner in _pendingDefense.Keys.ToList()) ResolveDefense(owner, 0, 0);
+        foreach (var owner in _pendingDefense.Keys.ToList()) ResolveDefense(owner, 0, 0, _pendingDefense[owner].Any(e => e.Beneficiary.Kind == ActorKind.Pet));
     }
 
     /// Extra damage (Vulnerable) or damage avoided (Weak, Strength down) credited to whoever is responsible for
