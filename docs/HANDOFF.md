@@ -115,14 +115,14 @@ Order: test → default branch → release prep → publish → maintenance. The
 2. **Default (non-beta) branch:** copy the non-beta game DLLs into `lib/default/` (same files as `lib/beta/`:
    `sts2.dll`, `GodotSharp.dll`, `0Harmony.dll`, `release_info.json`; same game folders they came from for the beta). Then Claude runs
    `./build.sh default` and fixes the patches that no longer match. Skip if the beta becomes the default version soon.
-3. **Release prep decisions:**
-   - an icon (an image Zaille75 likes, or Claude draws a simple one);
-   - license (suggest MIT; game files are never shipped);
-   - public name and one-line description (EN + FR);
-   - whether the GitHub repo becomes public at release.
-   Claude then writes README (EN + FR: what it shows, install, F7 / F8 keys, works when friends don't have it),
-   CHANGELOG, sets version 1.0.0.
-4. **Publishing:** which sites (GitHub release, Nexus Mods, Steam Workshop if StS2 accepts mods there). Claude checks
+3. **Release prep (decided 2026-10-28, done):** icon `docs/images/icon.png` (drawn by `tools/icon/make_icon.py`),
+   MIT license, README (English + French in one file), CHANGELOG, manifest description updated. Name stays
+   KikiMAIster. The GitHub repo becomes public at 1.0 (checked: no game files, Steam IDs, login or server address in
+   the files or the history). Version 1.0.0 is set when publishing.
+4. **Publishing (with 1.0):** **Steam Workshop first** (Zaille75: it is how the game wants public mods; the game
+   loads subscribed Workshop items itself, app 2868840), then a GitHub release (and Nexus Mods if wanted). No
+   official StS2 uploader found yet (StS1 shipped a `mod-uploader.jar` in the game folder): ask Zaille75 to look for
+   an uploader in the game folder, else use SteamCMD `workshop_build_item`. Former note: which sites (GitHub release, Nexus Mods, Steam Workshop if StS2 accepts mods there). Claude checks
    each site's requirements first; Zaille75 creates the accounts / uploads where a login is needed.
 5. **Maintenance after each game patch:** Zaille75 copies the new DLLs into `lib/beta/` (and `lib/default/`), Claude
    rebuilds (PatchCheck flags broken hooks), fixes them, re-syncs `BlockAlternatives.HitCount`, bumps the version.
