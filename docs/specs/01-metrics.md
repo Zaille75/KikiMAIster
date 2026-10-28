@@ -85,6 +85,11 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
   They are kept aside and count only if the pet **dies later in the same fight** and its owner then **loses HP to
   enemies**: up to the HP the owner loses (without the saved HP, the pet would have died sooner and the owner would
   have taken that much more). Otherwise they never count.
+- **Attacks that grow with the pet's HP (v0.17.5, Zaille75):** Déchaînement (base + 1 per **current** HP of Osty) and
+  Protecteur (base + 1 per **max** HP). The part of their damage due to the HP (damage × HP part ÷ whole, so Strength,
+  Vulnerable… are shared in proportion) is "Permis" for the allies behind those HP: HP an ally's debuffs saved on the pet
+  during its current life (current HP only), then the rest by who gave the pet its HP (summon, heal, max HP: same
+  proportions as the damage the pet absorbs, rule §D2). The owner's own share credits nobody.
 
 ## C. Protection & support
 

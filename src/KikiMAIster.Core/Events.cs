@@ -115,6 +115,10 @@ public sealed record DebuffEffect(Actor Holder, string PowerId, Actor Beneficiar
 /// Direct: the Applier given with the effect.
 public enum DebuffCredit { CurrentTurn, RemainingTurns, Stacks, Direct }
 
+/// A pet's attack whose damage grows with its HP (v0.17.5): FromCurrentHp / FromMaxHp = the part of the damage dealt
+/// due to the pet's current HP (Déchaînement) or max HP (Protecteur); PetHp = its current HP at the hit.
+public sealed record PetHpAttack(Actor Pet, double FromCurrentHp, double FromMaxHp, double PetHp) : StatEvent;
+
 /// A player gave Strength to another player (Blaze…): those points count for the giver for the rest of the combat.
 public sealed record StrengthGiven(Actor Player, Actor Giver, double Amount) : StatEvent;
 

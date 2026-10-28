@@ -256,3 +256,27 @@ public class HelpTests : TestBase
         Assert.Equal(20, Combat(IdA).BiggestHit);
     }
 }
+
+/// v0.17.5: attacks that grow with the pet's HP (Déchaînement, Protecteur).
+public class PetHpAttackTests : TestBase
+{
+    [Fact]
+    public void Unleash_PartFromHpSavedOrGivenByAnAlly_IsEnabledForThatAlly()
+    {
+        var petB = Actor.Pet(IdB, 11);
+        Engine.Handle(new PetHpGiven(B, 6, B));
+        Engine.Handle(new PetHpGiven(C, 2, B));
+        Power(A, Enemy, "WEAK_POWER", 1);
+        Engine.Handle(new DebuffEffect(Enemy, "WEAK_POWER", petB, 2, Offense: false, Credit: DebuffCredit.CurrentTurn));
+        EnemyHits(petB, 0, 3);
+        // Osty has 8 HP left (2 of them saved by A's Weak); Déchaînement's HP part dealt 8 damage.
+        Engine.Handle(new PetHpAttack(petB, 8, 0, 8));
+        Assert.Equal(2, Combat(IdA).DamageEnabledAllies, 6);
+        Assert.Equal(1.5, Combat(IdC).DamageEnabledAllies, 6); // 6 other HP × 2/8 given by C
+        Assert.Equal(0, Combat(IdB).DamageEnabledAllies);
+
+        // Protecteur (max HP): only HP given count.
+        Engine.Handle(new PetHpAttack(petB, 0, 8, 8));
+        Assert.Equal(3.5, Combat(IdC).DamageEnabledAllies, 6);
+    }
+}

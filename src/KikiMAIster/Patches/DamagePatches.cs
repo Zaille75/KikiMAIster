@@ -7,6 +7,7 @@ using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Entities.Powers;
+using MegaCrit.Sts2.Core.Models.Cards;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Models;
@@ -166,6 +167,8 @@ public static class DamagePatches
         Capture.Emit(new DamageDealt(Capture.ToActor(dealer), Capture.ToActor(target),
             r.BlockedDamage, r.UnblockedDamage, r.OverkillDamage, r.WasTargetKilled, source));
         if (card != null && target.IsEnemy && r.UnblockedDamage > 0) CreditHelpers(card, dealer, target, r.UnblockedDamage);
+        if (card is Unleash or Protector && dealer is { IsPet: true } pet && target.IsEnemy && r.UnblockedDamage > 0)
+            Capture.Safe("pet HP attack", () => ReportPetHpAttack(card, pet, r.UnblockedDamage));
         if (card != null) BlockAlternatives.OnHit(card, target, r.BlockedDamage + r.UnblockedDamage);
     }
 
@@ -182,6 +185,21 @@ public static class DamagePatches
             play.PlayIndex >= extra.From)
             Capture.Emit(new DebuffEffect(Capture.ToActor(target), "TAG_TEAM_POWER", dealerActor, damage, Offense: true,
                 Credit: DebuffCredit.Direct, Applier: Capture.ToActor(extra.Applier)));
+    }
+
+    /// Déchaînement: base + 1 per current HP of Osty; Protecteur: base + 1 per max HP. The part of the damage due to the
+    /// HP is base-free: damage × (HP part ÷ whole).
+    private static void ReportPetHpAttack(CardModel card, Creature pet, int damage)
+    {
+        var vars = card.DynamicVars;
+        var baseValue = (double)vars.CalculationBase.BaseValue;
+        var perHp = (double)vars.ExtraDamage.BaseValue;
+        var hp = card is Unleash ? pet.CurrentHp : pet.MaxHp;
+        var whole = baseValue + perHp * hp;
+        if (whole <= 0 || hp <= 0) return;
+        var part = damage * perHp * hp / whole;
+        Capture.Emit(card is Unleash ? new PetHpAttack(Capture.ToActor(pet), part, 0, pet.CurrentHp)
+            : new PetHpAttack(Capture.ToActor(pet), 0, part, pet.CurrentHp));
     }
 
     /// Cards created by a player for another player (the creator).

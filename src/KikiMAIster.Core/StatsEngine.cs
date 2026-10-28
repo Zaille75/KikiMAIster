@@ -31,6 +31,8 @@ public sealed class StatsEngine
     /// same fight. Owner → saved effects not yet credited; owners whose pet died since.
     private readonly Dictionary<ulong, List<DebuffEffect>> _petSaved = new();
     private readonly HashSet<ulong> _petDied = new();
+    /// The same saved pet HP, for the pet's current life only (attacks that grow with the pet's HP: Déchaînement).
+    private readonly Dictionary<ulong, List<DebuffEffect>> _petSavedAlive = new();
     /// Rock-paper-scissors fights already counted in this run.
     private readonly HashSet<string> _chifumiFights = new();
 
@@ -88,6 +90,7 @@ public sealed class StatsEngine
                 break;
             }
             case DebuffEffect x: OnDebuffEffect(x); break;
+            case PetHpAttack a when a.Pet.IsPlayerSide && a.Pet.PlayerId != 0: OnPetHpAttack(a); break;
             case StrengthBorrowed b: OnStrengthBorrowed(b); break;
             case StrengthUsed u: OnStrengthUsed(u); break;
             case StrengthGiven g when g.Amount > 0 && g.Player.Kind == ActorKind.Player && g.Giver.IsPlayerSide:
@@ -282,6 +285,7 @@ public sealed class StatsEngine
         _pendingDefense.Clear();
         _petSaved.Clear();
         _petDied.Clear();
+        _petSavedAlive.Clear();
     }
 
     // ---------- Damage ----------
@@ -358,7 +362,11 @@ public sealed class StatsEngine
     {
         var owner = d.Target.PlayerId;
         ResolveDefense(owner, d.Blocked, d.Hp, d.Target.Kind == ActorKind.Pet);
-        if (d.Target.Kind == ActorKind.Pet && d.Killed) _petDied.Add(owner);
+        if (d.Target.Kind == ActorKind.Pet && d.Killed)
+        {
+            _petDied.Add(owner);
+            _petSavedAlive.Remove(owner);
+        }
         else if (d.Target.Kind == ActorKind.Player && d.Dealer.IsEnemy && d.Hp > 0 && _petDied.Contains(owner)) ReleasePetSaved(owner, d.Hp);
 
         // Pets use their owner's block (the game blocks pet damage with the owner's block).
@@ -550,9 +558,13 @@ public sealed class StatsEngine
         var scaled = effects.Select(e => e with { Amount = e.Amount * saved / avoided }).ToList();
         if (pet)
         {
-            // The pet's HP: kept until the pet dies and its owner loses HP (ReleasePetSaved).
+            // The pet's HP: kept until the pet dies and its owner loses HP (ReleasePetSaved), and while the pet lives,
+            // for attacks that grow with its HP (OnPetHpAttack). Who was responsible is decided now.
+            var resolved = scaled.SelectMany(Resolved).ToList();
             if (!_petSaved.TryGetValue(owner, out var kept)) _petSaved[owner] = kept = new();
-            kept.AddRange(scaled);
+            kept.AddRange(resolved);
+            if (!_petSavedAlive.TryGetValue(owner, out var alive)) _petSavedAlive[owner] = alive = new();
+            alive.AddRange(resolved);
             return;
         }
         foreach (var e in scaled) CreditDebuffEffect(e);
@@ -567,11 +579,43 @@ public sealed class StatsEngine
         {
             var e = kept[0];
             var part = Math.Min(e.Amount, hpLost);
-            CreditDebuffEffect(e with { Amount = part });
+            CreditResolved(e with { Amount = part });
             hpLost -= part;
             if (part >= e.Amount) kept.RemoveAt(0);
             else kept[0] = e with { Amount = e.Amount - part };
         }
+    }
+
+    /// An attack that grows with the pet's HP (Déchaînement: current HP; Protecteur: max HP, v0.17.5): the part of that
+    /// damage due to HP an ally gave the pet (summon, heal, max HP: same proportions as the damage the pet absorbs) or
+    /// saved on it (debuffs, this life) is damage enabled ("Permis") for that ally.
+    private void OnPetHpAttack(PetHpAttack a)
+    {
+        var owner = a.Pet.PlayerId;
+        var given = _petHp.GetValueOrDefault(owner);
+        var givenTotal = given?.Values.Sum() ?? 0;
+        void Enable(ulong id, double amount, string source)
+        {
+            if (amount <= 0 || id == 0 || id == owner) return;
+            Each(id, s =>
+            {
+                s.DamageEnabledAllies += amount;
+                PlayerStats.Add(s.EnabledPerAlly, AllyKey(owner), amount);
+                PlayerStats.Add(s.DebuffEffectBySource, source, amount);
+            });
+        }
+        if (a.FromCurrentHp > 0 && a.PetHp > 0)
+        {
+            var saves = _petSavedAlive.GetValueOrDefault(owner) ?? new List<DebuffEffect>();
+            var savedTotal = saves.Sum(e => e.Amount);
+            var scale = savedTotal > a.PetHp ? a.PetHp / savedTotal : 1;
+            foreach (var e in saves) Enable(e.Applier.PlayerId, a.FromCurrentHp * e.Amount * scale / a.PetHp, e.PowerId);
+            var rest = a.FromCurrentHp * (a.PetHp - savedTotal * scale) / a.PetHp;
+            if (given != null && givenTotal > 0)
+                foreach (var (giver, hp) in given) Enable(giver, rest * hp / givenTotal, "Pet");
+        }
+        if (a.FromMaxHp > 0 && given != null && givenTotal > 0)
+            foreach (var (giver, hp) in given) Enable(giver, a.FromMaxHp * hp / givenTotal, "Pet");
     }
 
     /// Avoided damage with no hit after it (the hit was cancelled): only what the block would not have stopped.
@@ -597,6 +641,13 @@ public sealed class StatsEngine
 
     private void CreditDebuffEffect(DebuffEffect x)
     {
+        foreach (var direct in Resolved(x)) CreditResolved(direct);
+    }
+
+    /// The effect split between the players responsible for it now (FIFO turn, stacks…), as Direct effects: what is
+    /// kept for later (pet HP saved) keeps who was responsible at the time of the hit.
+    private List<DebuffEffect> Resolved(DebuffEffect x)
+    {
         var shares = new List<(ulong Id, double Share)>();
         _fifo.TryGetValue((x.Holder.CreatureId, x.PowerId), out var fifo);
         switch (x.Credit)
@@ -620,28 +671,33 @@ public sealed class StatsEngine
                 break;
             }
         }
-        var beneficiary = x.Beneficiary.PlayerId;
-        foreach (var (id, share) in shares)
-        {
-            var amount = x.Amount * share;
-            Each(id, s =>
-            {
-                if (x.Offense && id == beneficiary) s.DamageEnabledSelf += amount;
-                else if (x.Offense)
-                {
-                    s.DamageEnabledAllies += amount;
-                    PlayerStats.Add(s.EnabledPerAlly, AllyKey(beneficiary), amount);
-                }
-                else if (id == beneficiary) s.PreventedByDebuffsSelf += amount;
-                else
-                {
-                    s.PreventedByDebuffsAllies += amount;
-                    PlayerStats.Add(s.SavedPerAlly, AllyKey(beneficiary), amount);
-                }
-                PlayerStats.Add(s.DebuffEffectBySource, x.PowerId, amount);
-            });
-        }
+        return shares.Select(sh => x with { Amount = x.Amount * sh.Share, Credit = DebuffCredit.Direct, Applier = Actor.Player(sh.Id, 0) }).ToList();
     }
+
+    private void CreditResolved(DebuffEffect x)
+    {
+        var beneficiary = x.Beneficiary.PlayerId;
+        var id = x.Applier.PlayerId;
+        if (!x.Applier.IsPlayerSide || id == 0) return;
+        var amount = x.Amount;
+        Each(id, s =>
+        {
+            if (x.Offense && id == beneficiary) s.DamageEnabledSelf += amount;
+            else if (x.Offense)
+            {
+                s.DamageEnabledAllies += amount;
+                PlayerStats.Add(s.EnabledPerAlly, AllyKey(beneficiary), amount);
+            }
+            else if (id == beneficiary) s.PreventedByDebuffsSelf += amount;
+            else
+            {
+                s.PreventedByDebuffsAllies += amount;
+                PlayerStats.Add(s.SavedPerAlly, AllyKey(beneficiary), amount);
+            }
+            PlayerStats.Add(s.DebuffEffectBySource, x.PowerId, amount);
+        });
+    }
+
 
     private void OnStrengthBorrowed(StrengthBorrowed b)
     {
