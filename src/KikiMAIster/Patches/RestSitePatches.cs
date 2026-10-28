@@ -35,7 +35,8 @@ public static class RestSitePatches
 
     /// Rests taken at a campfire: option id, HP before resting, floor. Kept until the next fight starts.
     private static readonly Dictionary<Player, (string Option, int HpBefore, int Floor)> Rests = new();
-    /// Players who rested just before the boss fight in progress: option id, HP before resting, HP at the fight's start.
+    /// Players who rested just before the boss fight in progress: option id, HP they would have had without resting, HP at
+    /// the fight's start (both after the Pantographe's heal, v0.17.34).
     private static readonly Dictionary<Player, (string Option, int HpBefore, int HpAtStart)> BossRests = new();
 
     /// A fight starts: a rest from the floor just before counts if this is the boss.
@@ -44,7 +45,13 @@ public static class RestSitePatches
         BossRests.Clear();
         if (room == RoomType.Boss)
             foreach (var (player, rest) in Rests.Where(r => r.Value.Floor == run.TotalFloor - 1))
-                BossRests[player] = (rest.Option, rest.HpBefore, player.Creature.CurrentHp);
+            {
+                // Pantographe heals at the boss fight's start (after this hook): with or without the rest.
+                var max = player.Creature.MaxHp;
+                var heal = player.GetRelic<Pantograph>() is { } pantograph ? (int)pantograph.DynamicVars.Heal.BaseValue : 0;
+                int Healed(int hp) => Math.Min(max, hp + heal);
+                BossRests[player] = (rest.Option, Healed(rest.HpBefore), Healed(player.Creature.CurrentHp));
+            }
         Rests.Clear();
     }
 

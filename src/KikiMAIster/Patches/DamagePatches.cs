@@ -156,11 +156,16 @@ public static class DamagePatches
         Seen.Add(r, true);
         // The extra damage of this hit (Vulnerable…) counts for the HP it removed only.
         DebuffEffectPatches.ReleaseOffense(dealer, r.Receiver, r.UnblockedDamage, r.BlockedDamage + r.UnblockedDamage + r.OverkillDamage);
+        var target = r.Receiver;
+        // A hit that did nothing because the enemy's Carapace endurcie limit was reached this turn (v0.17.34).
+        if (card != null && target.IsEnemy && r.TotalDamage + r.OverkillDamage <= 0 && target.GetPower<HardenedShellPower>() is { } shell &&
+            shell.DisplayAmount <= 0)
+            BlockAlternatives.OnShellCapped(card);
         if (r.TotalDamage + r.OverkillDamage <= 0) return;
 
-        var target = r.Receiver;
-        // An enemy shown with infinite HP (Waterfall Giant about to explode) cannot be hurt for real: not counted.
-        if (target.IsEnemy && target.HpDisplay != HpDisplay.Normal) return;
+        // An enemy shown with infinite HP (Waterfall Giant about to explode) cannot be hurt for real: not counted. Carapace
+        // endurcie shows "infinite with numbers" once its limit is reached: the hit reaching it was real (v0.17.34).
+        if (target.IsEnemy && target.HpDisplay == HpDisplay.InfiniteWithoutNumbers) return;
         Source source;
         if (card != null) source = Source.Card(Capture.IdOf(card));
         else if (call?.DotPowerId is { } powerId && (dealer == null || dealer == target))

@@ -214,6 +214,7 @@ public sealed class StatsEngine
                 var s = Stats(Scope.Run, h.Player.PlayerId);
                 s.MaxHpGained = h.MaxHpGained;
                 s.MaxHpLost = h.MaxHpLost;
+                s.HpLostOutside = h.HpLostOutside;
                 s.RestSiteChoices.Clear();
                 foreach (var (k, v) in h.RestSiteChoices) s.RestSiteChoices[k] = v;
                 break;
@@ -570,6 +571,7 @@ public sealed class StatsEngine
         {
             if (wasted) s.WastedBlock += amount;
             else s.UselessBlock += amount;
+            if (!wasted && (layer.Absorbed > 0 || layer.PlayId == 0)) s.UnavoidableBlock += amount;
             PlayerStats.Add(s.BlockUnusedBySource, layer.Source, amount);
             if (toAlly) s.UnusedGivenToAllies += amount;
             if (wasted && hasChoice && PlayerStats.AddWasted(s.WastedPlays, layer.PlayId, layer.Round, choice.Choice, amount, _combatNumber))

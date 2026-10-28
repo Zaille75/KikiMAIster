@@ -4,6 +4,7 @@ using KikiMAIster.Core;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.TreasureRelicPicking;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
 
 namespace KikiMAIster.Patches;
@@ -19,25 +20,30 @@ public static class RunHistoryPatches
     public static void Read(IRunState? run) => Capture.Safe("RunHistory.Read", () =>
     {
         if (run == null) return;
-        var totals = run.Players.ToDictionary(p => p.NetId, _ => (Gained: 0, Lost: 0, Choices: new Dictionary<string, double>()));
+        var totals = run.Players.ToDictionary(p => p.NetId, _ => (Gained: 0, Lost: 0, Choices: new Dictionary<string, double>(), Outside: 0));
         foreach (var act in run.MapPointHistory)
             foreach (var point in act)
+            {
+                // HP lost on a floor without a fight (an event that turns into a fight counts as a fight).
+                var fight = point.Rooms.Any(r => r.RoomType is RoomType.Monster or RoomType.Elite or RoomType.Boss);
                 foreach (var entry in point.PlayerStats)
                 {
                     if (!totals.TryGetValue(entry.PlayerId, out var t)) continue;
                     t.Gained += entry.MaxHpGained;
                     t.Lost += entry.MaxHpLost;
+                    if (!fight) t.Outside += entry.DamageTaken;
                     foreach (var choice in entry.RestSiteChoices) t.Choices[choice] = t.Choices.GetValueOrDefault(choice) + 1;
                     totals[entry.PlayerId] = t;
                 }
+            }
         var signature = string.Join(';', totals.OrderBy(kv => kv.Key).Select(kv =>
-            $"{kv.Key}:{kv.Value.Gained}:{kv.Value.Lost}:{string.Join(',', kv.Value.Choices.OrderBy(r => r.Key, StringComparer.Ordinal).Select(r => $"{r.Key}={r.Value}"))}"));
+            $"{kv.Key}:{kv.Value.Gained}:{kv.Value.Lost}:{kv.Value.Outside}:{string.Join(',', kv.Value.Choices.OrderBy(r => r.Key, StringComparer.Ordinal).Select(r => $"{r.Key}={r.Value}"))}"));
         if (signature == _signature) return;
         _signature = signature;
         foreach (var p in run.Players)
         {
             var t = totals[p.NetId];
-            Capture.Emit(new RunHistoryRead(Capture.ToActor(p), t.Gained, t.Lost, t.Choices));
+            Capture.Emit(new RunHistoryRead(Capture.ToActor(p), t.Gained, t.Lost, t.Choices, t.Outside));
         }
     });
 

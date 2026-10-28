@@ -55,6 +55,10 @@ public static class BlockAlternatives
         public List<(Creature Target, int Raw, int Slow)> Hits { get; } = new();
         /// Number of times this play gave block (Dexterity counts once per gain).
         public int BlockGains { get; set; }
+        /// Stars paid for this card (v0.17.34: Stars spent where energy would have done, or for nothing).
+        public int StarsSpent { get; init; }
+        /// Hits on an enemy whose Carapace endurcie limit was already reached (0 damage, v0.17.34).
+        public int ShellCapped { get; set; }
         /// Orbs this play triggered (evoke or passive) that Focus boosts, for the wrong-order check of a later Focus
         /// (v0.17.32): Lightning / Glass hits ("order", with their enemy), Frost block ("orderBlock"), Dark charging
         /// ("orderDark": its stored damage). Plasma gives energy, which Focus does not change.
@@ -338,6 +342,7 @@ public static class BlockAlternatives
             Owner = Capture.PlayerOf(cardPlay),
             Card = cardPlay.Card,
             EnergySpent = cardPlay.Resources.EnergySpent,
+            StarsSpent = cardPlay.Resources.StarsSpent,
             Ethereal = cardPlay.Card.Keywords.Contains(CardKeyword.Ethereal),
             // Genetic Algorithm / The Scythe grow each time they are played: a side effect no hook reports.
             // Sacrifice kills the player's own pet (validated by Zaille75: never wasted).
@@ -390,6 +395,7 @@ public static class BlockAlternatives
         foreach (var player in combat.Players.Where(p => p.Creature.IsAlive))
             Capture.Safe("free cards", () => FreeCardsLeft(combat, player));
         var used = new HashSet<CardModel>();
+        var withAlternative = new HashSet<Play>();
         // Newest block plays first (v0.17.25): block is used oldest first, so the last block played is the one most likely
         // left unused — it gets the alternative (3 Défense with one Neutralisation in hand: the third one is gâché).
         foreach (var play in ThisTurn.Where(p => p.GaveBlock).Reverse())
@@ -403,14 +409,102 @@ public static class BlockAlternatives
                 !used.Contains(c) && state.Hand.Cards.Contains(c) && !KeptOnPurpose(c, combat) && Cost(c) <= budget && PlayableExceptEnergy(c) &&
                 !IsFree(c) && // a free card left in hand is its own miss (FreeCardsLeft), not the reason a block was wasted
                 ThornsDamage(c, creature) <= Math.Max(0, surplus) && !PunishedAttack(c));
-            if (alternative != null) used.Add(alternative);
+            if (alternative != null)
+            {
+                used.Add(alternative);
+                withAlternative.Add(play);
+            }
             ModLog.Info($"block play {play.Id}: other effect {play.HadOtherEffect}, ethereal {play.Ethereal}, energy budget {budget}, useful cards in hand when played: " +
                         $"[{string.Join(", ", play.UsefulCardsInHand.Select(c => Capture.IdOf(c)))}] → alternative: " +
                         (alternative != null ? Capture.IdOf(alternative) : "none"));
             Capture.Emit(new BlockPlayResolved(play.Id, alternative != null,
                 alternative == null || state == null ? null : Explain(play, alternative, state)));
         }
+        foreach (var player in combat.Players.Where(p => p.Creature.IsAlive))
+        {
+            Capture.Safe("stars", () => CheckStars(combat, player, withAlternative, used));
+            Capture.Safe("hardened shell", () => CheckShell(combat, player, used));
+        }
         ThisTurn.Clear();
+    }
+
+    /// Stars are not refilled each turn (spec §E0, v0.17.34, Zaille75): a card paid with Stars that did nothing but block
+    /// or damage was a misplay when
+    /// - its block was not needed (block at the end of the turn minus its block still covers the incoming attack): Gâché
+    ///   ("starsWasted"), unless it already counts as a wasted block (it had an alternative);
+    /// - an energy card left in hand, paid with the energy left, did the same job (block covering what was missing, or at
+    ///   least the damage the attack dealt to its target): Choix ("stars").
+    private static void CheckStars(ICombatState combat, Player player, HashSet<Play> withAlternative, HashSet<CardModel> used)
+    {
+        if (player.PlayerCombatState is not { } st) return;
+        var actor = Capture.ToActor(player);
+        var creature = player.Creature;
+        var incoming = IncomingDamage(creature);
+        var energy = st.Energy;
+        var hand = st.Hand.Cards.ToList();
+        bool Candidate(CardModel c) => !used.Contains(c) && !IsStatusOrCurse(c) && PlayableExceptEnergy(c) && !c.EnergyCost.CostsX &&
+                                       c.CurrentStarCost <= 0 && !c.HasStarCostX && !KeptOnPurpose(c, combat) && Cost(c) <= energy;
+        foreach (var play in ThisTurn.Where(p => p.Owner == player && p.StarsSpent > 0))
+        {
+            CardModel? instead = null;
+            if (play.GaveBlock && !play.HadOtherEffect && play.Card.Type != CardType.Attack)
+            {
+                var missing = incoming - (creature.Block - play.BlockAmount);
+                if (missing <= 0)
+                {
+                    if (!withAlternative.Contains(play))
+                        Capture.Emit(new MissedChance(actor, "starsWasted", new[] { Key(play.Card), N(play.StarsSpent) }));
+                    continue;
+                }
+                instead = hand.Where(c => Candidate(c) && c.GainsBlock && c.TargetType != TargetType.AnyAlly && EstimateBlock(c) >= missing)
+                    .OrderBy(Cost).FirstOrDefault();
+            }
+            else if (play.Card.Type == CardType.Attack && !play.HadNonDamageEffect && play.Hits.Count > 0)
+            {
+                var target = play.Hits[0].Target;
+                var dealt = play.Hits.Where(h => h.Target == target).Sum(h => h.Raw);
+                instead = hand.Where(c => Candidate(c) && c.Type == CardType.Attack && c.TargetType is TargetType.AnyEnemy or TargetType.AllEnemies &&
+                                          !PunishedAttack(c) && ThornsDamage(c, creature) <= ThornsDamage(play.Card, creature) &&
+                                          HitCount(c, target) != null && EstimateDamage(c, target) >= dealt)
+                    .OrderBy(Cost).FirstOrDefault();
+            }
+            if (instead == null) continue;
+            used.Add(instead);
+            energy -= Cost(instead);
+            ModLog.Info($"stars: {Capture.IdOf(play.Card)} paid {play.StarsSpent} Stars, {Capture.IdOf(instead)} could do it with the energy left");
+            Capture.Emit(new MissedChance(actor, "stars", new[] { Key(play.Card), N(play.StarsSpent), Key(instead) }));
+        }
+    }
+
+    /// An attack whose every hit met a Carapace endurcie already at its limit (0 damage) and that did nothing else, while
+    /// a more useful card was playable instead (v0.17.34, Zaille75): a block card when the block did not cover the attack,
+    /// an attack on an enemy without that limit, or another useful card. Counted in Choix ("shell").
+    private static void CheckShell(ICombatState combat, Player player, HashSet<CardModel> used)
+    {
+        if (player.PlayerCombatState is not { } st) return;
+        var creature = player.Creature;
+        var blockShort = creature.Block < IncomingDamage(creature);
+        var open = RealEnemies(combat).Where(e => !(e.GetPower<HardenedShellPower>() is { } p && p.DisplayAmount <= 0)).ToList();
+        foreach (var play in ThisTurn.Where(p => p.Owner == player && p.ShellCapped > 0 && p.Hits.Count == 0 && !p.HadNonDamageEffect &&
+                                                 p.Card.Type == CardType.Attack))
+        {
+            var budget = play.EnergySpent + st.Energy;
+            var instead = play.HandAtPlay.FirstOrDefault(c => st.Hand.Cards.Contains(c) && !used.Contains(c) && !IsStatusOrCurse(c) &&
+                PlayableExceptEnergy(c) && !LacksStars(c) && !KeptOnPurpose(c, combat) && !c.EnergyCost.CostsX && Cost(c) <= budget &&
+                (c.GainsBlock ? blockShort
+                    : c.Type == CardType.Attack ? open.Count > 0 && DealsDamage(c, combat) && !PunishedAttack(c)
+                    : IsUseful(c)));
+            if (instead == null) continue;
+            used.Add(instead);
+            Capture.Emit(new MissedChance(Capture.ToActor(player), "shell",
+                new[] { Key(play.Card), $"Power:{ModelDb.GetId<HardenedShellPower>().Entry}", Key(instead) }));
+        }
+    }
+
+    /// A hit of the card play in progress that met a Carapace endurcie at its limit (0 damage).
+    public static void OnShellCapped(CardModel card)
+    {
+        if (InProgress.TryPeek(out var play) && play != null && play.Card == card) play.ShellCapped++;
     }
 
     /// Missed lethal (front hand could kill every enemy, yet they are alive at the end of the turn) and weak attacks
@@ -480,10 +574,15 @@ public static class BlockAlternatives
         // Cards kept on purpose (Retain, Star cost) are left out: not playing them is a choice (spec §E0, v0.17.0).
         // So is a block card when the block already covers the incoming attack (v0.17.1).
         var blockCovered = player.Creature.Block >= IncomingDamage(player.Creature);
+        // An attack into Thorns counts only if the block covers the incoming attack plus the Thorns damage (v0.17.34).
+        var thornsRoom = Math.Max(0, player.Creature.Block - IncomingDamage(player.Creature));
+        bool Punished(CardModel c) => PunishedAttack(c) || ThornsDamage(c, player.Creature) > thornsRoom;
+        // An enemy asleep (Matriarche lagavulin): not hitting it may be on purpose, energy left is never a miss (v0.17.34).
+        var asleep = RealEnemies(combat).Any(e => e.HasPower<AsleepPower>());
         // An Exhaust card (Feu follet…) is gone once played: keeping it for later is a choice (v0.17.18).
         bool WouldHelp(CardModel c) => Affordable(c) && !KeptOnPurpose(c, combat) && !(blockCovered && c.GainsBlock && c.Type == CardType.Skill) &&
-                                       !c.Keywords.Contains(CardKeyword.Exhaust) && !PunishedAttack(c);
-        if (energy > 0 && !nothingToKill && hand.Any(WouldHelp) && Hook.ShouldPlayerResetEnergy(combat, player) &&
+                                       !Punished(c);
+        if (energy > 0 && !nothingToKill && !asleep && hand.Any(WouldHelp) && Hook.ShouldPlayerResetEnergy(combat, player) &&
             player.GetRelic<PaelsTears>() == null)
         {
             // Args: the energy, then the cards that energy could have paid (most expensive first, at most 3).
@@ -493,8 +592,8 @@ public static class BlockAlternatives
         }
         // Energy lost with nothing useful to spend it on (v0.17.29): no card left, or only block when the attack is already
         // covered, or only attacks the enemy punishes. Not a miss; counted for the trophy "Batterie pleine".
-        else if (energy > 0 && Hook.ShouldPlayerResetEnergy(combat, player) && player.GetRelic<PaelsTears>() == null &&
-                 (nothingToKill || !hand.Any(c => Affordable(c) && !(blockCovered && c.GainsBlock && c.Type == CardType.Skill) && !PunishedAttack(c))))
+        else if (energy > 0 && !asleep && Hook.ShouldPlayerResetEnergy(combat, player) && player.GetRelic<PaelsTears>() == null &&
+                 (nothingToKill || !hand.Any(c => Affordable(c) && !(blockCovered && c.GainsBlock && c.Type == CardType.Skill) && !Punished(c))))
             Capture.Emit(new HelpGiven(actor, "energySurplus", energy));
 
         // Pael's Tears gives energy next turn for energy left: energy spent on a useless card (at any time in the turn)
@@ -511,7 +610,9 @@ public static class BlockAlternatives
 
         // Block for one ally (Lift…) does not protect the player: only the ally check below.
         // La grande manœuvre is followed on its own (its block comes with a deadly risk): see below.
-        var kept = hand.Where(c => c.GainsBlock && Affordable(c) && c is not TheGambit && (c.TargetType != TargetType.AnyAlly || c is Mimic))
+        // An Exhaust block card kept is never a miss (v0.17.34).
+        bool Exhausts(CardModel c) => c.Keywords.Contains(CardKeyword.Exhaust);
+        var kept = hand.Where(c => c.GainsBlock && Affordable(c) && !Exhausts(c) && c is not TheGambit && (c.TargetType != TargetType.AnyAlly || c is Mimic))
             .Select(c => (Card: c, Block: EstimateBlock(c)))
             .Where(x => x.Block > 0).OrderByDescending(x => x.Block).FirstOrDefault();
         if (kept.Card != null) Capture.Emit(new BlockCardKept(actor, Key(kept.Card), kept.Block));
@@ -523,7 +624,7 @@ public static class BlockAlternatives
         // A block card for allies (Lift, Rally…) kept in hand while an ally is alive: their HP lost may have been avoidable.
         if (combat.Players.Any(p => p != player && p.Creature.IsAlive))
         {
-            var forAllies = hand.Where(c => c.GainsBlock && c.TargetType is TargetType.AnyAlly or TargetType.AllAllies && c is not Mimic && Affordable(c))
+            var forAllies = hand.Where(c => c.GainsBlock && c.TargetType is TargetType.AnyAlly or TargetType.AllAllies && c is not Mimic && Affordable(c) && !Exhausts(c))
                 .Select(c => (Card: c, Block: EstimateBlock(c))).Where(x => x.Block > 0).OrderByDescending(x => x.Block).FirstOrDefault();
             if (forAllies.Card != null)
                 Capture.Emit(new AllyBlockCardKept(actor, Key(forAllies.Card), forAllies.Block, forAllies.Card.TargetType == TargetType.AllAllies));
@@ -565,7 +666,8 @@ public static class BlockAlternatives
     private static bool IsFree(CardModel c) => !c.EnergyCost.CostsX && Cost(c) == 0 && c.CurrentStarCost <= 0 && !c.HasStarCostX;
 
     /// A useful free card (attack, or skill/power without block: Neutralisation…) left in hand at the end of the turn is a
-    /// misplay counted in "Gâché" (v0.17.26), unless it is kept on purpose (Retain — Shivs with Phantom Blades —, Stars),
+    /// misplay counted in "Gâché" (v0.17.26), unless it is kept on purpose (Retain, Stars, Exhaust since v0.17.34), Rage with
+    /// no attack played while it was in hand,
     /// punished (Thorns
     /// the block cannot afford, Personal Hive), deals no damage, or there is nothing left to hit.
     private static void FreeCardsLeft(ICombatState combat, Player player)
@@ -574,10 +676,15 @@ public static class BlockAlternatives
         var creature = player.Creature;
         var surplus = creature.Block - IncomingDamage(creature);
         foreach (var c in st.Hand.Cards.Where(c => IsFree(c) && IsUseful(c) && !IsStatusOrCurse(c) && PlayableExceptEnergy(c) &&
-                                                   !KeptOnPurpose(c, combat) && !PunishedAttack(c) &&
+                                                   !KeptOnPurpose(c, combat) && !PunishedAttack(c) && !(c is Rage && !RageWouldHelp(c, player)) &&
                                                    (c.Type != CardType.Attack || (DealsDamage(c, combat) && ThornsDamage(c, creature) <= Math.Max(0, surplus)))))
             Capture.Emit(new MissedChance(Capture.ToActor(player), "freeCard", new[] { Key(c) }));
     }
+
+    /// Rage gives block for each attack played after it this turn: left in hand, it lost something only if the player
+    /// played an attack while it was in hand (v0.17.34).
+    private static bool RageWouldHelp(CardModel rage, Player player) =>
+        ThisTurn.Any(p => p.Owner == player && p.Card.Type == CardType.Attack && p.HandAtPlay.Contains(rage));
 
     /// Cards the player paid energy for this turn that did nothing useful: a block card with no other effect whose block
     /// was not needed (block at the end of the turn minus its block still covers the incoming attack), or a card whose
@@ -823,9 +930,11 @@ public static class BlockAlternatives
     }
 
     /// A card the player may keep on purpose, so not playing it is never a misplay (spec §E0, v0.17.0): it is retained
-    /// (Retain, or the whole hand is kept: Main retenue…), or it costs Stars (they are not refilled each turn).
+    /// (Retain, or the whole hand is kept: Main retenue…), it costs Stars (they are not refilled each turn), or it Exhausts
+    /// (gone once played: v0.17.34, Zaille75 — Surins and Entrave des ténèbres included; missed lethal still uses it).
     private static bool KeptOnPurpose(CardModel card, ICombatState combat) =>
-        card.ShouldRetainThisTurn || card.CurrentStarCost > 0 || card.HasStarCostX || !Hook.ShouldFlush(combat, card.Owner);
+        card.ShouldRetainThisTurn || card.CurrentStarCost > 0 || card.HasStarCostX || card.Keywords.Contains(CardKeyword.Exhaust) ||
+        !Hook.ShouldFlush(combat, card.Owner);
 
     /// The player has not enough Stars for this card.
     private static bool LacksStars(CardModel card)

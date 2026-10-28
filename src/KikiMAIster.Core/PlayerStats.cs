@@ -54,6 +54,9 @@ public sealed class PlayerStats
     public double WastedBlock { get; set; }
     /// Block that saved nothing with no alternative (no playable attack, relic/power block…).
     public double UselessBlock { get; set; }
+    /// Part of the useless block that could not be avoided (v0.17.34): the leftover of a block that stopped part of the
+    /// damage (needed 1 more, only a 5 in hand), or block no card chose (relics, powers, orbs).
+    public double UnavoidableBlock { get; set; }
     /// Part of the wasted + useless block that this player had given to allies (co-op detail).
     public double UnusedGivenToAllies { get; set; }
     public double UnusedOwn => WastedBlock + UselessBlock - UnusedGivenToAllies;
@@ -92,11 +95,11 @@ public sealed class PlayerStats
     public Dictionary<string, double> MissedByKind { get; } = new();
     public List<MissedEntry> MissedEntries { get; } = new();
     /// Worse choices: weak attacks + smaller block, Pen Nib on a weak attack, block below Orichalcum, growing card not played.
-    public double MissedChoices => WeakAttacks + new[] { "smallBlock", "penNib", "orichalcum", "order", "orderBlock", "orderSlow", "growth", "tent", "orderPotion", "restBoss", "orderDark" }.Sum(k => MissedByKind.GetValueOrDefault(k));
+    public double MissedChoices => WeakAttacks + new[] { "smallBlock", "penNib", "orichalcum", "order", "orderBlock", "orderSlow", "growth", "tent", "orderPotion", "restBoss", "orderDark", "stars", "shell" }.Sum(k => MissedByKind.GetValueOrDefault(k));
     /// Block card plays whose block was wasted (gâché, rule F3), counted once per play (saved with the run).
     public double WastedPlayCount { get; set; }
     /// "Gâché" misplays: wasted block card plays + useful free cards left in hand (v0.17.26; growing cards: Choix).
-    public double MissedWasted => WastedPlayCount + MissedByKind.GetValueOrDefault("freeCard");
+    public double MissedWasted => WastedPlayCount + MissedByKind.GetValueOrDefault("freeCard") + MissedByKind.GetValueOrDefault("starsWasted");
     /// Every missed opportunity counted once (trophies).
     public double MissedTotal => MissedLethals + MissedWasted + MissedChoices + MissedByKind.GetValueOrDefault("relic") + MissedByKind.GetValueOrDefault("paelsTears") +
                                  MissedByKind.GetValueOrDefault("potion") + (MissedByKind.GetValueOrDefault("blockKept") > 0 ? 1 : 0) +
@@ -139,6 +142,8 @@ public sealed class PlayerStats
     /// Max HP gained and lost during the run (events, relics, cards…).
     public double MaxHpGained { get; set; }
     public double MaxHpLost { get; set; }
+    /// HP lost outside fights (events…, v0.17.34): the game's damage taken on floors without a fight.
+    public double HpLostOutside { get; set; }
     /// Campfire choices, by the game's option id ("HEAL", "SMITH", "MEND"…): how many times each.
     public Dictionary<string, double> RestSiteChoices { get; } = new();
     /// Rock-paper-scissors when several players picked the same treasure relic: fights won / fought.

@@ -10,7 +10,7 @@ Summary by version line. The detailed notes of every version are in [docs/specs/
 - **Compositions:** every composition listed, sorted by games or win rate; "this group of players" stats from the
   game's run history; a table of who played what (2 players: my character × my partner's; 3–4 players: each player ×
   character); never-played / never-won suggestions with a random pick; opens by itself in the lobby, can be folded.
-- **New stats:** campfire choices, Max HP gained / lost (trophies Culturiste and Peau sur les os), rock-paper-scissors
+- **New stats:** useless block split into avoidable / unavoidable ("29/12"), HP lost outside fights, campfire choices, Max HP gained / lost (trophies Culturiste and Peau sur les os), rock-paper-scissors
   for relics across runs, self-inflicted damage, block enabled for allies (Sacrifice), campfire heals for allies.
 - **Pets:** HP saved on a pet (by debuffs or block) only count once it dies and its owner loses HP; attacks that grow
   with the pet's HP credit the allies behind those HP.
@@ -18,7 +18,9 @@ Summary by version line. The detailed notes of every version are in [docs/specs/
   (Friendship) and Plating handled; Personal Hive treated like Thorns; Miniature Tent options left behind; debuff
   help only counts the HP really saved or dealt; missed lethal ignores enemies spawned by a kill; block from a card that
   had an alternative absorbs last (Frost orbs make a Defend gâché); Focus gained after orbs fired and a rest before the
-  boss that was not needed count in Choix; Ice Lance no longer counted as 3 hits.
+  boss that was not needed count in Choix (Pantographe included); Ice Lance no longer counted as 3 hits; Stars spent for
+  nothing or where energy would do; attacks stopped by Carapace endurcie when something better was playable; Exhaust
+  cards never a miss when kept; Rage, asleep enemies and Thorns handled for unused energy and free cards.
 - **Interface:** "Erreurs" (Gâché + Choix) in every tab, sections in their own windows, hide columns at 0, richer details (Protection by block source),
   clicked window comes to the front, draggable settings, visible checkboxes, explanations kept across Save & Quit,
   previous session's log kept.

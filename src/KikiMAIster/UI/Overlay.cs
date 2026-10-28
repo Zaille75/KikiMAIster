@@ -58,7 +58,7 @@ public static class Overlay
     /// What your debuffs changed (v0.17.17: shown in Dégâts, no longer in Affaiblissements).
     private static readonly string[] DebuffEffectColumns = { "col.extraDamage", "col.avoided" };
 
-    private static readonly string[] TakenColumns = { "col.hpLost", "col.fromSelf", "col.fromAllies", "col.maxHp" };
+    private static readonly string[] TakenColumns = { "col.hpLost", "col.fromSelf", "col.fromAllies", "col.hpOutside", "col.maxHp" };
 
     private static readonly Section[] Sections =
     {
@@ -82,7 +82,7 @@ public static class Overlay
     /// What the settings menu can hide: every section, and its fixed columns (damage kinds and debuff effect included).
     internal static readonly (string Section, string[] Columns)[] Hideable =
     {
-        ("damage", new[] { "cat.cards", "cat.dot", "cat.powers", "cat.pet", "cat.orbs", "cat.relics", "cat.potions", "cat.other", "col.extraDamage", "col.avoided", "col.hpLost", "col.fromSelf", "col.fromAllies", "col.maxHp" }),
+        ("damage", new[] { "cat.cards", "cat.dot", "cat.powers", "cat.pet", "cat.orbs", "cat.relics", "cat.potions", "cat.other", "col.extraDamage", "col.avoided", "col.hpLost", "col.fromSelf", "col.fromAllies", "col.hpOutside", "col.maxHp" }),
         ("protection", new[] { "col.byBlock", "col.byPet", "col.useless", "col.petHp" }),
         ("debuffs", Array.Empty<string>()),
         ("missed", MissedColumns),
@@ -761,6 +761,7 @@ public static class Overlay
             .Append(new Cell("col.hpLost", N(s.HpLost), tip))
             .Append(new Cell("col.fromSelf", N(s.HpLostFromSelf), tip))
             .Append(new Cell("col.fromAllies", N(s.HpLostFromAllies), tip))
+            .Append(new Cell("col.hpOutside", N(s.HpLostOutside), tip))
             .Append(new Cell("col.maxHp", maxHp > 0 ? $"+{N(maxHp)}" : N(maxHp), tip)).ToArray();
     }
 
@@ -835,7 +836,8 @@ public static class Overlay
             new Cell("col.prevented", N(s.PreventedTotal), tip),
             new Cell("col.byBlock", N(s.PreventedByBlock), tip),
             new Cell("col.byPet", N(s.AbsorbedByPet + s.PetAbsorbedForAllies), tip),
-            new Cell("col.useless", N(s.UnusedBlock), tip),
+            // Useless / of which unavoidable (v0.17.34): "29/12".
+            new Cell("col.useless", $"{N(s.UnusedBlock)}/{N(Math.Min(s.UnavoidableBlock, s.UnusedBlock))}", tip),
             new Cell("col.petHp", N(s.PetHpGiven), tip)
         };
     }
