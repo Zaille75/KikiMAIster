@@ -162,10 +162,10 @@ public sealed record RunEnded(bool Victory) : StatEvent;
 public sealed record ChifumiFought(string FightId, Actor Winner, IReadOnlyList<Actor> Players) : StatEvent;
 
 /// What the game's map history says about one player so far in the run: Max HP gained and lost, campfire choices
-/// (option id → times), HP lost outside fights (events…, v0.17.34). Replaces the previous values (the history is complete
-/// each time).
+/// (option id → times), HP lost and healed outside fights by kind of floor ("event", "restSite", "other"; v0.17.34–35).
+/// Replaces the previous values (the history is complete each time).
 public sealed record RunHistoryRead(Actor Player, double MaxHpGained, double MaxHpLost, IReadOnlyDictionary<string, double> RestSiteChoices,
-    double HpLostOutside = 0) : StatEvent;
+    IReadOnlyDictionary<string, double>? HpLostOutside = null, IReadOnlyDictionary<string, double>? HealedOutside = null) : StatEvent;
 
 /// A missed lethal turn, kept for its explanation (not saved with the run). Combat: the fight's number in the run.
 public sealed record MissedLethalTurn(int Round, IReadOnlyList<string> Cards, int EnemiesHp, int Combat = 0);

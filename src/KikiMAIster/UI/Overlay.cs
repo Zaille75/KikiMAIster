@@ -58,7 +58,7 @@ public static class Overlay
     /// What your debuffs changed (v0.17.17: shown in Dégâts, no longer in Affaiblissements).
     private static readonly string[] DebuffEffectColumns = { "col.extraDamage", "col.avoided" };
 
-    private static readonly string[] TakenColumns = { "col.hpLost", "col.fromSelf", "col.fromAllies", "col.hpOutside", "col.maxHp" };
+    private static readonly string[] TakenColumns = { "col.hpLost", "col.fromSelf", "col.fromAllies", "col.hpOutside", "col.healOutside", "col.maxHp" };
 
     private static readonly Section[] Sections =
     {
@@ -82,7 +82,7 @@ public static class Overlay
     /// What the settings menu can hide: every section, and its fixed columns (damage kinds and debuff effect included).
     internal static readonly (string Section, string[] Columns)[] Hideable =
     {
-        ("damage", new[] { "cat.cards", "cat.dot", "cat.powers", "cat.pet", "cat.orbs", "cat.relics", "cat.potions", "cat.other", "col.extraDamage", "col.avoided", "col.hpLost", "col.fromSelf", "col.fromAllies", "col.hpOutside", "col.maxHp" }),
+        ("damage", new[] { "cat.cards", "cat.dot", "cat.powers", "cat.pet", "cat.orbs", "cat.relics", "cat.potions", "cat.other", "col.extraDamage", "col.avoided", "col.hpLost", "col.fromSelf", "col.fromAllies", "col.hpOutside", "col.healOutside", "col.maxHp" }),
         ("protection", new[] { "col.byBlock", "col.byPet", "col.useless", "col.petHp" }),
         ("debuffs", Array.Empty<string>()),
         ("missed", MissedColumns),
@@ -754,6 +754,15 @@ public static class Overlay
         var maxHp = s.MaxHpGained - s.MaxHpLost;
         if (s.MaxHpGained + s.MaxHpLost > 0)
             tip += Block($"{Loc.T("col.maxHp")}: {Line(("tip.maxHpGained", s.MaxHpGained, false), ("tip.maxHpLost", s.MaxHpLost, false))}");
+        // Outside fights (v0.17.34–35): HP lost and healed, by kind of floor.
+        string ByFloor(Dictionary<string, double> d) => string.Join(", ", d.OrderByDescending(kv => kv.Value)
+            .Select(kv => $"{Loc.T($"tip.floor.{kv.Key}")} {N(kv.Value)}"));
+        if (s.HpLostOutside + s.HealedOutside > 0)
+            tip += Block($"{Loc.T("col.hpOutside")}: " + string.Join(" · ", new[]
+            {
+                s.HpLostOutside > 0 ? $"{Loc.T("tip.lost")} {N(s.HpLostOutside)} ({ByFloor(s.HpLostOutsideBy)})" : "",
+                s.HealedOutside > 0 ? $"{Loc.T("tip.healed")} {N(s.HealedOutside)} ({ByFloor(s.HealedOutsideBy)})" : ""
+            }.Where(x => x != "")));
         return new[] { new Cell("col.total", totalText, tip) }
             .Concat(_damageColumns.Select(c => new Cell(c, N(byColumn.GetValueOrDefault(c)), tip)))
             .Append(new Cell("col.extraDamage", N(extra), tip))
@@ -762,6 +771,7 @@ public static class Overlay
             .Append(new Cell("col.fromSelf", N(s.HpLostFromSelf), tip))
             .Append(new Cell("col.fromAllies", N(s.HpLostFromAllies), tip))
             .Append(new Cell("col.hpOutside", N(s.HpLostOutside), tip))
+            .Append(new Cell("col.healOutside", N(s.HealedOutside), tip))
             .Append(new Cell("col.maxHp", maxHp > 0 ? $"+{N(maxHp)}" : N(maxHp), tip)).ToArray();
     }
 

@@ -144,6 +144,11 @@ public sealed class PlayerStats
     public double MaxHpLost { get; set; }
     /// HP lost outside fights (events…, v0.17.34): the game's damage taken on floors without a fight.
     public double HpLostOutside { get; set; }
+    /// HP healed outside fights (events, campfires, relics…, v0.17.35).
+    public double HealedOutside { get; set; }
+    /// Both by kind of floor: "event", "restSite", "other".
+    public Dictionary<string, double> HpLostOutsideBy { get; } = new();
+    public Dictionary<string, double> HealedOutsideBy { get; } = new();
     /// Campfire choices, by the game's option id ("HEAL", "SMITH", "MEND"…): how many times each.
     public Dictionary<string, double> RestSiteChoices { get; } = new();
     /// Rock-paper-scissors when several players picked the same treasure relic: fights won / fought.

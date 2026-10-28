@@ -214,7 +214,12 @@ public sealed class StatsEngine
                 var s = Stats(Scope.Run, h.Player.PlayerId);
                 s.MaxHpGained = h.MaxHpGained;
                 s.MaxHpLost = h.MaxHpLost;
-                s.HpLostOutside = h.HpLostOutside;
+                s.HpLostOutsideBy.Clear();
+                foreach (var (k, v) in h.HpLostOutside ?? new Dictionary<string, double>()) s.HpLostOutsideBy[k] = v;
+                s.HpLostOutside = s.HpLostOutsideBy.Values.Sum();
+                s.HealedOutsideBy.Clear();
+                foreach (var (k, v) in h.HealedOutside ?? new Dictionary<string, double>()) s.HealedOutsideBy[k] = v;
+                s.HealedOutside = s.HealedOutsideBy.Values.Sum();
                 s.RestSiteChoices.Clear();
                 foreach (var (k, v) in h.RestSiteChoices) s.RestSiteChoices[k] = v;
                 break;

@@ -34,8 +34,12 @@ public class Feedback0_17_34Tests : TestBase
     [Fact]
     public void HpLostOutside_FromRunHistory_RunScopeOnly()
     {
-        Engine.Handle(new RunHistoryRead(A, 0, 25, new Dictionary<string, double>(), HpLostOutside: 12));
+        Engine.Handle(new RunHistoryRead(A, 0, 25, new Dictionary<string, double>(),
+            HpLostOutside: new Dictionary<string, double> { ["event"] = 12 },
+            HealedOutside: new Dictionary<string, double> { ["event"] = 5, ["restSite"] = 20 }));
         Assert.Equal(12, Engine.Get(Scope.Run, IdA).HpLostOutside);
+        Assert.Equal(25, Engine.Get(Scope.Run, IdA).HealedOutside);
+        Assert.Equal(20, Engine.Get(Scope.Run, IdA).HealedOutsideBy["restSite"]);
         Assert.Equal(0, Combat(IdA).HpLostOutside);
     }
 
