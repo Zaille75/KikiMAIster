@@ -963,6 +963,50 @@ public static class Overlay
         return l;
     }
 
+    /// Two round arrows making a circle, drawn with lines (no font needs the symbol): clicking it runs the action.
+    internal static Control CycleButton(string tooltip, Action pressed)
+    {
+        const float size = 16, r = 5.5f;
+        var box = new Control
+        {
+            CustomMinimumSize = new Vector2(size + 6, size), MouseFilter = Control.MouseFilterEnum.Stop,
+            MouseDefaultCursorShape = Control.CursorShape.PointingHand, TooltipText = tooltip
+        };
+        var center = new Vector2(size / 2 + 3, size / 2);
+        var parts = new List<CanvasItem>();
+        // Two arcs of about 140°, each ending with an arrowhead pointing clockwise.
+        foreach (var start in new[] { -170f, 10f })
+        {
+            var line = new Line2D { Width = 1.6f, DefaultColor = Accent, Antialiased = true };
+            const int steps = 10;
+            for (var i = 0; i <= steps; i++)
+            {
+                var a = Mathf.DegToRad(start + 140f * i / steps);
+                line.AddPoint(center + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * r);
+            }
+            var end = Mathf.DegToRad(start + 140f);
+            var tip = center + new Vector2(Mathf.Cos(end), Mathf.Sin(end)) * r;
+            var tangent = new Vector2(-Mathf.Sin(end), Mathf.Cos(end));
+            var radial = new Vector2(Mathf.Cos(end), Mathf.Sin(end));
+            var head = new Polygon2D
+            {
+                Color = Accent,
+                Polygon = new[] { tip + tangent * 3.2f, tip + radial * 2.6f, tip - radial * 2.6f }
+            };
+            box.AddChild(line);
+            box.AddChild(head);
+            parts.Add(line);
+            parts.Add(head);
+        }
+        box.MouseEntered += () => parts.ForEach(p => p.Modulate = new Color(1.25f, 1.25f, 1.25f));
+        box.MouseExited += () => parts.ForEach(p => p.Modulate = Colors.White);
+        box.GuiInput += e =>
+        {
+            if (e is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true }) pressed();
+        };
+        return box;
+    }
+
     internal static Button MakeButton(string text)
     {
         var b = new Button { Text = text, Flat = true, FocusMode = Control.FocusModeEnum.None };

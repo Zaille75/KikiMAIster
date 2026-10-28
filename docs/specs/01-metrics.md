@@ -94,6 +94,12 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
   Osty HP enabled their share of that block (same proportions): Coop column **"Armure permise"**, and what that block
   then stops counts in their "PV sauvés" (the owner keeps the full block in his own protection, like Permis for
   damage). HP saved by debuffs are current HP: they do not change max HP, so they never change Sacrifice's block.
+- **Block on a hit aimed at the pet (v0.17.8, Zaille75, to be judged in game):** pets use their owner's block, but that
+  block saved the **pet's** HP. It now follows the same rule as debuffs: it counts (as the giver's block protection:
+  own "Armure", or "PV sauvés" for an ally's block) only once the pet died and its owner then loses HP to enemies in
+  the same fight, and while the pet lives it feeds Déchaînement's Permis for an ally who gave that block. "Bloqués"
+  (damage blocked) stays immediate. The previous rule (block on the pet counted at once) is kept in git as the tag
+  `backup/v0.17.7-pet-protection-immediate`.
 
 ## C. Protection & support
 

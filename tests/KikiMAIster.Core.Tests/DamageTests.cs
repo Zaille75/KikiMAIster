@@ -145,10 +145,15 @@ public class DamageTests : TestBase
         EnemyHits(PetA, blocked: 3, hp: 5, killed: true);
 
         var s = Combat(IdA);
-        Assert.Equal(3, s.PreventedOwnBlock);
+        // v0.17.8: block that protected the pet counts only once the pet died and its owner loses HP.
+        Assert.Equal(0, s.PreventedOwnBlock);
         Assert.Equal(5, s.AbsorbedByPet);
         Assert.Equal(1, s.PetDeaths);
         Assert.Equal(0, s.HpLost);
+        EnemyHits(A, 0, 2);
+        Assert.Equal(2, s.PreventedOwnBlock);
+        EnemyHits(A, 0, 4);
+        Assert.Equal(3, s.PreventedOwnBlock);
     }
 
     [Fact]

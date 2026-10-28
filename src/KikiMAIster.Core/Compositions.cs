@@ -89,6 +89,28 @@ public sealed class Compositions
         return grid;
     }
 
+    /// Per player (spec 02-ui v0.17.8, 3–4 players): the runs of this size in which each of these players played each
+    /// character. GroupOnly: only the runs of exactly these players; else every run of that player with this many players.
+    public static Dictionary<(ulong Player, string Character), List<Run>> PerPlayer(IEnumerable<Run> runs, IReadOnlyCollection<ulong> players,
+        int size, bool groupOnly, int? ascension)
+    {
+        var wanted = players.ToHashSet();
+        var result = new Dictionary<(ulong, string), List<Run>>();
+        foreach (var run in runs)
+        {
+            if (run.Players.Count != size || (ascension != null && run.Ascension != ascension)) continue;
+            if (groupOnly && !run.Players.ToHashSet().SetEquals(wanted)) continue;
+            for (var i = 0; i < run.Players.Count; i++)
+            {
+                if (!wanted.Contains(run.Players[i])) continue;
+                var key = (run.Players[i], run.Characters[i]);
+                if (!result.TryGetValue(key, out var list)) result[key] = list = new();
+                list.Add(run);
+            }
+        }
+        return result;
+    }
+
     /// The tallies of every run.
     public static Compositions Of(IEnumerable<Run> runs)
     {

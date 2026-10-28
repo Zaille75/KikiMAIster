@@ -112,4 +112,21 @@ public class RunHistoryTests : TestBase
         var withTwo = Compositions.Grid(runs, 1, 2, null);
         Assert.Equal(new Compositions.Tally(1, 1), withTwo[("IRONCLAD", "SILENT")]);
     }
+
+    [Fact]
+    public void PerPlayer_CharactersOfEachPlayer()
+    {
+        var runs = new[]
+        {
+            new Compositions.Run(new ulong[] { 1, 2, 3 }, new[] { "IRONCLAD", "SILENT", "DEFECT" }, 0, true),
+            new Compositions.Run(new ulong[] { 3, 1, 2 }, new[] { "IRONCLAD", "SILENT", "DEFECT" }, 0, false),
+            new Compositions.Run(new ulong[] { 1, 2, 4 }, new[] { "IRONCLAD", "SILENT", "DEFECT" }, 0, false),
+        };
+        var group = Compositions.PerPlayer(runs, new ulong[] { 1, 2, 3 }, 3, groupOnly: true, null);
+        Assert.Single(group[(1, "IRONCLAD")]);
+        Assert.Single(group[(1, "SILENT")]);
+        Assert.False(group.ContainsKey((4, "DEFECT")));
+        var general = Compositions.PerPlayer(runs, new ulong[] { 1, 2, 3 }, 3, groupOnly: false, null);
+        Assert.Equal(2, general[(1, "IRONCLAD")].Count);
+    }
 }

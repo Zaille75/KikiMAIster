@@ -298,9 +298,11 @@ public static class CompositionWindow
                 (context.Ascension is { } a ? string.Format(Loc.T("compo.at"), a) : "") + Stats(data.Get(context.Group, context.Ascension)),
                 Overlay.Text));
 
-        // 2 players with both known (lobby or run): list or grid "my character × my partner's character" (v0.17.7).
-        var gridAvailable = context.Me is { } myId && context.Ids.Count == 2 && context.Ids.Contains(myId);
-        if (_players == 2)
+        // The players present are known (lobby or run): list or table. 2 players: my character × my partner's (v0.17.7);
+        // 3–4 players: each player × the characters they played (v0.17.8).
+        var gridAvailable = context.Ids.Count == _players &&
+                            (_players > 2 || (context.Me is { } myId && context.Ids.Contains(myId)));
+        if (_players >= 2)
         {
             var view = new HBoxContainer();
             view.AddChild(Overlay.MakeLabel(Loc.T("compo.view"), Overlay.Text));
@@ -310,7 +312,7 @@ public static class CompositionWindow
                 b.AddThemeColorOverride("font_color", (cfg.CompoGrid && gridAvailable) == grid ? Overlay.Accent : Overlay.Muted);
                 b.AddThemeColorOverride("font_disabled_color", new Color(Overlay.Muted, 0.35f));
                 b.Disabled = grid && !gridAvailable;
-                b.TooltipText = Loc.T(grid ? "compo.gridTip" : "compo.listTip");
+                b.TooltipText = Loc.T(grid ? (_players == 2 ? "compo.gridTip" : "compo.perPlayerTip") : "compo.listTip");
                 b.Pressed += () => Capture.Safe("CompositionWindow.View", () =>
                 {
                     cfg.CompoGrid = grid;
@@ -322,7 +324,11 @@ public static class CompositionWindow
             _content.AddChild(view);
         }
 
-        if (_players == 2 && gridAvailable && cfg.CompoGrid) AddGrid(context, characters, cfg.CompoGroupOnly);
+        if (gridAvailable && cfg.CompoGrid)
+        {
+            if (_players == 2) AddGrid(context, characters, cfg.CompoGroupOnly);
+            else AddPerPlayer(context, characters, cfg.CompoGroupOnly);
+        }
         else
         {
             // Sort: by games or by win rate, decreasing or increasing (v0.17.0).
@@ -382,10 +388,10 @@ public static class CompositionWindow
         }
 
         // Suggestions: a composition never played, one never won.
-        AddSuggestion("compo.neverPlayed", data.NeverPlayed(characters, _players, _ascension).ToList(), _neverPlayedPick, () => _neverPlayedPick++);
+        AddSuggestion("compo.neverPlayed", data.NeverPlayed(characters, _players, _ascension).ToList(), _neverPlayedPick, p => _neverPlayedPick = p);
         // Never won = played and always lost: only shown once such a composition exists.
         var neverWon = data.NeverWon(characters, _players, _ascension).ToList();
-        if (neverWon.Count > 0) AddSuggestion("compo.neverWon", neverWon, _neverWonPick, () => _neverWonPick++);
+        if (neverWon.Count > 0) AddSuggestion("compo.neverWon", neverWon, _neverWonPick, p => _neverWonPick = p);
     }
 
     /// Rows: my character; columns: my partner's (this partner only, or anyone). Each cell: games played (tooltip: wins).
@@ -419,23 +425,69 @@ public static class CompositionWindow
         if (!CompositionStore.HistoryRead) _content.AddChild(Overlay.MakeLabel(Loc.T("compo.noHistory"), Overlay.Muted));
     }
 
-    private static void AddSuggestion(string labelKey, List<string> options, int pick, Action next)
+    /// 3–4 players: one row per player present, one column per character; each cell = games that player played that
+    /// character (this group only, or every run of that player with this many players). Hover: the compositions played.
+    private static void AddPerPlayer(Context context, IReadOnlyList<string> characters, bool groupOnly)
+    {
+        var cells = CompositionStore.PerPlayer(context.Ids, _players, groupOnly, _ascension);
+        string Name(ulong id)
+        {
+            var i = context.Ids.ToList().IndexOf(id);
+            return i >= 0 ? context.Names[i] : Loc.T("compo.otherPlayer");
+        }
+        _content!.AddChild(Overlay.MakeLabel(Loc.T("compo.perPlayerAxes"), Overlay.Muted));
+        var grid = new GridContainer { Columns = characters.Count + 1, MouseFilter = Control.MouseFilterEnum.Pass };
+        grid.AddThemeConstantOverride("h_separation", 12);
+        grid.AddThemeConstantOverride("v_separation", 0);
+        grid.AddChild(Overlay.MakeLabel("", Overlay.Muted));
+        foreach (var c in characters) grid.AddChild(Overlay.MakeLabel(GameNames.Of($"Character:{c}"), Overlay.CharacterColor(c), HorizontalAlignment.Center));
+        foreach (var id in context.Ids)
+        {
+            var name = Overlay.MakeLabel(Name(id), Overlay.Text);
+            name.ClipText = true;
+            name.CustomMinimumSize = new Vector2(90, 0);
+            grid.AddChild(name);
+            foreach (var c in characters)
+            {
+                var runs = cells.GetValueOrDefault((id, c)) ?? new List<Compositions.Run>();
+                var won = runs.Count(r => r.Victory);
+                var cell = Overlay.MakeLabel(runs.Count == 0 ? "·" : runs.Count.ToString(CultureInfo.InvariantCulture),
+                    won > 0 ? Overlay.Text : Overlay.Muted, HorizontalAlignment.Center);
+                if (runs.Count > 0)
+                {
+                    // Each composition played (who played what), with its games and wins.
+                    var lines = runs.GroupBy(r => string.Join(" · ", r.Players.Select((p, k) => (Player: p, Character: r.Characters[k]))
+                            .OrderBy(x => context.Ids.Contains(x.Player) ? context.Ids.ToList().IndexOf(x.Player) : int.MaxValue)
+                            .Select(x => $"{Name(x.Player)}: {GameNames.Of($"Character:{x.Character}")}")))
+                        .OrderByDescending(g => g.Count())
+                        .Select(g => $"{g.Key} — {Stats(new Compositions.Tally(g.Count(), g.Count(r => r.Victory)))}");
+                    cell.TooltipText = $"{Name(id)} · {GameNames.Of($"Character:{c}")}: {Stats(new Compositions.Tally(runs.Count, won))}\n" +
+                                       string.Join('\n', lines);
+                    cell.MouseFilter = Control.MouseFilterEnum.Stop;
+                }
+                grid.AddChild(cell);
+            }
+        }
+        _content.AddChild(grid);
+        if (!CompositionStore.HistoryRead) _content.AddChild(Overlay.MakeLabel(Loc.T("compo.noHistory"), Overlay.Muted));
+    }
+
+    private static void AddSuggestion(string labelKey, List<string> options, int pick, Action<int> setPick)
     {
         var row = new HBoxContainer();
         row.AddChild(Overlay.MakeLabel(string.Format(Loc.T(labelKey), options.Count), Overlay.Accent));
         row.AddChild(Overlay.MakeLabel(options.Count == 0 ? "-" : Describe(options[pick % options.Count]), Overlay.Text));
         if (options.Count > 1)
         {
-            // A "turning arrows" button (v0.17.0), clearer than the "Another one" text, which stays as its tooltip.
-            var another = Overlay.MakeButton("↻");
-            another.TooltipText = Loc.T("compo.another");
-            another.AddThemeColorOverride("font_color", Overlay.Accent);
-            another.Pressed += () => Capture.Safe("CompositionWindow.Another", () =>
+            // Two round arrows making a circle (drawn: no font has to provide the symbol); a new random pick.
+            row.AddChild(Overlay.CycleButton(Loc.T("compo.another"), () => Capture.Safe("CompositionWindow.Another", () =>
             {
-                next();
+                // Another one at random, never the one shown.
+                var current = pick % options.Count;
+                var other = Rng.Next(options.Count - 1);
+                setPick(other >= current ? other + 1 : other);
                 _rebuildPending = true;
-            });
-            row.AddChild(another);
+            })));
         }
         _content!.AddChild(row);
     }
@@ -450,6 +502,14 @@ public static class CompositionStore
 
     /// The game's run history could be read (else "this group" has no data).
     public static bool HistoryRead { get; private set; }
+
+    /// Runs of this size per (player, character), for the players present.
+    public static Dictionary<(ulong Player, string Character), List<Compositions.Run>> PerPlayer(IReadOnlyCollection<ulong> players, int size,
+        bool groupOnly, int? ascension)
+    {
+        _ = Data;
+        return Compositions.PerPlayer(Runs, players, size, groupOnly, ascension);
+    }
 
     /// 2-player runs: my character × my partner's (that partner only, or anyone).
     public static Dictionary<(string Mine, string Theirs), Compositions.Tally> Grid(ulong me, ulong? partner, int? ascension)

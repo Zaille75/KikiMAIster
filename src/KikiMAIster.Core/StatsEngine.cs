@@ -29,10 +29,45 @@ public sealed class StatsEngine
     private readonly Dictionary<ulong, List<DebuffEffect>> _pendingDefense = new();
     /// HP of a player's pet saved by debuffs (v0.17.4): only real once the pet died and its owner then loses HP in the
     /// same fight. Owner → saved effects not yet credited; owners whose pet died since.
-    private readonly Dictionary<ulong, List<DebuffEffect>> _petSaved = new();
+    private readonly Dictionary<ulong, List<PetSave>> _petSaved = new();
     private readonly HashSet<ulong> _petDied = new();
     /// The same saved pet HP, for the pet's current life only (attacks that grow with the pet's HP: Déchaînement).
-    private readonly Dictionary<ulong, List<DebuffEffect>> _petSavedAlive = new();
+    private readonly Dictionary<ulong, List<PetSave>> _petSavedAlive = new();
+
+    /// Pet HP saved by a debuff (Debuff: who was responsible, resolved at the hit) or by block (v0.17.8: Giver = who gave
+    /// that block, the owner included).
+    private sealed record PetSave(ulong Giver, double Amount, DebuffEffect? Debuff = null)
+    {
+        public PetSave Part(double amount) => this with { Amount = amount, Debuff = Debuff == null ? null : Debuff with { Amount = amount } };
+    }
+
+    private void AddPetSaves(ulong owner, IEnumerable<PetSave> saves)
+    {
+        var list = saves.ToList();
+        if (!_petSaved.TryGetValue(owner, out var kept)) _petSaved[owner] = kept = new();
+        kept.AddRange(list);
+        if (!_petSavedAlive.TryGetValue(owner, out var alive)) _petSavedAlive[owner] = alive = new();
+        alive.AddRange(list);
+    }
+
+    /// A pet save turned real: the debuff's applier gets it as HP prevented, the block's giver as block protection.
+    private void CreditPetSave(ulong owner, PetSave save)
+    {
+        if (save.Debuff != null)
+        {
+            CreditResolved(save.Debuff);
+            return;
+        }
+        Each(save.Giver, s =>
+        {
+            if (save.Giver == owner) s.PreventedOwnBlock += save.Amount;
+            else
+            {
+                s.PreventedForAllies += save.Amount;
+                PlayerStats.Add(s.SavedPerAlly, AllyKey(owner), save.Amount);
+            }
+        });
+    }
     /// Rock-paper-scissors fights already counted in this run.
     private readonly HashSet<string> _chifumiFights = new();
 
@@ -383,6 +418,13 @@ public sealed class StatsEngine
                         s.SavedByEnabledBlock += taken * share;
                         PlayerStats.Add(s.SavedPerAlly, AllyKey(owner), taken * share);
                     });
+                // Block on a hit aimed at the pet saved the pet's HP: it counts like a debuff's saving (v0.17.8), once the
+                // pet died and its owner loses HP, and for attacks that grow with the pet's HP.
+                if (d.Target.Kind == ActorKind.Pet)
+                {
+                    AddPetSaves(owner, new[] { new PetSave(layer.GiverId, taken) });
+                    return;
+                }
                 Each(layer.GiverId, s =>
                 {
                     if (layer.GiverId == owner) s.PreventedOwnBlock += taken;
@@ -394,6 +436,8 @@ public sealed class StatsEngine
                 });
             });
             Each(owner, s => s.DamageBlocked += d.Blocked);
+            // A pet killed by this hit: its life's savings (just added) are gone for its HP-based attacks.
+            if (d.Target.Kind == ActorKind.Pet && d.Killed) _petSavedAlive.Remove(owner);
         }
 
         if (d.Target.Kind == ActorKind.Pet)
@@ -570,11 +614,7 @@ public sealed class StatsEngine
         {
             // The pet's HP: kept until the pet dies and its owner loses HP (ReleasePetSaved), and while the pet lives,
             // for attacks that grow with its HP (OnPetHpAttack). Who was responsible is decided now.
-            var resolved = scaled.SelectMany(Resolved).ToList();
-            if (!_petSaved.TryGetValue(owner, out var kept)) _petSaved[owner] = kept = new();
-            kept.AddRange(resolved);
-            if (!_petSavedAlive.TryGetValue(owner, out var alive)) _petSavedAlive[owner] = alive = new();
-            alive.AddRange(resolved);
+            AddPetSaves(owner, scaled.SelectMany(Resolved).Select(e => new PetSave(e.Applier.PlayerId, e.Amount, e)));
             return;
         }
         foreach (var e in scaled) CreditDebuffEffect(e);
@@ -589,10 +629,10 @@ public sealed class StatsEngine
         {
             var e = kept[0];
             var part = Math.Min(e.Amount, hpLost);
-            CreditResolved(e with { Amount = part });
+            CreditPetSave(owner, e.Part(part));
             hpLost -= part;
             if (part >= e.Amount) kept.RemoveAt(0);
-            else kept[0] = e with { Amount = e.Amount - part };
+            else kept[0] = e.Part(e.Amount - part);
         }
     }
 
@@ -616,10 +656,10 @@ public sealed class StatsEngine
         }
         if (a.FromCurrentHp > 0 && a.PetHp > 0)
         {
-            var saves = _petSavedAlive.GetValueOrDefault(owner) ?? new List<DebuffEffect>();
+            var saves = _petSavedAlive.GetValueOrDefault(owner) ?? new List<PetSave>();
             var savedTotal = saves.Sum(e => e.Amount);
             var scale = savedTotal > a.PetHp ? a.PetHp / savedTotal : 1;
-            foreach (var e in saves) Enable(e.Applier.PlayerId, a.FromCurrentHp * e.Amount * scale / a.PetHp, e.PowerId);
+            foreach (var e in saves) Enable(e.Giver, a.FromCurrentHp * e.Amount * scale / a.PetHp, e.Debuff?.PowerId ?? "Block");
             var rest = a.FromCurrentHp * (a.PetHp - savedTotal * scale) / a.PetHp;
             if (given != null && givenTotal > 0)
                 foreach (var (giver, hp) in given) Enable(giver, rest * hp / givenTotal, "Pet");

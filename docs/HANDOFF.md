@@ -150,14 +150,13 @@ hotkey settings, chart history across Save & Quit.
   permise" and what it stops is PV sauvés. Answered (v0.17.7): Ralenti stays in Choix; trophy names OK; self-debuffs
   go to Dégâts "Auto-infligés"; growing cards to Choix; "Évités" chart removal confirmed; v1.0 prep later. The Mante
   freeze: the game just stopped (frequent beta crashes). **Still open:** block on the pet waiting for its death (question
-  re-explained); Agression (re-explained); proposal for 3–4 player composition views (per-player × character grid).
+  re-explained → done in v0.17.8, judged in game; back-up tag `backup/v0.17.7-pet-protection-immediate`);
+  Agression dropped (Zaille75 will check later); 3–4 player per-player table done (v0.17.8).
 - Zaille75 tests v0.16.8 in co-op and sends the log ("log transferred"), see "Path to v1.0" step 1.
 - **Trophy list:** v0.15.0 co-op additions validated by Zaille75 (Bouclier humain, Dynamo, Croupier; Forteresse = own only;
   Traître includes ally HP that a kept ally block card could have saved; Tank and pets given to allies credited). Not tested in game.
 - Previous fights are kept across Save & Quit since v0.14.0 (run file `combat.N.*` lines); not the explanations of misses.
-- **Asked Zaille75 (v0.14.0):** the "Agression" feedback. The log showed the only flagged play (Mante Chapardeuse T4: Frappe
-  instead of Incendie) with Incendie in hand since the start of the turn (Agression adds it before the draw). Waiting
-  for the exact line he saw. Intouchable: victories only, hidden after a defeat (validated, v0.14.1).
+- Intouchable: victories only, hidden after a defeat (validated, v0.14.1).
 - Roadmap leftovers: MVP line in the summary; end-of-run Totals / Per act tabs; JSON export; settings for opacity,
   scale, hotkey; support for the default (non-beta) branch (`lib/default`); publishing (GitHub, Steam Workshop, Nexus).
 - Offered but not requested: keeping the chart history (per-combat timeline) across Save & Quit.

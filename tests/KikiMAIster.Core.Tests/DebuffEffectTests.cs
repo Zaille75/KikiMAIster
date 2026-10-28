@@ -292,4 +292,16 @@ public class PetHpAttackTests : TestBase
         Assert.Equal(2, Combat(IdC).SavedForAllies, 6);
         Assert.Equal(8, Combat(IdB).PreventedOwnBlock, 6);
     }
+
+    [Fact]
+    public void BlockOnPet_FeedsUnleash_ForTheAllyWhoGaveIt()
+    {
+        var petB = Actor.Pet(IdB, 11);
+        Engine.Handle(new PetHpGiven(B, 8, B));
+        Block(B, C, 4); // C's block on B
+        EnemyHits(petB, 4, 0);
+        Assert.Equal(0, Combat(IdC).SavedForAllies);
+        Engine.Handle(new PetHpAttack(petB, 8, 0, 8));
+        Assert.Equal(4, Combat(IdC).DamageEnabledAllies, 6);
+    }
 }
