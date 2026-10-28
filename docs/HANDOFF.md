@@ -1,4 +1,9 @@
-# Handoff — state of the project (2026-10-28, v0.17.0)
+# Handoff — state of the project (2026-10-28, v0.17.37)
+
+> **Next session starts with Zaille75's next co-op test (beta branch, v0.17.37 or later).** He will send it with
+> `Envoyer-a-Claude.bat` → `logs/inbox/<date_time>/` (both logs + F9 `feedback/` folders). **Review and summarize every
+> report first, wait for his go, then implement the whole batch** (memory rules). See "Waiting for the next co-op test"
+> below for what to check.
 
 Read this first in a new conversation, then `CLAUDE.md`, `docs/specs/01-metrics.md` and `docs/specs/02-ui.md`.
 The conversation of 2026-10-27 turned the 27 feedback points of the first co-op games into v0.8.0 → v0.13.4, then
@@ -137,6 +142,27 @@ Order: test → default branch → release prep → publish → maintenance. The
 
 Optional roadmap items (only if asked): JSON export, end-of-run Totals / Per act tabs, MVP line, opacity / scale /
 hotkey settings, chart history across Save & Quit.
+
+## Waiting for the next co-op test (written 2026-10-28, end of session)
+Versions v0.17.32 → v0.17.37 were built from two solo runs on the **main branch** (Défectueux, then Soldat de fer and
+Régent; archived in `logs/2026-10-28_v0.17.31_main_solo_defect_inbox/` and
+`logs/2026-10-28_v0.17.33_main_solo_ironclad_regent_inbox/`). **None of it is tested in game yet.** In the co-op log,
+check especially:
+- **F10 (v0.17.32):** block from a play with an alternative absorbs last — gâché / inutile figures and `block play N`
+  lines look right, nothing shifted between players (co-op block given to allies goes through the same ledger).
+- **New Choix / Gâché kinds:** `restBoss` (+ Pantographe), `order`/`orderBlock`/`orderDark` from Focus, `stars`,
+  `starsWasted`, `shell` (Carapace endurcie: hits with 0 damage are now reported before the early return in
+  `DamagePatches.Report`, and InfiniteWithNumbers enemies are no longer skipped — check the damage totals did not jump).
+- **Unused energy:** no `energy` miss while an enemy is asleep or when only Thorns-punished attacks are left; Exhaust
+  cards are never a miss (KeptOnPurpose) — check weak attacks / relic triggers did not disappear wrongly.
+- **Run history:** `RunHistoryRead` now carries HP lost/healed outside fights by floor kind and `RunEconomy` (gold,
+  curses, purchases); `event before the fight` log lines for event fights (PreFightEvent, once per floor).
+- **UI:** Erreurs column in every tab; Inutile "x/y"; Dégâts "Hors combat" / "Soins hors combat"; section
+  "Or et malédictions"; Cartes et potions "Énergie pour rien"; trophies Chercheur d'or, Panier percé, Radin, Chat noir,
+  Batterie pleine (spare + for-nothing energy).
+- Zaille75 plays the **beta** normally: install from `dist/beta/`. `dist/default/` is only for main-branch tests.
+- Send-to-Claude script lives in `dist/tools/` (git-ignored, has the server address); rebuild with the same content
+  if `dist/` is ever wiped.
 
 ## Open topics for the next conversation
 - **Event outcomes not tracked yet (audit v0.17.35, decision pending with Zaille75):** cards gained / removed, upgrades,
