@@ -202,7 +202,7 @@ public static class Overlay
     internal static void RaiseAt(Vector2 position)
     {
         if (_layer == null || !GodotObject.IsInstanceValid(_layer)) return;
-        foreach (var child in _layer.GetChildren().Reverse())
+        foreach (var child in Enumerable.Reverse(_layer.GetChildren().ToList()))
         {
             if (child is not Control { Visible: true } window) continue;
             if (!new Rect2(window.Position, window.Size * window.Scale).HasPoint(position)) continue;
