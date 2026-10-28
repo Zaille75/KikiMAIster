@@ -165,6 +165,7 @@ public static class SettingsMenu
         var c = new CheckBox { Text = text, ButtonPressed = on, FocusMode = Control.FocusModeEnum.None };
         c.AddThemeFontSizeOverride("font_size", small ? Overlay.FontSize - 1 : Overlay.FontSize);
         c.AddThemeColorOverride("font_color", small ? Overlay.Muted : Overlay.Text);
+        Overlay.StyleCheckBox(c);
         c.Toggled += value => Capture.Safe("SettingsMenu.Toggle", () => toggled(value));
         return c;
     }

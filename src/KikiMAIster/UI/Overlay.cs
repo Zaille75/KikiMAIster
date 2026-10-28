@@ -1013,6 +1013,45 @@ public static class Overlay
         return box;
     }
 
+    private static Texture2D? _boxOff, _boxOn;
+
+    /// The game's checkbox icons are dark on the dark panel: drawn boxes instead (v0.17.11), a light frame when unticked,
+    /// the same frame filled with the accent color and a tick when ticked.
+    internal static void StyleCheckBox(CheckBox c)
+    {
+        _boxOff ??= BoxTexture(false);
+        _boxOn ??= BoxTexture(true);
+        foreach (var (name, tex) in new[] { ("unchecked", _boxOff), ("unchecked_disabled", _boxOff), ("checked", _boxOn), ("checked_disabled", _boxOn) })
+            c.AddThemeIconOverride(name, tex);
+    }
+
+    private static Texture2D BoxTexture(bool on)
+    {
+        const int n = 14;
+        var img = Image.CreateEmpty(n, n, false, Image.Format.Rgba8);
+        var frame = new Color(Text, 0.85f);
+        for (var x = 0; x < n; x++)
+            for (var y = 0; y < n; y++)
+            {
+                var border = x <= 1 || y <= 1 || x >= n - 2 || y >= n - 2;
+                img.SetPixel(x, y, border ? frame : on ? new Color(Accent, 0.9f) : new Color(1, 1, 1, 0.08f));
+            }
+        if (on)
+        {
+            // A dark tick: short stroke down-right, then long stroke up-right.
+            var tick = new Color(0.08f, 0.08f, 0.1f);
+            for (var i = 0; i < 3; i++) Thick(img, 3 + i, 7 + i, tick);
+            for (var i = 0; i < 6; i++) Thick(img, 6 + i, 9 - i, tick);
+        }
+        return ImageTexture.CreateFromImage(img);
+    }
+
+    private static void Thick(Image img, int x, int y, Color color)
+    {
+        foreach (var (dx, dy) in new[] { (0, 0), (0, 1) })
+            if (x + dx < img.GetWidth() && y + dy < img.GetHeight()) img.SetPixel(x + dx, y + dy, color);
+    }
+
     internal static Button MakeButton(string text)
     {
         var b = new Button { Text = text, Flat = true, FocusMode = Control.FocusModeEnum.None };

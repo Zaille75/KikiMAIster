@@ -237,6 +237,7 @@ public static class CombatSummary
         _content.AddChild(body);
 
         var auto = new CheckBox { Text = Loc.T("summary.auto"), ButtonPressed = Cfg.AutoSummary, FocusMode = Control.FocusModeEnum.None };
+        Overlay.StyleCheckBox(auto);
         auto.AddThemeFontSizeOverride("font_size", Overlay.FontSize);
         auto.AddThemeColorOverride("font_color", Overlay.Muted);
         auto.Toggled += on => Capture.Safe("CombatSummary.Auto", () =>
