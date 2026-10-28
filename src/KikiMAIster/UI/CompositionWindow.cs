@@ -387,9 +387,10 @@ public static class CompositionWindow
             }
         }
 
-        // Suggestions: a composition never played, one never won.
-        AddSuggestion("compo.neverPlayed", data.NeverPlayed(characters, _players, _ascension).ToList(), _neverPlayedPick, p => _neverPlayedPick = p);
-        // Never won = played and always lost: only shown once such a composition exists.
+        // Suggestions: a composition never played, one never won (played and always lost); each line only when there is
+        // at least one (v0.17.9).
+        var neverPlayed = data.NeverPlayed(characters, _players, _ascension).ToList();
+        if (neverPlayed.Count > 0) AddSuggestion("compo.neverPlayed", neverPlayed, _neverPlayedPick, p => _neverPlayedPick = p);
         var neverWon = data.NeverWon(characters, _players, _ascension).ToList();
         if (neverWon.Count > 0) AddSuggestion("compo.neverWon", neverWon, _neverWonPick, p => _neverWonPick = p);
     }
