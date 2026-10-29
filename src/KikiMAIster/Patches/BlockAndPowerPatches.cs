@@ -13,6 +13,7 @@ using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Cards;
 using MegaCrit.Sts2.Core.Models.Orbs;
 using MegaCrit.Sts2.Core.Models.Powers;
+using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.ValueProps;
 
 namespace KikiMAIster.Patches;
@@ -61,10 +62,42 @@ public static class BlockAndPowerPatches
             // Sacrifice: its block comes from the pet's max HP (allies who gave those HP enabled it).
             if (call?.Source is { Kind: SourceKind.Card } src && src.Id == ModelDb.GetId<Sacrifice>().Entry)
                 Capture.Emit(new PetHpBlock(Capture.ToActor(receiver)));
+            // Oubli (temporary Dexterity from an ally, v0.17.38): the Dexterity they gave added to a card's block.
+            if (call?.Source.Kind == SourceKind.Card && receiver.IsPlayer)
+                Capture.Safe("block enabled", () => EnabledByAllyDexterity(receiver, amount));
             BlockAlternatives.OnBlockGained(call?.PlayId ?? 0, amount);
             if (call?.Source is { Kind: SourceKind.Orb } orb && orb.Id == ModelDb.GetId<FrostOrb>().Entry && receiver.Player is { } owner)
                 BlockAlternatives.OnOrbTriggered(owner, null, "orderBlock");
         });
+    }
+
+    /// Temporary Dexterity given by allies (Oubli): each ally's points, within the Dexterity the player really has, added
+    /// that much to this block gain.
+    private static void EnabledByAllyDexterity(Creature receiver, int amount)
+    {
+        var dexterity = receiver.GetPower<DexterityPower>()?.Amount ?? 0;
+        if (dexterity <= 0 || amount <= 0) return;
+        var given = receiver.Powers.OfType<TemporaryDexterityPower>()
+            .Where(p => p.Type == PowerType.Buff && p.Amount > 0 && p.Applier is { IsPlayer: true } a && a != receiver).ToList();
+        var total = given.Sum(p => (double)p.Amount);
+        if (total <= 0) return;
+        var scale = Math.Min(1, dexterity / total);
+        foreach (var p in given)
+            Capture.Emit(new BlockEnabled(Capture.ToActor(receiver), Capture.ToActor(p.Applier), Math.Min(amount, p.Amount * scale)));
+    }
+
+    /// Strength players removed from each enemy for good (Strength down cards, potions…), v0.17.38. Temporary losses are read
+    /// from their own powers.
+    private static readonly ConditionalWeakTable<Creature, StrongBox<double>> PermanentStrengthDown = new();
+
+    /// The Strength players removed from this enemy that is still gone: permanent losses + temporary ones (Enfeebling
+    /// Touch…) still on it.
+    public static double StrengthDownFromPlayers(Creature enemy)
+    {
+        var permanent = PermanentStrengthDown.TryGetValue(enemy, out var box) ? box.Value : 0;
+        var temporary = enemy.Powers.OfType<TemporaryStrengthPower>()
+            .Where(p => p.Type == PowerType.Debuff && p.Applier is { IsPlayer: true }).Sum(p => Math.Abs((double)p.Amount));
+        return permanent + temporary;
     }
 
     [HarmonyPatch(typeof(CreatureCmd), nameof(CreatureCmd.LoseBlock))]
@@ -140,6 +173,8 @@ public static class BlockAndPowerPatches
             }
             // The stat loss a temporary power applies to its holder is already counted as that temporary power.
             if (id.EndsWith("~DOWN") && TakeSuppressed(power.Owner)) return;
+            if (power is StrengthPower && amount < 0 && power.Owner.IsEnemy && applier is { IsPlayer: true })
+                PermanentStrengthDown.GetOrCreateValue(power.Owner).Value += (double)-amount;
             Capture.Emit(new PowerChanged(Capture.ToActor(applier), Capture.ToActor(power.Owner), id, value, debuff, Capture.CurrentOrigin,
                 enabledBy is { } e ? Capture.ToActor(e.Giver) : default, enabledBy?.Source ?? ""));
         });
@@ -235,6 +270,13 @@ public static class BlockAndPowerPatches
                     var given = (int)Math.Min(amount, creature.MaxHp - creature.CurrentHp);
                     if (given > 0) Capture.Emit(new Healed(Capture.ToActor(mender), Capture.ToActor(creature), given));
                     RestSitePatches.Mender = null;
+                }
+                // Right after a fight (Sang ardent…, v0.17.38): the game's history counts it on the fight's floor, which the
+                // heals outside fights leave out.
+                else if (creature.IsPlayer && creature.Player?.RunState.CurrentRoom is CombatRoom)
+                {
+                    var healedAfter = Math.Min(amount, creature.MaxHp - creature.CurrentHp);
+                    if (healedAfter > 0) Capture.Emit(new AfterFightHealed(Capture.ToActor(creature), (double)healedAfter));
                 }
                 return;
             }

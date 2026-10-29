@@ -144,7 +144,8 @@ public sealed record WeakAttack(Actor Player, string Played, int PlayedDamage, s
 
 public enum CardAction { Drawn, Played, Exhausted, Discarded }
 
-public sealed record CardEvent(Actor Player, CardAction Action) : StatEvent;
+/// Repeat: the same card played again by Déflagration, Duplication, Forme résonnante… (v0.17.38): not a new card played.
+public sealed record CardEvent(Actor Player, CardAction Action, bool Repeat = false) : StatEvent;
 
 /// A card play is over (its hits and the cards it played itself included): closes the "best card play" count.
 public sealed record CardPlayFinished(Actor Player) : StatEvent;
@@ -176,6 +177,14 @@ public sealed record RunEconomy(double GoldGained, double GoldSpent, double Gold
 /// HP lost or healed by an event just before the fight it starts (heal 22 then fight…, v0.17.36): the player's HP when the
 /// fight starts minus their HP at the end of the previous floor. Key: the floor, counted once (fight reloaded…).
 public sealed record PreFightEvent(Actor Player, string Key, double Lost, double Healed) : StatEvent;
+
+/// HP healed right after a won fight (Sang ardent, Sang noir, Os à viande…, v0.17.38): outside the fight, counted with the
+/// heals outside fights (kind "afterFight").
+public sealed record AfterFightHealed(Actor Player, double Amount) : StatEvent;
+
+/// Part of the block Receiver just gained was added by Enabler's help (Oubli: temporary Dexterity given by an ally,
+/// v0.17.38): "Armure permise" for that ally, and what it stops is HP they saved.
+public sealed record BlockEnabled(Actor Receiver, Actor Enabler, double Amount) : StatEvent;
 
 /// A missed lethal turn, kept for its explanation (not saved with the run). Combat: the fight's number in the run.
 public sealed record MissedLethalTurn(int Round, IReadOnlyList<string> Cards, int EnemiesHp, int Combat = 0);

@@ -1,6 +1,6 @@
-# Handoff — state of the project (2026-10-28, v0.17.37)
+# Handoff — state of the project (2026-10-29, v0.17.38)
 
-> **Next session starts with Zaille75's next co-op test (beta branch, v0.17.37 or later).** He will send it with
+> **Next session starts with Zaille75's next co-op test (beta branch, v0.17.38 or later).** He will send it with
 > `Envoyer-a-Claude.bat` → `logs/inbox/<date_time>/` (both logs + F9 `feedback/` folders). **Review and summarize every
 > report first, wait for his go, then implement the whole batch** (memory rules). See "Waiting for the next co-op test"
 > below for what to check.
@@ -142,6 +142,21 @@ Order: test → default branch → release prep → publish → maintenance. The
 
 Optional roadmap items (only if asked): JSON export, end-of-run Totals / Per act tabs, MVP line, opacity / scale /
 hotkey settings, chart history across Save & Quit.
+
+## v0.17.38 — code review fixes (2026-10-29, not tested in game)
+Full review of the mod against the decompiled game: `docs/REVIEW-2026-10-29.md` (findings, game code, fixes). Zaille75's
+decisions: status / curse damage goes to whoever created the card (enemy / self / ally); one kill per enemy and enemies
+whose death does not end the fight left out of missed lethal; minions dying with their leader credit nobody; Ancients'
+heals shown apart ("Anciens"); Oubli's Dexterity is "Armure permise". In the next logs, check:
+- `MissedChance … growth` lines now appear (Algorithme génétique, La faux… never played).
+- Sacrifice: no jump of "Familier" / PV sauvés; Burn / curse damage in Ennemis or Auto-infligés, no longer Autres.
+- Co-op: gâché / unused energy for the **other** players look right (incoming attack per player); both PCs agree.
+- Évités: Intangible (Fantôme dans un bocal) appears; Strength down on cultists (Rituel) counted.
+- `run history <id>: HP lost outside […], healed outside […]` lines: "afterFight" (Sang ardent) and "ancient" present, no
+  ~Max HP heal on Neow's floor.
+- Extra turn (Ambre gris, Œil de Paël): block played before it is never "needed".
+- Not done (ideas from the review, section 3): event outcomes, stolen cards, afflictions, enchantment damage, damage
+  taken by kind, fight length, heals by source. Section 4: moving `BlockAlternatives` decisions to `Core/` for tests.
 
 ## Waiting for the next co-op test (written 2026-10-28, end of session)
 Versions v0.17.32 → v0.17.37 were built from two solo runs on the **main branch** (Défectueux, then Soldat de fer and

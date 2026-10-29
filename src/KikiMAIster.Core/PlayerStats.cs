@@ -153,6 +153,8 @@ public sealed class PlayerStats
     public double PreFightHpLost { get; set; }
     public double PreFightHealed { get; set; }
     public Dictionary<string, double> PreFightFloors { get; } = new();
+    /// HP healed right after won fights (Sang ardent…, v0.17.38), already in HealedOutside ("afterFight").
+    public double AfterFightHealed { get; set; }
     /// Gold and curses over the run (v0.17.36, run scope, from the game's map history).
     public double GoldGained { get; set; }
     public double GoldSpent { get; set; }
@@ -163,7 +165,8 @@ public sealed class PlayerStats
     public double CursesGained { get; set; }
     public double CursesRemoved { get; set; }
     public double Purchases { get; set; }
-    /// Both by kind of floor: "event", "restSite", "other".
+    /// Both by kind of floor: "event", "ancient" (act-start Ancients, v0.17.38), "restSite", "other"; heals also
+    /// "afterFight" (v0.17.38).
     public Dictionary<string, double> HpLostOutsideBy { get; } = new();
     public Dictionary<string, double> HealedOutsideBy { get; } = new();
     /// Campfire choices, by the game's option id ("HEAL", "SMITH", "MEND"…): how many times each.

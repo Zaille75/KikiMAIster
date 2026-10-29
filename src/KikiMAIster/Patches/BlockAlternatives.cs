@@ -13,6 +13,7 @@ using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Localization.DynamicVars;
 using MegaCrit.Sts2.Core.ValueProps;
 using MegaCrit.Sts2.Core.MonsterMoves.Intents;
+using MegaCrit.Sts2.Core.Models.Afflictions;
 
 namespace KikiMAIster.Patches;
 
@@ -86,12 +87,20 @@ public static class BlockAlternatives
     private static readonly List<OrderLoss> OrderLosses = new();
     /// Cards the player chose this turn that lowered their own Strength (Amitié: −2 Strength for +1 energy), and by how much.
     private static readonly List<(Play Play, double Loss)> StrengthDrops = new();
+    /// The first play of each card this turn: a card played again (Déflagration, Duplication, Forme résonnante…) is the
+    /// same choice, its copies add their hits and block to it (v0.17.38).
+    private static readonly Dictionary<CardModel, Play> FirstPlays = new(ReferenceEqualityComparer.Instance);
+    /// Players who take an extra turn right after this one (Ambre gris, Œil de Paël, v0.17.38): no enemy attacks before
+    /// their block is cleared.
+    private static readonly HashSet<Player> ExtraTurn = new();
 
     public static void Reset()
     {
         OrderLosses.Clear();
         StrengthDrops.Clear();
         ThisTurn.Clear();
+        FirstPlays.Clear();
+        ExtraTurn.Clear();
         InProgress.Clear();
         FrontHand.Clear();
         TurnPlays.Clear();
@@ -170,16 +179,21 @@ public static class BlockAlternatives
         switch (power)
         {
             case VulnerablePower when power.Owner.IsEnemy && !stacked:
+            {
+                // The game's multiplier (×1.5, more with some relics, v0.17.38).
+                var extra = VulnerableFactor(power, power.Owner, player.Creature) - 1;
                 foreach (var e in earlier.Where(p => p.Card.Type == CardType.Attack && !p.HadNonDamageEffect))
                 {
                     var raw = e.Hits.Where(h => h.Target == power.Owner).Sum(h => h.Raw);
-                    if (raw > 0) OrderLosses.Add(new OrderLoss(e, boost, "order", power.Owner, raw * 0.5));
+                    if (raw > 0) OrderLosses.Add(new OrderLoss(e, boost, "order", power.Owner, raw * extra));
                 }
                 break;
+            }
             case StrengthPower when power.Owner == player.Creature:
                 foreach (var e in earlier.Where(p => p.Card.Type == CardType.Attack && !p.HadNonDamageEffect))
                     foreach (var g in e.Hits.GroupBy(h => h.Target))
-                        OrderLosses.Add(new OrderLoss(e, boost, "order", g.Key, (double)amount * g.Count()));
+                        OrderLosses.Add(new OrderLoss(e, boost, "order", g.Key, (double)amount * g.Count() *
+                            (g.Key.GetPower<VulnerablePower>() is { } v ? VulnerableFactor(v, g.Key, player.Creature) : 1)));
                 break;
             // Focus gained after orbs fired this turn (Potion de focalisation after an evoke): each orb hit lost that much
             // damage, each Frost trigger that much block, each Dark charge that much stored damage (v0.17.32).
@@ -193,6 +207,13 @@ public static class BlockAlternatives
                     OrderLosses.Add(new OrderLoss(e, boost, "orderBlock", null, (double)amount * e.BlockGains));
                 break;
         }
+    }
+
+    /// Vulnerable's damage multiplier on this enemy for the player's attacks (1.5 when the game gives none).
+    private static double VulnerableFactor(PowerModel vulnerable, Creature enemy, Creature dealer)
+    {
+        var f = (double)DebuffEffectPatches.Mult(vulnerable, enemy, 10, ValueProp.Move, dealer, null, null) ;
+        return f > 1 ? f : 1.5;
     }
 
     /// A hit of the card play in progress on an enemy (for the wrong-order check).
@@ -332,6 +353,13 @@ public static class BlockAlternatives
             InProgress.Push(null);
             return;
         }
+        // Played again by Déflagration & co.: the same choice, paid once (v0.17.38).
+        if (cardPlay.PlayIndex > 0 && FirstPlays.TryGetValue(cardPlay.Card, out var first))
+        {
+            Plays.AddOrUpdate(cardPlay, first);
+            InProgress.Push(first);
+            return;
+        }
         // Not checked at turn start: the hand before this first card is still the front hand.
         if (!FrontHand.ContainsKey(Capture.PlayerOf(cardPlay)))
             FrontHand[Capture.PlayerOf(cardPlay)] = FindLethal(Capture.PlayerOf(cardPlay), hand.Append(cardPlay.Card).Distinct().ToList(),
@@ -360,6 +388,7 @@ public static class BlockAlternatives
         if (cardPlay.Card.GainsBlock) play.BiggerBlock = BiggerBlock(cardPlay.Card, hand);
         Capture.Safe("wrong order (Slow)", () => CheckSlowOrder(play));
         Plays.AddOrUpdate(cardPlay, play);
+        FirstPlays[cardPlay.Card] = play;
         ThisTurn.Add(play);
         InProgress.Push(play);
     }
@@ -391,6 +420,12 @@ public static class BlockAlternatives
     /// End of the players' turn: each attack can be the alternative of only one block card.
     public static void ResolveTurn(ICombatState combat)
     {
+        ExtraTurn.Clear();
+        foreach (var p in combat.Players.Where(p => p.Creature.IsAlive))
+            Capture.Safe("extra turn", () =>
+            {
+                if (Hook.ShouldTakeExtraTurn(combat, p)) ExtraTurn.Add(p);
+            });
         ResolveMissedChances(combat);
         foreach (var player in combat.Players.Where(p => p.Creature.IsAlive))
             Capture.Safe("free cards", () => FreeCardsLeft(combat, player));
@@ -406,7 +441,7 @@ public static class BlockAlternatives
             var surplus = creature.Block - IncomingDamage(creature);
             // An attack into Thorns is an alternative only if the block left would still have covered the Thorns damage.
             var alternative = state == null || play.HadOtherEffect || play.Ethereal ? null : play.UsefulCardsInHand.FirstOrDefault(c =>
-                !used.Contains(c) && state.Hand.Cards.Contains(c) && !KeptOnPurpose(c, combat) && Cost(c) <= budget && PlayableExceptEnergy(c) &&
+                !used.Contains(c) && state.Hand.Cards.Contains(c) && !KeptOnPurpose(c, combat) && Cost(c) <= budget && PlayableInstead(c) &&
                 !IsFree(c) && // a free card left in hand is its own miss (FreeCardsLeft), not the reason a block was wasted
                 ThornsDamage(c, creature) <= Math.Max(0, surplus) && !PunishedAttack(c));
             if (alternative != null)
@@ -426,6 +461,8 @@ public static class BlockAlternatives
             Capture.Safe("hardened shell", () => CheckShell(combat, player, used));
         }
         ThisTurn.Clear();
+        FirstPlays.Clear();
+        ExtraTurn.Clear();
     }
 
     /// Stars are not refilled each turn (spec §E0, v0.17.34, Zaille75): a card paid with Stars that did nothing but block
@@ -545,8 +582,6 @@ public static class BlockAlternatives
             Capture.Safe("end of turn checks", () => EndOfTurnChecks(combat, player));
         TurnPlays.Clear();
         PendingVulnerable.Clear();
-        GrowingAffordable.Clear();
-        GrowingPlayed.Clear();
     }
 
     /// Enemies that can really be hurt: an enemy shown with infinite HP (Waterfall Giant about to explode) is not one
@@ -785,16 +820,30 @@ public static class BlockAlternatives
     {
         try
         {
-            var all = RealEnemies(player.Creature.CombatState);
+            // Enemies whose death does not end the fight (they come back, or the fight goes on) are not "lethal" (v0.17.38).
+            var all = RealEnemies(player.Creature.CombatState).Where(e => !ComesBack(e)).ToList();
             var enemies = all.Where(e => !e.IsSecondaryEnemy).ToList();
             if (enemies.Count == 0) enemies = all.ToList();
             if (enemies.Count == 0) return null;
+            // Résonnant: only playable as the first card of the turn (left out); Lié under Entraves: one per turn (the first kept).
+            var chained = player.Creature.HasPower<ChainsOfBindingPower>();
+            var boundKept = false;
+            bool Allowed(CardModel c)
+            {
+                if (c.Affliction is Ringing) return false;
+                if (!chained || c.Affliction is not Bound) return true;
+                if (boundKept) return false;
+                boundKept = true;
+                return true;
+            }
             var attacks = hand.Where(c => c.Type == CardType.Attack && !c.EnergyCost.CostsX && PlayableExceptEnergy(c) && !LacksStars(c) &&
-                                          c.TargetType is TargetType.AnyEnemy or TargetType.AllEnemies)
+                                          c.TargetType is TargetType.AnyEnemy or TargetType.AllEnemies && Allowed(c))
                 .Select(c => new Lethal.Attack($"Card:{Capture.IdOf(c)}", Cost(c), c.TargetType == TargetType.AllEnemies,
                     enemies.Select(e => EstimateDamage(c, e)).ToList()))
                 .ToList();
-            var found = Lethal.Find(attacks, energy, enemies.Select(e => e.CurrentHp + e.Block).ToList());
+            // Paresse: at most that many cards this turn.
+            var maxPlays = player.Creature.GetPower<SlothPower>()?.Amount ?? int.MaxValue;
+            var found = Lethal.Find(attacks, energy, enemies.Select(e => e.CurrentHp + e.Block).ToList(), maxPlays);
             return found == null ? null : (found.ToArray(), enemies);
         }
         catch (Exception e)
@@ -803,6 +852,12 @@ public static class BlockAlternatives
             return null;
         }
     }
+
+    /// An enemy whose death does not end the fight: it comes back (Adaptable, Reconnexion, Illusion) or keeps the fight
+    /// going (Infesté, Stock, Éruption de vapeur, Surprise).
+    private static bool ComesBack(Creature enemy) =>
+        enemy.Powers.Any(p => p is AdaptablePower or ReattachPower or IllusionPower or InfestedPower or StockPower or SteamEruptionPower or
+            SurprisePower);
 
     /// The strongest attack in hand on the same target, if it beats the attack played, costs no more, and the
     /// played attack could not kill the target anyway.
@@ -902,20 +957,43 @@ public static class BlockAlternatives
             creature.Block, IncomingDamage(creature));
     }
 
-    /// Attack damage the enemies announced against this player.
+    /// Damage the player will take before their block is cleared: the attacks the enemies announced, computed for this
+    /// player (the game's intent shows the local player's numbers, v0.17.38), plus the status cards in hand that hurt at
+    /// the end of the turn and can be blocked (Brûlure…). Nothing when the player takes an extra turn first.
     internal static int IncomingDamage(Creature creature)
     {
         var incoming = 0;
         try
         {
-            foreach (var enemy in creature.CombatState?.Enemies ?? Array.Empty<Creature>())
+            if (creature.Player is { } p && ExtraTurn.Contains(p)) return 0;
+            if (creature.CombatState is not { } combat) return 0;
+            DebuffEffectPatches.Computing = true;
+            foreach (var enemy in combat.Enemies)
                 if (enemy.IsAlive && enemy.Monster != null)
-                    incoming += enemy.Monster.NextMove.Intents.OfType<AttackIntent>()
-                        .Sum(i => i.GetTotalDamage(new[] { creature }, enemy));
+                    foreach (var intent in enemy.Monster.NextMove.Intents.OfType<AttackIntent>())
+                    {
+                        if (intent.DamageCalc is not { } calc) continue;
+#if GAME_DEFAULT
+                        var hit = Hook.ModifyDamage(combat.RunState, combat, creature, enemy, calc(), ValueProp.Move, null,
+                            ModifyDamageHookType.All, CardPreviewMode.None, out _);
+#else
+                        var hit = Hook.ModifyDamage(combat.RunState, combat, creature, enemy, calc(), ValueProp.Move, null, null,
+                            ModifyDamageHookType.All, CardPreviewMode.None, out _);
+#endif
+                        incoming += Math.Max(0, (int)hit) * Math.Max(1, intent.Repeats);
+                    }
+            foreach (var card in creature.Player?.PlayerCombatState?.Hand.Cards ?? Array.Empty<CardModel>())
+                if (card.HasTurnEndInHandEffect && card.DynamicVars.TryGetValue("Damage", out var v) && v is DamageVar dv &&
+                    !dv.Props.HasFlag(ValueProp.Unblockable))
+                    incoming += Math.Max(0, (int)dv.BaseValue);
         }
         catch (Exception e)
         {
             ModLog.Error("incoming damage", e);
+        }
+        finally
+        {
+            DebuffEffectPatches.Computing = false;
         }
         return incoming;
     }
@@ -959,6 +1037,16 @@ public static class BlockAlternatives
     }
 
     private static int Cost(CardModel card) => Math.Max(0, card.EnergyCost.GetWithModifiers(CostModifiers.All));
+
+    /// Playable instead of a card already played: a limit on the cards played this turn (Paresse, Résonnant) does not count,
+    /// the played card took its place (v0.17.38).
+    private static bool PlayableInstead(CardModel card)
+    {
+        card.CanPlay(out var reason, out var preventer);
+        reason &= ~(UnplayableReason.EnergyCostTooHigh | UnplayableReason.StarCostTooHigh);
+        if (reason == UnplayableReason.BlockedByHook && preventer is SlothPower or RingingPower) return true;
+        return reason == UnplayableReason.None;
+    }
 
     private static bool PlayableExceptEnergy(CardModel card)
     {

@@ -35,6 +35,8 @@ public sealed class StatsEngine
     /// same fight. Owner → saved effects not yet credited; owners whose pet died since.
     private readonly Dictionary<ulong, List<PetSave>> _petSaved = new();
     private readonly HashSet<ulong> _petDied = new();
+    /// Enemies already killed in this fight (a kill counts once per enemy, v0.17.38).
+    private readonly HashSet<int> _killed = new();
     /// The same saved pet HP, for the pet's current life only (attacks that grow with the pet's HP: Déchaînement).
     private readonly Dictionary<ulong, List<PetSave>> _petSavedAlive = new();
 
@@ -166,7 +168,7 @@ public sealed class StatsEngine
                     switch (c.Action)
                     {
                         case CardAction.Drawn: s.CardsDrawn++; break;
-                        case CardAction.Played: s.CardsPlayed++; break;
+                        case CardAction.Played when !c.Repeat: s.CardsPlayed++; break;
                         case CardAction.Exhausted: s.CardsExhausted++; break;
                         case CardAction.Discarded: s.CardsDiscarded++; break;
                     }
@@ -174,9 +176,11 @@ public sealed class StatsEngine
                 if (c.Action == CardAction.Played)
                 {
                     // Best card play: a new count starts with each card the player chose (not with the cards it plays).
+                    // A card played again by Déflagration, Duplication… (v0.17.38) stays the same play and the same card.
                     var depth = _playDepth.GetValueOrDefault(c.Player.PlayerId);
-                    if (depth == 0) _playDamage[c.Player.PlayerId] = 0;
+                    if (depth == 0 && !c.Repeat) _playDamage[c.Player.PlayerId] = 0;
                     _playDepth[c.Player.PlayerId] = depth + 1;
+                    if (c.Repeat) break;
                     // Most cards in one turn: the turn scope counts this turn's plays.
                     var thisTurn = Stats(Scope.Turn, c.Player.PlayerId).CardsPlayed;
                     Each(c.Player.PlayerId, s => s.MostCardsInTurn = Math.Max(s.MostCardsInTurn, thisTurn));
@@ -249,6 +253,18 @@ public sealed class StatsEngine
                 s.HealedOutside += p.Healed;
                 break;
             }
+            case AfterFightHealed a when a.Player.Kind == ActorKind.Player && a.Amount > 0:
+            {
+                var s = Stats(Scope.Run, a.Player.PlayerId);
+                s.AfterFightHealed += a.Amount;
+                PlayerStats.Add(s.HealedOutsideBy, "afterFight", a.Amount);
+                s.HealedOutside += a.Amount;
+                break;
+            }
+            case BlockEnabled b when b.Receiver.Kind == ActorKind.Player && b.Enabler.Kind == ActorKind.Player && b.Amount > 0 &&
+                                     b.Enabler.PlayerId != b.Receiver.PlayerId:
+                OnBlockEnabled(b.Receiver.PlayerId, b.Enabler.PlayerId, b.Amount);
+                break;
             case BlockPlayResolved r:
                 _hadAlternative[r.PlayId] = r.HadAlternative;
                 if (r.Choice != null) _choices[r.PlayId] = (Round, r.Choice);
@@ -257,10 +273,12 @@ public sealed class StatsEngine
     }
 
     /// The history skips floors with a fight: what an event did just before its fight is added on top (v0.17.36).
+    /// Heals right after a won fight (Sang ardent…, v0.17.38) are not in that part of the history either.
     private static void AddPreFight(PlayerStats s)
     {
         if (s.PreFightHpLost > 0) PlayerStats.Add(s.HpLostOutsideBy, "event", s.PreFightHpLost);
         if (s.PreFightHealed > 0) PlayerStats.Add(s.HealedOutsideBy, "event", s.PreFightHealed);
+        if (s.AfterFightHealed > 0) PlayerStats.Add(s.HealedOutsideBy, "afterFight", s.AfterFightHealed);
         s.HpLostOutside = s.HpLostOutsideBy.Values.Sum();
         s.HealedOutside = s.HealedOutsideBy.Values.Sum();
     }
@@ -371,6 +389,7 @@ public sealed class StatsEngine
         _petSaved.Clear();
         _petDied.Clear();
         _petSavedAlive.Clear();
+        _killed.Clear();
     }
 
     // ---------- Damage ----------
@@ -387,7 +406,7 @@ public sealed class StatsEngine
         {
             // A damage-over-time debuff kept per applier (Strangle): the capture already knows whose it is.
             CreditEnemyDamage(d.Dealer.PlayerId, d, 1, d.Source.ToString(), isDot: true);
-            if (d.Killed) Each(d.Dealer.PlayerId, s => s.Kills++);
+            if (d.Killed) CreditKill(d.Dealer.PlayerId, d.Target);
             return;
         }
         if (d.Source.Kind == SourceKind.DamageOverTime)
@@ -406,7 +425,7 @@ public sealed class StatsEngine
                     PlayerStats.Add(s.DebuffEffectBySource, key.EnablerSource, d.Hp * share);
                 });
             if (d.Killed && shares.Count > 0)
-                Each(shares.MaxBy(s => s.Share).ApplierId, s => s.Kills++);
+                CreditKill(shares.MaxBy(s => s.Share).ApplierId, d.Target);
             return;
         }
         if (!d.Dealer.IsPlayerSide) return;
@@ -420,7 +439,7 @@ public sealed class StatsEngine
                 CreditEnemyDamage(d.Dealer.PlayerId, d, share, origin != "" ? origin : d.Source.ToString(), isDot: false);
         }
         else CreditEnemyDamage(d.Dealer.PlayerId, d, 1, d.Source.ToString(), isDot: false);
-        if (d.Killed) Each(d.Dealer.PlayerId, s => s.Kills++);
+        if (d.Killed) CreditKill(d.Dealer.PlayerId, d.Target);
         // Best card play: the card's hits (its pet's too), until the player chooses another card (late reports included).
         if (d.Source.Kind == SourceKind.Card && _playDamage.TryGetValue(d.Dealer.PlayerId, out var sum))
         {
@@ -428,6 +447,12 @@ public sealed class StatsEngine
             _playDamage[d.Dealer.PlayerId] = sum;
             Each(d.Dealer.PlayerId, s => s.BestCardPlay = Math.Max(s.BestCardPlay, sum));
         }
+    }
+
+    /// One kill per enemy and fight (v0.17.38): an enemy that comes back (Reconnexion, Adaptable…) is killed once.
+    private void CreditKill(ulong playerId, Actor enemy)
+    {
+        if (_killed.Add(enemy.CreatureId)) Each(playerId, s => s.Kills++);
     }
 
     private void CreditEnemyDamage(ulong playerId, DamageDealt d, double share, string sourceKey, bool isDot)
@@ -446,6 +471,19 @@ public sealed class StatsEngine
     private void OnDamageToPlayerSide(DamageDealt d)
     {
         var owner = d.Target.PlayerId;
+        // The owner killing their own pet (Sacrifice, v0.17.38): its HP stopped nothing. Only a pet death; what it had saved
+        // (debuffs, block) is thrown away with it.
+        if (d.Target.Kind == ActorKind.Pet && d.Dealer.Kind == ActorKind.Player && d.Dealer.PlayerId == owner)
+        {
+            if (d.Killed)
+            {
+                Each(owner, s => s.PetDeaths++);
+                _petHp.Remove(owner);
+                _petSaved.Remove(owner);
+                _petSavedAlive.Remove(owner);
+            }
+            return;
+        }
         ResolveDefense(owner, d.Blocked, d.Hp, d.Target.Kind == ActorKind.Pet);
         if (d.Target.Kind == ActorKind.Pet && d.Killed)
         {
@@ -735,6 +773,17 @@ public sealed class StatsEngine
         if (shares.Count == 0) return;
         layer.Enablers = shares;
         foreach (var (ally, share) in shares) Each(ally, s => s.BlockEnabledForAllies += layer.Amount * share);
+    }
+
+    /// Part of the block just gained was added by an ally's Dexterity (Oubli, v0.17.38): that ally enabled it, like
+    /// Sacrifice's block from pet HP they gave ("Armure permise", and what it stops is their "PV sauvés").
+    private void OnBlockEnabled(ulong owner, ulong ally, double amount)
+    {
+        if (Ledger(owner).Last is not { } layer || layer.Amount <= 0) return;
+        amount = Math.Min(amount, layer.Amount);
+        layer.Enablers ??= new Dictionary<ulong, double>();
+        layer.Enablers[ally] = Math.Min(1, layer.Enablers.GetValueOrDefault(ally) + amount / layer.Amount);
+        Each(ally, s => s.BlockEnabledForAllies += amount);
     }
 
     /// Avoided damage with no hit after it (the hit was cancelled): only what the block would not have stopped.

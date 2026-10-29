@@ -5,6 +5,7 @@ using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.TreasureRelicPicking;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Models.Events;
 using MegaCrit.Sts2.Core.Saves.Runs;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
@@ -30,7 +31,13 @@ public static class RunHistoryPatches
                 // HP lost and healed on a floor without a fight (an event that turns into a fight counts as a fight), by
                 // kind of floor: events (Neow included), campfires, others (shop, treasure: relics…), v0.17.35.
                 var fight = point.Rooms.Any(r => r.RoomType is RoomType.Monster or RoomType.Elite or RoomType.Boss);
-                var kind = point.Rooms.Any(r => r.RoomType == RoomType.Event) ? "event"
+                // The Ancients at the start of each act heal to full (shown apart, v0.17.38); Neow first sets HP to 0, so
+                // its "heal" is the whole Max HP: left out.
+                var ancients = point.Rooms.Select(r => r.ModelId is { } id ? ModelDb.GetByIdOrNull<EventModel>(id) : null)
+                    .OfType<AncientEventModel>().ToList();
+                var neow = ancients.Any(a => a is Neow);
+                var kind = ancients.Count > 0 ? "ancient"
+                    : point.Rooms.Any(r => r.RoomType == RoomType.Event) ? "event"
                     : point.Rooms.Any(r => r.RoomType == RoomType.RestSite) ? "restSite" : "other";
                 foreach (var entry in point.PlayerStats)
                 {
@@ -38,7 +45,7 @@ public static class RunHistoryPatches
                     t.Gained += entry.MaxHpGained;
                     t.Lost += entry.MaxHpLost;
                     if (!fight && entry.DamageTaken > 0) t.HpLost[kind] = t.HpLost.GetValueOrDefault(kind) + entry.DamageTaken;
-                    if (!fight && entry.HpHealed > 0) t.Healed[kind] = t.Healed.GetValueOrDefault(kind) + entry.HpHealed;
+                    if (!fight && !neow && entry.HpHealed > 0) t.Healed[kind] = t.Healed.GetValueOrDefault(kind) + entry.HpHealed;
                     // Gold and curses (v0.17.36): gained, spent, lost, stolen, peak, now, curses gained / removed, purchases.
                     t.Eco[0] += entry.GoldGained;
                     t.Eco[1] += entry.GoldSpent;
@@ -61,6 +68,8 @@ public static class RunHistoryPatches
         {
             var t = totals[p.NetId];
             var e = t.Eco;
+            // The event's own text shows dictionaries as type names: the HP figures, readable (v0.17.38).
+            ModLog.Info($"run history {p.NetId}: HP lost outside [{Sig(t.HpLost)}], healed outside [{Sig(t.Healed)}]");
             Capture.Emit(new RunHistoryRead(Capture.ToActor(p), t.Gained, t.Lost, t.Choices, t.HpLost, t.Healed,
                 new RunEconomy(e[0], e[1], e[2] + e[3], e[3], e[4], e[5], e[6], e[7], e[8])));
         }

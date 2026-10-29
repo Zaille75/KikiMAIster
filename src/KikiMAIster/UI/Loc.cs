@@ -128,6 +128,8 @@ public static class Loc
         ["tip.floor.event"] = ("events", "événements"),
         ["tip.floor.restSite"] = ("campfires", "feux de camp"),
         ["tip.floor.other"] = ("other", "autres"),
+        ["tip.floor.ancient"] = ("Ancients", "Anciens"),
+        ["tip.floor.afterFight"] = ("after fights", "après combat"),
         ["tip.col.hpOutside"] = ("HP lost outside fights during the run (events…), from the game's history", "PV perdus hors combat pendant la partie (événements…), d'après l'historique du jeu"),
         ["col.fromSelf"] = ("Self-inflicted", "Auto-infligés"),
         ["tip.col.fromSelf"] = ("HP you lost to your own cards and powers (Offering, Fatalité from Influx neuronal…); the details list the debuffs you put on yourself", "PV perdus à cause de tes propres cartes et pouvoirs (Offrande, Fatalité d'Influx neuronal…) ; le détail liste les affaiblissements que tu t'es mis"),

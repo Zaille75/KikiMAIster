@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using HarmonyLib;
 using KikiMAIster.Core;
 using MegaCrit.Sts2.Core.Combat;
@@ -224,7 +225,7 @@ public static class CombatFlowPatches
             {
                 Capture.CardPlayers.Push(cardPlay.Card.Owner);
                 Capture.CardPlays.Push(cardPlay);
-                Capture.Emit(new CardEvent(Capture.ToActor(cardPlay.Card.Owner), CardAction.Played));
+                Capture.Emit(new CardEvent(Capture.ToActor(cardPlay.Card.Owner), CardAction.Played, Repeat: cardPlay.PlayIndex > 0));
                 BlockAlternatives.OnPlayStarted(cardPlay);
             });
     }
@@ -237,6 +238,24 @@ public static class CombatFlowPatches
             if (Capture.CardPlayers.Count > 0) Capture.Emit(new CardPlayFinished(Capture.ToActor(Capture.CardPlayers.Pop())));
             if (Capture.CardPlays.Count > 0) Capture.CardPlays.Pop();
             BlockAlternatives.OnPlayFinished();
+        });
+    }
+
+    /// A card or potion effect is over. A player who died during their own card never reaches CardPlayFinished: their plays
+    /// are closed here, else they would stay "the player acting" for the rest of the fight (v0.17.38).
+    [HarmonyPatch(typeof(CombatManager), nameof(CombatManager.EndCardOrPotionEffect))]
+    public static class CardOrPotionEffectEnd
+    {
+        public static void Prefix(Player player) => Capture.Safe("EndCardOrPotionEffect", () =>
+        {
+            if (!player.Creature.IsDead) return;
+            while (Capture.CardPlays.TryPeek(out var play) && Capture.PlayerOf(play) == player)
+            {
+                Capture.CardPlays.Pop();
+                if (Capture.CardPlayers.Count > 0) Capture.Emit(new CardPlayFinished(Capture.ToActor(Capture.CardPlayers.Pop())));
+                BlockAlternatives.OnPlayFinished();
+            }
+            if (Capture.PotionUser == player) Capture.PotionUser = null;
         });
     }
 
@@ -290,6 +309,13 @@ public static class CombatFlowPatches
         public static void Prefix(CardModel card, Player? creator) => Capture.Safe("AfterCardGeneratedForCombat", () =>
         {
             BlockAlternatives.OnEffect();
+            // Status and curse cards remember who created them (no creator: an enemy), for the damage they deal to their
+            // holder (Brûlure…, v0.17.38). They are never cards given.
+            if (card.Type is CardType.Status or CardType.Curse)
+            {
+                DamagePatches.StatusCreators.AddOrUpdate(card, new StrongBox<Player?>(creator));
+                return;
+            }
             // A card created in another player's piles (Blade Symphony passes no creator: the player acting made it).
             var giver = creator ?? Capture.CurrentActingPlayer;
             // Âme sœur: the Soul copied into the ally's draw pile is "created" by that ally; it is the Soulbound

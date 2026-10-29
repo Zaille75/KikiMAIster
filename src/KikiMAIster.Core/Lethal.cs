@@ -11,7 +11,8 @@ public static class Lethal
     private const int MaxCards = 12;
 
     /// Needs: HP + block of each enemy. Returns the attacks of a lethal combination (fewest energy), or null.
-    public static IReadOnlyList<Attack>? Find(IReadOnlyList<Attack> attacks, int energy, IReadOnlyList<int> needs)
+    /// MaxPlays: the most cards the player may still play this turn (Paresse, v0.17.38).
+    public static IReadOnlyList<Attack>? Find(IReadOnlyList<Attack> attacks, int energy, IReadOnlyList<int> needs, int maxPlays = int.MaxValue)
     {
         if (needs.Count == 0) return null;
         var cards = attacks.Where(a => a.Cost <= energy && a.Damage.Count == needs.Count && a.Damage.Any(d => d > 0))
@@ -21,6 +22,7 @@ public static class Lethal
         for (var mask = 1; mask < 1 << cards.Count; mask++)
         {
             var chosen = cards.Where((_, i) => (mask & (1 << i)) != 0).ToList();
+            if (chosen.Count > maxPlays) continue;
             var cost = chosen.Sum(a => a.Cost);
             if (cost > energy || cost >= bestCost) continue;
             if (!Kills(chosen, needs)) continue;

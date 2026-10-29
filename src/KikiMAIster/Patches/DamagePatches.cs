@@ -13,6 +13,7 @@ using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Powers;
+using MegaCrit.Sts2.Core.Models.Relics;
 using MegaCrit.Sts2.Core.ValueProps;
 
 namespace KikiMAIster.Patches;
@@ -58,10 +59,23 @@ public static class DamagePatches
                 foreach (var t in targets)
                 {
                     var c = WithDot(call, t);
-                    // A player's buff dealing damage with no dealer (Haunt: Soul cards) counts for its holder.
-                    if (c.Dealer == null && c.DotPowerId == null && t.CombatState is { } cs &&
+                    // A player's buff dealing damage with no dealer (Haunt: Soul cards) counts for its holder (the one whose
+                    // power is triggering when two players hold it, v0.17.38).
+                    if (c.Dealer == null && c.DotPowerId == null && c.CallingModel == typeof(HauntPower) && HauntOwner != null)
+                        c = c with { Dealer = HauntOwner };
+                    else if (c.Dealer == null && c.DotPowerId == null && t.CombatState is { } cs &&
                         Capture.PowerHolder(c.CallingModel, cs.Players) is { } holder)
                         c = c with { Dealer = holder };
+                    // No dealer, from an enemy's power (Galvanisé…): that enemy; from the hit player's own relic (Forces
+                    // précaires, Champi aromatique, Poison royal): self-inflicted (v0.17.38).
+                    if (c.Dealer == null && c.DotPowerId == null && c.CallingModel is { } model && t.CombatState is { } state)
+                    {
+                        if (typeof(PowerModel).IsAssignableFrom(model) &&
+                            state.Enemies.FirstOrDefault(e => e.Powers.Any(p => p.GetType() == model)) is { } enemy)
+                            c = c with { Dealer = enemy };
+                        else if (typeof(RelicModel).IsAssignableFrom(model) && t.Player is { } owner && owner.Relics.Any(r => r.GetType() == model))
+                            c = c with { Dealer = t };
+                    }
                     LastCallOnTarget.AddOrUpdate(t, c);
                 }
             });
@@ -93,6 +107,8 @@ public static class DamagePatches
             Capture.Safe("Hook.ModifyHpLost", () =>
             {
                 var saved = (double)(decimal.Truncate(amount) - decimal.Truncate(__result));
+                // La botte raises a loss: only the models that lower it share the saving.
+                models = models?.Where(m => m is not TheBoot).ToList();
                 if (saved <= 0 || models == null || models.Count == 0) return;
                 var actor = Capture.ToActor(target);
                 if (!actor.IsPlayerSide) return;
@@ -167,6 +183,15 @@ public static class DamagePatches
         // endurcie shows "infinite with numbers" once its limit is reached: the hit reaching it was real (v0.17.34).
         if (target.IsEnemy && target.HpDisplay == HpDisplay.InfiniteWithoutNumbers) return;
         Source source;
+        Actor? dealerOverride = null;
+        // A status or curse hurting its holder (Brûlure, Déclin, Regrets…, v0.17.38): the enemy that put it in the deck, the
+        // ally who did, or the player themself (their own card, or a card of their deck).
+        if (card is { Type: CardType.Status or CardType.Curse } && dealer == null && !target.IsEnemy)
+        {
+            if (!StatusCreators.TryGetValue(card, out var creator)) dealer = card.Owner.Creature;
+            else if (creator.Value != null) dealer = creator.Value.Creature;
+            else dealerOverride = Actor.Enemy(0);
+        }
         if (card != null) source = Source.Card(Capture.IdOf(card));
         else if (call?.DotPowerId is { } powerId && (dealer == null || dealer == target))
         {
@@ -181,7 +206,7 @@ public static class DamagePatches
             if (dealer == null && source.Kind == SourceKind.Card) dealer = Capture.CurrentActingPlayer?.Creature;
         }
 
-        Capture.Emit(new DamageDealt(Capture.ToActor(dealer), Capture.ToActor(target),
+        Capture.Emit(new DamageDealt(dealerOverride ?? Capture.ToActor(dealer), Capture.ToActor(target),
             r.BlockedDamage, r.UnblockedDamage, r.OverkillDamage, r.WasTargetKilled, source));
         if (card != null && target.IsEnemy && r.UnblockedDamage > 0) CreditHelpers(card, dealer, target, r.UnblockedDamage);
         if (card == null && source.Kind == SourceKind.Potion && target.IsEnemy && r.WasTargetKilled && Capture.PotionUser is { } drinker)
@@ -225,6 +250,19 @@ public static class DamagePatches
         var part = damage * perHp * hp / whole;
         Capture.Emit(card is Unleash ? new PetHpAttack(Capture.ToActor(pet), part, 0, pet.CurrentHp)
             : new PetHpAttack(Capture.ToActor(pet), 0, part, pet.CurrentHp));
+    }
+
+    /// Status and curse cards created during the fight, by who created them (null = an enemy; v0.17.38).
+    public static readonly ConditionalWeakTable<CardModel, StrongBox<MegaCrit.Sts2.Core.Entities.Players.Player?>> StatusCreators = new();
+
+    /// The holder of the Haunt power triggering right now (two Nécrolieurs may both hold it, v0.17.38).
+    private static Creature? HauntOwner;
+
+    [HarmonyPatch(typeof(HauntPower), nameof(HauntPower.AfterCardPlayed))]
+    public static class HauntTrigger
+    {
+        public static void Prefix(HauntPower __instance) => HauntOwner = __instance.Owner;
+        public static void Postfix() => HauntOwner = null;
     }
 
     /// Cards created by a player for another player (the creator).

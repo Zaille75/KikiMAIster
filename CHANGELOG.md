@@ -22,6 +22,12 @@ Summary by version line. The detailed notes of every version are in [docs/specs/
   boss that was not needed count in Choix (Pantographe included); Ice Lance no longer counted as 3 hits; Stars spent for
   nothing or where energy would do; attacks stopped by Carapace endurcie when something better was playable; Exhaust
   cards never a miss when kept; Rage, asleep enemies and Thorns handled for unused energy and free cards.
+- **Code review (0.17.38):** growing cards never played are counted at last; Sacrifice no longer counts as protection;
+  a player dead during their own card no longer "acts" for the rest of the fight; cards played again (Déflagration…) are
+  one choice; Intangible / Dur à cuire in Évités; Strength down counted whatever the enemy's own Strength; co-op incoming
+  attack computed for each player; status and curse damage go to whoever created the card; kills once per enemy; heals
+  after fights and the Ancients' heals in "Soins hors combat" (Neow left out); Oubli's block enabled for the giver;
+  Paresse, Résonnant, Entraves and extra turns handled.
 - **Interface:** "Erreurs" (Gâché + Choix) in every tab, sections in their own windows, hide columns at 0, richer details (Protection by block source),
   clicked window comes to the front, draggable settings, visible checkboxes, explanations kept across Save & Quit,
   previous session's log kept.

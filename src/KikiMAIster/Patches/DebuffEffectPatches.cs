@@ -50,14 +50,14 @@ public static class DebuffEffectPatches
 
     // The two game branches: the beta passes the CardPlay to damage modifiers, the main branch does not.
 #if GAME_DEFAULT
-    private static decimal Mult(AbstractModel m, Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? card, CardPlay? _) =>
+    internal static decimal Mult(AbstractModel m, Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? card, CardPlay? _) =>
         m.ModifyDamageMultiplicative(target, amount, props, dealer, card);
-    private static decimal Additive(AbstractModel m, Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? card, CardPlay? _) =>
+    internal static decimal Additive(AbstractModel m, Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? card, CardPlay? _) =>
         m.ModifyDamageAdditive(target, amount, props, dealer, card);
 #else
-    private static decimal Mult(AbstractModel m, Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? card, CardPlay? play) =>
+    internal static decimal Mult(AbstractModel m, Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? card, CardPlay? play) =>
         m.ModifyDamageMultiplicative(target, amount, props, dealer, card, play);
-    private static decimal Additive(AbstractModel m, Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? card, CardPlay? play) =>
+    internal static decimal Additive(AbstractModel m, Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? card, CardPlay? play) =>
         m.ModifyDamageAdditive(target, amount, props, dealer, card, play);
 #endif
 
@@ -66,21 +66,33 @@ public static class DebuffEffectPatches
     {
 #if GAME_DEFAULT
         // The main branch has no CardPlay in damage modifiers.
-        public static void Postfix(Creature? target, Creature? dealer, ValueProp props, CardModel? cardSource,
-            CardPreviewMode previewMode, decimal __result, ref IEnumerable<AbstractModel> modifiers)
+        public static void Postfix(IRunState runState, ICombatState? combatState, Creature? target, Creature? dealer, decimal damage,
+            ValueProp props, CardModel? cardSource, ModifyDamageHookType modifyDamageHookType, CardPreviewMode previewMode, decimal __result,
+            ref IEnumerable<AbstractModel> modifiers)
         {
             CardPlay? cardPlay = null;
 #else
-        public static void Postfix(Creature? target, Creature? dealer, ValueProp props, CardModel? cardSource, CardPlay? cardPlay,
-            CardPreviewMode previewMode, decimal __result, ref IEnumerable<AbstractModel> modifiers)
+        public static void Postfix(IRunState runState, ICombatState? combatState, Creature? target, Creature? dealer, decimal damage,
+            ValueProp props, CardModel? cardSource, CardPlay? cardPlay, ModifyDamageHookType modifyDamageHookType, CardPreviewMode previewMode,
+            decimal __result, ref IEnumerable<AbstractModel> modifiers)
         {
 #endif
-            if (Computing || previewMode != CardPreviewMode.None || target == null || dealer == null) return;
+            if (Computing || previewMode != CardPreviewMode.None || target == null || dealer == null ||
+                modifyDamageHookType != ModifyDamageHookType.All) return;
             var mods = modifiers;
-            if (mods is not ICollection<AbstractModel> { Count: > 0 }) return;
+            if (mods is not ICollection<AbstractModel> collection) return;
+            // Strength down needs no modifier: the enemy's Strength may be back to 0 (+2 of its own, −2 from a player).
+            if (collection.Count == 0 && !(dealer.IsEnemy && props.IsPoweredAttack())) return;
+            var baseDamage = damage;
             Capture.Safe("Hook.ModifyDamage", () =>
             {
                 var effects = new List<StatEvent>();
+                // A hit capped by Intangible / Dur à cuire on the target (v0.17.38): Vulnerable and Strength did not change it;
+                // on a player or pet, the cap is damage prevented (the part that would have gone through the block).
+                var caps = mods.OfType<PowerModel>().Where(p => p is IntangiblePower or HardToKillPower && p.Owner == target).ToList();
+                if (caps.Count > 0 && Capture.ToActor(target).IsPlayerSide)
+                    Capture.Safe("damage cap", () => AddCapped(effects, caps, runState, combatState, target, dealer, baseDamage, props, cardSource,
+                        cardPlay, __result));
                 var vulnerable = new List<Creature>();
                 var damage = (double)__result;
                 // Vulnerable multiplier of this hit (1 if none): the other effects are measured before it.
@@ -102,7 +114,7 @@ public static class DebuffEffectPatches
                     switch (m)
                     {
                         // Vulnerable on an enemy: extra damage for the player (or pet) hitting it.
-                        case VulnerablePower v when v.Owner == target && target.IsEnemy && target.HpDisplay == HpDisplay.Normal:
+                        case VulnerablePower v when v.Owner == target && target.IsEnemy && target.HpDisplay == HpDisplay.Normal && caps.Count == 0:
                         {
                             var factor = (double)Mult(v, target, __result, props, dealer, cardSource, cardPlay);
                             if (factor > 1)
@@ -123,7 +135,7 @@ public static class DebuffEffectPatches
                         // A player's Strength: the part borrowed from others' Vulnerable (Dominate) is damage they enabled.
                         // Temporary Strength from another player (Coordinate) is read from its power, which keeps its applier.
                         case StrengthPower s when s.Owner == dealer && dealer.IsPlayer && s.Amount > 0 && target.IsEnemy &&
-                                                  target.HpDisplay == HpDisplay.Normal:
+                                                  target.HpDisplay == HpDisplay.Normal && caps.Count == 0:
                         {
                             var temporary = dealer.Powers.OfType<TemporaryStrengthPower>()
                                 .Where(t => t.Amount > 0 && t.Applier is { IsPlayer: true } a && a != dealer)
@@ -131,11 +143,6 @@ public static class DebuffEffectPatches
                             effects.Add(new StrengthUsed(Capture.ToActor(dealer), s.Amount, Math.Min(damage, s.Amount * vulnFactor), temporary));
                             break;
                         }
-                        // Strength down on an attacking enemy: the lost Strength, shared by everyone who removed it.
-                        case StrengthPower s when s.Owner == dealer && dealer.IsEnemy && s.Amount < 0:
-                            effects.Add(new DebuffEffect(Capture.ToActor(dealer), $"{Capture.IdOf(s)}~DOWN", Capture.ToActor(target),
-                                (double)-s.Amount, Offense: false, Credit: DebuffCredit.Stacks));
-                            break;
                         // Any other power that remembers which player applied it: a debuff on the enemy hit (Flanking,
                         // Knockdown), a buff an ally gave the attacker (One for All), or a debuff on the attacking enemy.
                         // Intercept: the interceptor takes its allies' hits (multiplier = 1 + covered allies).
@@ -169,8 +176,47 @@ public static class DebuffEffectPatches
                             break;
                     }
                 }
+                // Strength down on an attacking enemy (v0.17.38): the Strength players removed and that is still gone, whatever
+                // Strength the enemy has (Rituel…), × the hit's Weak and the target's Vulnerable; shared by who removed it.
+                if (dealer.IsEnemy && props.IsPoweredAttack() && Capture.ToActor(target).IsPlayerSide && caps.Count == 0 &&
+                    BlockAndPowerPatches.StrengthDownFromPlayers(dealer) is var down and > 0)
+                {
+                    var factor = mods.OfType<WeakPower>().Where(w => w.Owner == dealer)
+                        .Concat<PowerModel>(mods.OfType<VulnerablePower>().Where(v => v.Owner == target))
+                        .Aggregate(1.0, (f, p) => f * (double)Mult(p, target, __result, props, dealer, cardSource, cardPlay));
+                    effects.Add(new DebuffEffect(Capture.ToActor(dealer), $"{ModelDb.GetId<StrengthPower>().Entry}~DOWN", Capture.ToActor(target),
+                        down * factor, Offense: false, Credit: DebuffCredit.Stacks));
+                }
                 _last = effects.Count > 0 ? new Pending(mods, effects, vulnerable, dealer, target) : null;
             });
+        }
+
+        /// Intangible / Dur à cuire capped the hit before the block: what the hit would have done without the cap, minus
+        /// what it does, past the block (the pet uses its owner's block), is HP loss prevented by that power.
+        private static void AddCapped(List<StatEvent> effects, List<PowerModel> caps, IRunState runState, ICombatState? combatState,
+            Creature target, Creature dealer, decimal damage, ValueProp props, CardModel? cardSource, CardPlay? cardPlay, decimal capped)
+        {
+            decimal uncapped;
+            Computing = true;
+            try
+            {
+#if GAME_DEFAULT
+                uncapped = Hook.ModifyDamage(runState, combatState, target, dealer, damage, props, cardSource,
+                    ModifyDamageHookType.Additive | ModifyDamageHookType.Multiplicative, CardPreviewMode.None, out _);
+#else
+                uncapped = Hook.ModifyDamage(runState, combatState, target, dealer, damage, props, cardSource, cardPlay,
+                    ModifyDamageHookType.Additive | ModifyDamageHookType.Multiplicative, CardPreviewMode.None, out _);
+#endif
+            }
+            finally
+            {
+                Computing = false;
+            }
+            var block = props.HasFlag(ValueProp.Unblockable) ? 0 : (target.PetOwner?.Creature ?? target).Block;
+            var saved = (double)(Math.Max(0, (int)uncapped - block) - Math.Max(0, (int)capped - block));
+            if (saved <= 0) return;
+            foreach (var cap in caps)
+                effects.Add(new HpLossPrevented(Capture.ToActor(target), saved / caps.Count, $"Power:{Capture.IdOf(cap)}"));
         }
 
         private static void AddApplied(List<StatEvent> effects, PowerModel p, Creature applier, Creature target, Creature dealer,
