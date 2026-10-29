@@ -159,6 +159,7 @@ public static class CombatFlowPatches
             KikiMAIster.UI.Overlay.EnsureAttached("combat start");
             KikiMAIster.UI.CombatSummary.HideAutoShown();
             var players = combatState?.Players ?? runState.Players;
+            PlayLog.CombatStarted(combatState, players, EncounterName(combatState));
             Capture.Emit(new CombatStarted(players.Select(p =>
                 new PlayerInfo(p.NetId, Capture.PlayerName(p, players.Count), p.Character.Id.Entry)).ToList(),
                 EncounterName(combatState)));
@@ -187,7 +188,9 @@ public static class CombatFlowPatches
     {
         public static void Prefix(ICombatState combatState, CombatSide side) => Capture.Safe("BeforeSideTurnEnd", () =>
         {
-            if (side == CombatSide.Player) BlockAlternatives.ResolveTurn(combatState);
+            if (side != CombatSide.Player) return;
+            PlayLog.TurnEnded(combatState);
+            BlockAlternatives.ResolveTurn(combatState);
         });
     }
 
@@ -195,7 +198,11 @@ public static class CombatFlowPatches
     [HarmonyPatch(typeof(Hook), nameof(Hook.AfterPlayerTurnStart))]
     public static class PlayerTurnStart
     {
-        public static void Prefix(Player player) => Capture.Safe("AfterPlayerTurnStart", () => BlockAlternatives.OnTurnStarted(player));
+        public static void Prefix(Player player) => Capture.Safe("AfterPlayerTurnStart", () =>
+        {
+            PlayLog.TurnStarted(player);
+            BlockAlternatives.OnTurnStarted(player);
+        });
     }
 
     /// Called for every creature starting its turn, after the game cleared (or kept) its block.
@@ -260,6 +267,7 @@ public static class CombatFlowPatches
                 Capture.CardPlays.Push(cardPlay);
                 Capture.Emit(new CardEvent(Capture.ToActor(cardPlay.Card.Owner), CardAction.Played, Repeat: cardPlay.PlayIndex > 0));
                 BlockAlternatives.OnPlayStarted(cardPlay);
+                PlayLog.PlayStarted(cardPlay);
             });
     }
 
@@ -268,6 +276,7 @@ public static class CombatFlowPatches
     {
         public static void Prefix() => Capture.Safe("CardPlayFinished", () =>
         {
+            PlayLog.PlayFinished();
             if (Capture.CardPlayers.Count > 0) Capture.Emit(new CardPlayFinished(Capture.ToActor(Capture.CardPlayers.Pop())));
             if (Capture.CardPlays.Count > 0) Capture.CardPlays.Pop();
             BlockAlternatives.OnPlayFinished();
@@ -282,6 +291,7 @@ public static class CombatFlowPatches
         public static void Prefix(Player player) => Capture.Safe("EndCardOrPotionEffect", () =>
         {
             if (!player.Creature.IsDead) return;
+            PlayLog.PlaysAbandoned();
             while (Capture.CardPlays.TryPeek(out var play) && Capture.PlayerOf(play) == player)
             {
                 Capture.CardPlays.Pop();
@@ -426,8 +436,9 @@ public static class CombatFlowPatches
     [HarmonyPatch(typeof(Hook), nameof(Hook.BeforePotionUsed))]
     public static class PotionStart
     {
-        public static void Prefix(PotionModel potion) => Capture.Safe("BeforePotionUsed", () =>
+        public static void Prefix(PotionModel potion, Creature? target) => Capture.Safe("BeforePotionUsed", () =>
         {
+            PlayLog.Potion(potion, target);
             Capture.PotionUser = potion.Owner;
             Capture.PotionId = $"Potion:{Capture.IdOf(potion)}";
             Capture.Emit(new PotionUsed(Capture.ToActor(potion.Owner)));

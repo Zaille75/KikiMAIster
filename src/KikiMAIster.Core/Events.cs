@@ -14,6 +14,11 @@ public readonly record struct Actor(ActorKind Kind, int CreatureId, ulong Player
     /// True for players and pets: the player this actor counts for.
     public bool IsPlayerSide => Kind is ActorKind.Player or ActorKind.Pet;
     public bool IsEnemy => Kind == ActorKind.Enemy;
+
+    /// Readable names in the log (v0.17.43): set by the capture layer ("Régent", "Larve#7"); null = kind and id.
+    public static Func<Actor, string>? Namer;
+
+    public override string ToString() => Namer?.Invoke(this) ?? $"{Kind}#{CreatureId}";
 }
 
 public enum SourceKind { Card, Power, DamageOverTime, Pet, Potion, Relic, Orb, Unknown }

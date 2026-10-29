@@ -71,9 +71,11 @@ public static class Capture
         try
         {
             CountUnknown(e);
+            PlayLog.OnEvent(e);
             Engine.Handle(e);
-            if (Settings.LogEvents)
-                ModLog.Info(e is MissedChance m ? $"EVENT MissedChance {m.Player.PlayerId} {m.Kind} [{string.Join(", ", m.Args)}] {m.Amount}" : $"EVENT {e}");
+            // Card plays are shown by the play log (▶ / ◀ lines, v0.17.43): their raw events would only add noise.
+            if (Settings.LogEvents && e is not (CardEvent or CardPlayFinished))
+                ModLog.Info(e is MissedChance m ? $"EVENT MissedChance {m.Player} {m.Kind} [{string.Join(", ", m.Args)}] {m.Amount}" : $"EVENT {e}");
         }
         catch (Exception ex)
         {
@@ -91,7 +93,13 @@ public static class Capture
     public static Actor ToActor(Creature? c)
     {
         if (c == null) return Actor.None;
-        var id = CreatureIds.GetValue(c, _ => new StrongBox<int>(++_nextCreatureId)).Value;
+        var isNew = false;
+        var id = CreatureIds.GetValue(c, _ =>
+        {
+            isNew = true;
+            return new StrongBox<int>(++_nextCreatureId);
+        }).Value;
+        if (isNew) PlayLog.Seen(c, id, true);
         if (c.IsPet && c.PetOwner != null) return Actor.Pet(c.PetOwner.NetId, id);
         if (c.IsPlayer) return Actor.Player(c.Player!.NetId, id);
         if (c.IsEnemy) return Actor.Enemy(id);

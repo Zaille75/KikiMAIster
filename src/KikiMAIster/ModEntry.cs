@@ -15,6 +15,7 @@ public static class ModEntry
     {
         try
         {
+            PlayLog.Install();
             new Harmony("kikimaister").PatchAll(typeof(ModEntry).Assembly);
             ModLog.Info($"loaded (v{typeof(ModEntry).Assembly.GetName().Version})");
             ReflectionTargets.CheckAll();

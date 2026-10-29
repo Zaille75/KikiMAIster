@@ -36,6 +36,7 @@ Summary by version line. The detailed notes of every version are in [docs/specs/
   enemy a smaller one or Trou noir would have killed (Gâché); Slow: bigger attack before a smaller one, allies included;
   Max HP gained after a capped heal (new "Hors combat" misplays); fight time stops at the last kill; HP outside fights
   shown again (history read fixed); trophy hover texts to the right of the mouse.
+- **0.17.43:** play-by-play log of each fight (turns, cards, targets, energy, effects), readable in co-op.
 - **Details and records (0.17.39):** enchantment damage, HP lost by kind and heals by source in the details; fight length
   (rounds, time) and fastest-win records per encounter across runs (ascension, players, solo character), with a notice.
 - **Interface:** "Erreurs" (Gâché + Choix) in every tab, sections in their own windows, hide columns at 0, richer details (Protection by block source),

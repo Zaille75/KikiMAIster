@@ -61,6 +61,15 @@ command's first `await`. A game update adding one would silently turn sources in
 see; so each fight's end logs `sources unknown this fight: N player damage, M block (first: …)` when there were any.
 A jump of that count after a game update means the source lookup broke.
 
+**Play-by-play log (v0.17.43, Zaille75):** `PlayLog.cs` writes each fight in the mod's log so every stat can be checked
+afterwards against the cards really played, solo or co-op: `═══` fight start (players, HP); `+` each enemy when first
+seen (`Larve#7`: the number tells two of a kind apart); `───` each round's enemies (HP, block, powers, intent with the
+attack total on each player) and each player's turn (HP, block, energy, Stars, powers, pet, hand, piles); `▶` card played
+(player, card title + id, target, energy / Stars paid and left, auto-play, played again); `◀` its summary (damage, block,
+overkill, kills, powers, heals, misses during it); `⚗` potion and target; `■` each player's end of turn (energy, Stars,
+block, incoming attack, cards kept). Every EVENT line names creatures the same way (`Actor.Namer`); the raw card events
+(drawn, played, finished) are no longer written.
+
 ## Safety rules
 - Every patch is wrapped in try/catch and logs errors; the mod must **never** crash the game.
 - The mod never modifies game state.

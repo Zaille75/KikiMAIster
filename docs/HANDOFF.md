@@ -1,4 +1,4 @@
-# Handoff — state of the project (2026-10-29, v0.17.42)
+# Handoff — state of the project (2026-10-29, v0.17.43)
 
 > **Next session starts with Zaille75's next co-op test (beta branch, v0.17.38 or later).** He will send it with
 > `Envoyer-a-Claude.bat` → `logs/inbox/<date_time>/` (both logs + F9 `feedback/` folders). **Review and summarize every
@@ -143,6 +143,11 @@ Order: test → default branch → release prep → publish → maintenance. The
 
 Optional roadmap items (only if asked): JSON export, end-of-run Totals / Per act tabs, MVP line, opacity / scale /
 hotkey settings, chart history across Save & Quit.
+
+## v0.17.43 — play-by-play log (2026-10-29, not tested in game)
+`PlayLog.cs` (see 03-technical). Next step agreed with Zaille75: when he says so, a **partial card-by-card check of his
+last run** (`logs/inbox/2026-10-29_20-06-37/`, v0.17.40: no play lines, card names only from damage / block sources);
+then the full check on the first log written by v0.17.43. Report differences first, change nothing before his go.
 
 ## v0.17.42 — Régent solo run feedback (2026-10-29, not tested in game)
 Log `logs/inbox/2026-10-29_20-06-37/` (main branch, v0.17.40, A9, 15 fights). Fixed: the map history read crashed on every
