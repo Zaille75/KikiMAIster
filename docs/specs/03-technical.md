@@ -49,6 +49,17 @@ Rule learned in the spike: patch the public `CombatHistory` wrappers, never the 
 (type as text, so the list loads no game code). PatchCheck fails the build when one is missing, and the mod logs an
 `ERROR game member not found` line at start-up (the stat using it stays empty). Any new reflection must go through that
 list.
+**v0.17.41:** the end-of-turn misplay rules (wrong order, weak attacks, energy left, block cards kept, relic triggers,
+free cards, wasted block, Stars, Carapace endurcie) live in `Core/TurnReview.cs` and are unit-tested
+(`TurnReviewTests`). `Patches/BlockAlternatives.cs` only follows the turn (plays, hits, order losses) and, when the players'
+turn ends, fills a `TurnState` snapshot (hand cards with the game's cost, block, damage, Thorns, playability; each
+player's energy, block, incoming attack, relics) and emits what `TurnReview.Resolve` returns. The per-turn state is
+cleared in one place (`ClearTurn`). Missed lethal and the estimates (damage, block, hits) stay in the patch: they call
+the game.
+**Unknown sources (v0.17.41):** damage and block sources come from a call-stack walk that only works before the game
+command's first `await`. A game update adding one would silently turn sources into "Unknown", which PatchCheck cannot
+see; so each fight's end logs `sources unknown this fight: N player damage, M block (first: …)` when there were any.
+A jump of that count after a game update means the source lookup broke.
 
 ## Safety rules
 - Every patch is wrapped in try/catch and logs errors; the mod must **never** crash the game.

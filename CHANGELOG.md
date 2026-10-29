@@ -28,6 +28,10 @@ Summary by version line. The detailed notes of every version are in [docs/specs/
   attack computed for each player; status and curse damage go to whoever created the card; kills once per enemy; heals
   after fights and the Ancients' heals in "Soins hors combat" (Neow left out); Oubli's block enabled for the giver;
   Paresse, Résonnant, Entraves and extra turns handled.
+- **0.17.39–0.17.41:** enchantment damage, HP lost by kind and heals by source in the details; fight length and fastest
+  wins per encounter across runs with a "Nouveau record" notice; the build fails and the log warns when a private game
+  member the mod reads is renamed; the misplay rules moved to the tested core (no change in game) and a per-fight log
+  count of damage / block whose source was not found.
 - **Details and records (0.17.39):** enchantment damage, HP lost by kind and heals by source in the details; fight length
   (rounds, time) and fastest-win records per encounter across runs (ascension, players, solo character), with a notice.
 - **Interface:** "Erreurs" (Gâché + Choix) in every tab, sections in their own windows, hide columns at 0, richer details (Protection by block source),

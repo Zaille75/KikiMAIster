@@ -48,6 +48,7 @@ public static class CombatFlowPatches
         var seconds = FightClock.Elapsed.TotalSeconds;
         FightClock.Reset();
         Capture.Emit(new CombatEnded(victory, seconds));
+        Capture.LogUnknownSources();
         if (victory && _fightKey != null && Capture.Engine.LastCombat is { } fight)
         {
             var key = _fightKey;
@@ -129,6 +130,7 @@ public static class CombatFlowPatches
             Capture.PotionUser = null;
             DamagePatches.Reset();
             BlockAlternatives.Reset();
+            Capture.ResetUnknownSources();
             BlockAndPowerPatches.Reset();
             _combatOpen = true;
             FightClock.Restart();

@@ -31,10 +31,46 @@ public static class Capture
     /// "Potion:<ID>" while a potion is being used (not inside a card it plays), else "".
     public static string CurrentOrigin => PotionUser != null && CardPlayers.Count == 0 ? PotionId : "";
 
+    /// Damage dealt by a player or pet, and block, whose source was not found this fight (v0.17.41). The source comes from
+    /// a call-stack walk that only works before the game command's first await: a game update adding one would turn sources
+    /// into "Unknown" with no error, so the count is logged at the end of each fight.
+    private static int _unknownDamage, _unknownBlock;
+    private static string _unknownExample = "";
+
+    public static void ResetUnknownSources()
+    {
+        _unknownDamage = _unknownBlock = 0;
+        _unknownExample = "";
+    }
+
+    public static void LogUnknownSources()
+    {
+        if (_unknownDamage + _unknownBlock > 0)
+            ModLog.Info($"sources unknown this fight: {_unknownDamage} player damage, {_unknownBlock} block (first: {_unknownExample})");
+        ResetUnknownSources();
+    }
+
+    private static void CountUnknown(StatEvent e)
+    {
+        switch (e)
+        {
+            case DamageDealt d when d.Source.Kind == SourceKind.Unknown && d.Dealer.IsPlayerSide:
+                _unknownDamage++;
+                break;
+            case BlockGained b when b.Source.Kind == SourceKind.Unknown && b.Receiver.IsPlayerSide:
+                _unknownBlock++;
+                break;
+            default:
+                return;
+        }
+        if (_unknownExample == "") _unknownExample = e.ToString();
+    }
+
     public static void Emit(StatEvent e)
     {
         try
         {
+            CountUnknown(e);
             Engine.Handle(e);
             if (Settings.LogEvents)
                 ModLog.Info(e is MissedChance m ? $"EVENT MissedChance {m.Player.PlayerId} {m.Kind} [{string.Join(", ", m.Args)}] {m.Amount}" : $"EVENT {e}");

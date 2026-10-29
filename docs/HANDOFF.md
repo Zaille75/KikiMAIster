@@ -1,4 +1,4 @@
-# Handoff — state of the project (2026-10-29, v0.17.40)
+# Handoff — state of the project (2026-10-29, v0.17.41)
 
 > **Next session starts with Zaille75's next co-op test (beta branch, v0.17.38 or later).** He will send it with
 > `Envoyer-a-Claude.bat` → `logs/inbox/<date_time>/` (both logs + F9 `feedback/` folders). **Review and summarize every
@@ -143,6 +143,13 @@ Order: test → default branch → release prep → publish → maintenance. The
 
 Optional roadmap items (only if asked): JSON export, end-of-run Totals / Per act tabs, MVP line, opacity / scale /
 hotkey settings, chart history across Save & Quit.
+
+## v0.17.41 — review section 4 (2026-10-29, not tested in game)
+The end-of-turn misplay rules moved from `Patches/BlockAlternatives.cs` to `Core/TurnReview.cs` (pure, 10 tests in
+`TurnReviewTests`); the patch fills a `TurnState` snapshot. Same rules, so the figures must not change: in the next logs
+compare `block play …`, `wrong order …`, `stars …` lines and the Choix / Gâché counts with what Zaille75 saw. New log
+line at each fight's end when some damage / block had no known source: `sources unknown this fight: …`. Small known
+change: Mimic no longer counts as block for one ally in the Stars check.
 
 ## v0.17.39 — review section 3, items 4–7 (2026-10-29, not tested in game)
 Enchantment damage, HP lost by kind, heals by source (details only), fight length and fight records
