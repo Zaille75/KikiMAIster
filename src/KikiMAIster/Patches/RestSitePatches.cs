@@ -88,7 +88,7 @@ public static class RestSitePatches
     {
         public static void Prefix(RestSiteSynchronizer __instance) => Capture.Safe("RestSite.LocalLeft", () =>
         {
-            if (Traverse.Create(__instance).Property("LocalPlayer").GetValue<Player>() is { } me)
+            if (Traverse.Create(__instance).Property(ReflectionTargets.RestSiteLocalPlayer.Name).GetValue<Player>() is { } me)
                 Check(me, __instance.GetOptionsForPlayer(me));
         });
     }

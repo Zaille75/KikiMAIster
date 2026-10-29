@@ -200,7 +200,7 @@ public static class DebuffEffectPatches
             });
         }
 
-        private static readonly System.Reflection.MethodInfo? Internal = AccessTools.Method(typeof(Hook), "ModifyDamageInternal");
+        private static readonly System.Reflection.MethodInfo? Internal = ReflectionTargets.Method(ReflectionTargets.ModifyDamageInternal);
 
         /// The game's damage computation without the card's enchantment (its private step after the enchantment).
         private static decimal WithoutEnchantment(IRunState runState, ICombatState? combatState, Creature target, Creature dealer, decimal damage,

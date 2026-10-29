@@ -17,6 +17,7 @@ public static class ModEntry
         {
             new Harmony("kikimaister").PatchAll(typeof(ModEntry).Assembly);
             ModLog.Info($"loaded (v{typeof(ModEntry).Assembly.GetName().Version})");
+            ReflectionTargets.CheckAll();
             // Mods load during the game's startup, after NGame._Ready. The overlay is attached on the first
             // input or combat start (see Overlay.EnsureAttached): a deferred call from here never ran in v0.2.0.
             ModLog.Info($"main thread: {OS.GetThreadCallerId() == OS.GetMainThreadId()}, NGame ready: {NGame.Instance != null}");

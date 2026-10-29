@@ -44,6 +44,11 @@
 
 Rule learned in the spike: patch the public `CombatHistory` wrappers, never the private `Add` (JIT inlining).
 `tools/PatchCheck` (run by `build.sh`) verifies that every patch matches exactly one game method.
+**v0.17.40:** private game members read by name (`Hook.ModifyDamageInternal`, `PenNib.AttackToDouble`,
+`RestSiteSynchronizer.LocalPlayer`, `SoulboundPower.IsAddingSoul`) are all listed in `src/KikiMAIster/ReflectionTargets.cs`
+(type as text, so the list loads no game code). PatchCheck fails the build when one is missing, and the mod logs an
+`ERROR game member not found` line at start-up (the stat using it stays empty). Any new reflection must go through that
+list.
 
 ## Safety rules
 - Every patch is wrapped in try/catch and logs errors; the mod must **never** crash the game.

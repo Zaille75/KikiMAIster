@@ -342,7 +342,7 @@ public static class CombatFlowPatches
             // applier's gift (v0.17.1).
 #if !GAME_DEFAULT // Âme sœur: beta only
             if (card is Soul && card.Owner.Creature.GetPower<SoulboundPower>() is { } soulbound && soulbound.Applier?.Player is { } binder &&
-                binder != card.Owner && Traverse.Create(soulbound).Property("IsAddingSoul").GetValue<bool>())
+                binder != card.Owner && Traverse.Create(soulbound).Property(ReflectionTargets.SoulboundAddingSoul.Name).GetValue<bool>())
                 giver = binder;
 #endif
             if (giver != null && card.Owner != giver)

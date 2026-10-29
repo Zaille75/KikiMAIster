@@ -1,4 +1,4 @@
-# Handoff — state of the project (2026-10-29, v0.17.39)
+# Handoff — state of the project (2026-10-29, v0.17.40)
 
 > **Next session starts with Zaille75's next co-op test (beta branch, v0.17.38 or later).** He will send it with
 > `Envoyer-a-Claude.bat` → `logs/inbox/<date_time>/` (both logs + F9 `feedback/` folders). **Review and summarize every
@@ -138,7 +138,8 @@ Order: test → default branch → release prep → publish → maintenance. The
    an uploader in the game folder, else use SteamCMD `workshop_build_item`. Former note: which sites (GitHub release, Nexus Mods, Steam Workshop if StS2 accepts mods there). Claude checks
    each site's requirements first; Zaille75 creates the accounts / uploads where a login is needed.
 5. **Maintenance after each game patch:** Zaille75 copies the new DLLs into `lib/beta/` (and `lib/default/`), Claude
-   rebuilds (PatchCheck flags broken hooks), fixes them, re-syncs `BlockAlternatives.HitCount`, bumps the version.
+   rebuilds (PatchCheck flags broken hooks and, since v0.17.40, renamed private members listed in `ReflectionTargets.cs`),
+   fixes them, re-syncs `BlockAlternatives.HitCount`, bumps the version.
 
 Optional roadmap items (only if asked): JSON export, end-of-run Totals / Per act tabs, MVP line, opacity / scale /
 hotkey settings, chart history across Save & Quit.

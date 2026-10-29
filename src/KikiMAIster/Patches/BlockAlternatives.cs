@@ -783,7 +783,7 @@ public static class BlockAlternatives
     {
         var nib = Capture.PlayerOf(cardPlay).GetRelic<PenNib>();
         if (nib == null) return false;
-        return Traverse.Create(nib).Property("AttackToDouble").GetValue<CardModel>() == cardPlay.Card;
+        return Traverse.Create(nib).Property(ReflectionTargets.PenNibAttackToDouble.Name).GetValue<CardModel>() == cardPlay.Card;
     }
 
     /// A block card in hand giving more block than the one played (same cost or cheaper).

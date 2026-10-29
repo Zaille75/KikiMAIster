@@ -28,4 +28,17 @@ foreach (var t in modAsm.GetTypes())
     if (methods.Count == 1 && missingParams.Count == 0) { ok++; Console.WriteLine($"OK   {t.Name} -> {decl.Name}.{name}"); }
     else { bad++; Console.WriteLine($"FAIL {t.Name} -> {decl.Name}.{name}: {methods.Count} matches, unknown params [{string.Join(",", missingParams)}]"); }
 }
+// Private game members the mod reads by name (KikiMAIster.ReflectionTargets): each must still exist.
+var targets = modAsm.GetType("KikiMAIster.ReflectionTargets");
+if (targets == null) { bad++; Console.WriteLine("FAIL ReflectionTargets class not found in the mod"); }
+else
+{
+    var find = targets.GetMethod("Find")!;
+    var all = (System.Collections.IEnumerable)targets.GetProperty("All")!.GetValue(null)!;
+    foreach (var t in all)
+    {
+        if (find.Invoke(null, new[] { t }) != null) { ok++; Console.WriteLine($"OK   reflection {t}"); }
+        else { bad++; Console.WriteLine($"FAIL reflection {t}: not found in the game"); }
+    }
+}
 Console.WriteLine($"{ok} ok, {bad} failed");
