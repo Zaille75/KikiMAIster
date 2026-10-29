@@ -170,6 +170,15 @@ Tags: **[v1]** = first release · **[v2]** = later release (needs harder attribu
 ## C3. Other stats (v0.9.0)
 Cards drawn, played, exhausted, discarded; potions used.
 
+## C5. Details and fight length (v0.17.39, Zaille75)
+| Stat | Definition |
+|---|---|
+| Enchantment damage | The part of a card's hit added by its enchantment (Tranchant, Tezcatara's ember…): the game's damage without the enchantment, through the same modifiers, against the real hit, for its share of the HP removed. Already in the card's damage: a detail of Dégâts, no column. |
+| HP lost by kind | HP lost split into enemy attacks, enemy reactions (an enemy's power: Thorns…), status and curse cards, debuffs (Poison, Doom…), self, allies, other. A detail of Dégâts, no column. |
+| Heals by source | Heals a player gave (self and allies) by what healed: relic, card, potion, power. A detail of Protection. |
+| Fight length | Rounds and real time of each fight (from its start to its end; menus and pauses included; a fight reloaded after Save & Quit starts again). Run scope: number of fights, total rounds and time, average time. Details of "Cartes et potions"; the combat summary shows the time next to the rounds. |
+| Fight records | Across runs, for each encounter won: fewest rounds and shortest time, kept apart by ascension level, number of players and, in solo, character (file `KikiMAIster.fights.cfg`). The first win of an encounter only sets the record; beating it shows "★ Nouveau record pour ce combat ! 4 tours (avant 5) · 2:10 (avant 2:45)" in the combat summary. Defeats never count. |
+
 ## C4. Run stats outside combat (v0.17.0)
 | Stat | Definition |
 |---|---|

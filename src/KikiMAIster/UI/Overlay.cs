@@ -746,8 +746,13 @@ public static class Overlay
         var avoided = s.PreventedByDebuffsSelf + s.PreventedByDebuffsAllies;
         var tip = Line(("tip.intoBlock", s.DamageIntoBlock, false), ("tip.overkill", s.Overkill, false), ("tip.kills", s.Kills, false))
                   + Block(Lines(s.DamageBySource))
+                  // Damage added by card enchantments (v0.17.39): already in the cards' damage.
+                  + (s.DamageByEnchantment.Values.Sum() >= 0.5 ? Block($"{Loc.T("tip.enchantments")}:\n{Lines(s.DamageByEnchantment)}") : "")
                   + (extra + avoided > 0 ? Block(Line(("tip.enabled", extra, false), ("tip.byDebuffs", avoided, false)) + Block(Lines(s.DebuffEffectBySource))) : "")
                   + Block(taken == "" ? "" : $"{Loc.T("col.hpLost")} {N(s.HpLost)}: {taken}")
+                  // HP lost by kind (v0.17.39): attacks, reactions (Thorns…), status cards, damage over time, self, allies.
+                  + (s.HpLostByKind.Count == 0 ? "" : Block($"{Loc.T("tip.byKind")}: " + string.Join(", ", s.HpLostByKind
+                      .Where(kv => Math.Round(kv.Value) != 0).OrderByDescending(kv => kv.Value).Select(kv => $"{Loc.T($"tip.kind.{kv.Key}")} {N(kv.Value)}"))))
                   + (s.DebuffsReceived.Count == 0 ? "" : Block($"{Loc.T("tip.debuffsReceived")}:\n{Powers(s.DebuffsReceived)}"))
                   + (s.SelfDebuffs.Count == 0 ? "" : Block($"{Loc.T("tip.selfDebuffs")}:\n{Powers(s.SelfDebuffs)}"));
         var byColumn = s.DamageBySource.GroupBy(kv => DamageColumn(kv.Key)).ToDictionary(g => g.Key, g => g.Sum(kv => kv.Value));
@@ -857,6 +862,10 @@ public static class Overlay
         var byDebuffs = s.PreventedByDebuffsSelf + s.PreventedByDebuffsAllies;
         if (byDebuffs > 0) lines.Add($"{Loc.T("tip.byDebuffs")}: {N(byDebuffs)}");
         if (s.HealingSelf > 0) lines.Add($"{Loc.T("tip.healSelf")}: {N(s.HealingSelf)}");
+        // Heals given, by source (v0.17.39).
+        if (s.HealingBySource.Values.Sum() >= 0.5)
+            lines.Add($"{Loc.T("tip.healBySource")}: " + string.Join(", ", s.HealingBySource.Where(kv => Math.Round(kv.Value) != 0)
+                .OrderByDescending(kv => kv.Value).Select(kv => $"{GameNames.Of(kv.Key)} {N(kv.Value)}")));
         var tip = string.Join('\n', lines);
         return new[]
         {
@@ -965,12 +974,22 @@ public static class Overlay
     private static string AllyName(string key) =>
         ulong.TryParse(key, NumberStyles.None, CultureInfo.InvariantCulture, out var id) && Capture.Engine.Players.TryGetValue(id, out var p) ? p.Name : key;
 
-    private static IReadOnlyList<Cell> OtherRow(ulong id, PlayerStats s) => new[]
+    private static IReadOnlyList<Cell> OtherRow(ulong id, PlayerStats s)
     {
-        new Cell("col.drawn", N(s.CardsDrawn)), new Cell("col.played", N(s.CardsPlayed)),
-        new Cell("col.exhausted", N(s.CardsExhausted)), new Cell("col.discarded", N(s.CardsDiscarded)),
-        new Cell("col.potions", N(s.PotionsUsed)), new Cell("col.energySurplus", N(s.EnergySurplus)), new Cell("col.energyUseless", N(s.EnergyUseless))
-    };
+        // Fight length (v0.17.39): this fight's rounds and time, or the run's totals over its fights.
+        var tip = s.FightTurns <= 0 ? ""
+            : s.FightsTimed > 0
+                ? string.Format(Loc.T("tip.fightsLength"), N(s.FightsTimed), N(s.FightTurns), FightRecordStore.Duration(s.FightSeconds),
+                    FightRecordStore.Duration(s.FightSeconds / s.FightsTimed))
+                : string.Format(Loc.T("tip.fightLength"), N(s.FightTurns), FightRecordStore.Duration(s.FightSeconds));
+        return new[]
+        {
+            new Cell("col.drawn", N(s.CardsDrawn), tip), new Cell("col.played", N(s.CardsPlayed), tip),
+            new Cell("col.exhausted", N(s.CardsExhausted), tip), new Cell("col.discarded", N(s.CardsDiscarded), tip),
+            new Cell("col.potions", N(s.PotionsUsed), tip), new Cell("col.energySurplus", N(s.EnergySurplus), tip),
+            new Cell("col.energyUseless", N(s.EnergyUseless), tip)
+        };
+    }
 
     // ---------- Helpers ----------
 
@@ -984,7 +1003,7 @@ public static class Overlay
             $"{kv.Value.HealingSelf + kv.Value.HealingAllies:F1}:{kv.Value.PetHpGiven:F1}:{kv.Value.WastedPlays.Count}:{kv.Value.Kills}:" +
             $"{kv.Value.DamageEnabledSelf + kv.Value.DamageEnabledAllies:F1}:{kv.Value.MissedLethals}:{kv.Value.WeakAttacks}:{kv.Value.EnergyGiven + kv.Value.CardsGiven + kv.Value.OrbsGiven + kv.Value.TakenForAllies:F1}:{kv.Value.MissedEntries.Count}:{kv.Value.Deaths}:" +
             $"{kv.Value.CardsDrawn + kv.Value.CardsPlayed + kv.Value.CardsExhausted + kv.Value.CardsDiscarded + kv.Value.PotionsUsed + kv.Value.EnergySurplus + kv.Value.EnergyUseless}:" +
-            $"{kv.Value.MaxHpGained}:{kv.Value.MaxHpLost}:{kv.Value.HpLostOutside}:{kv.Value.HealedOutside}:{kv.Value.GoldGained}:{kv.Value.GoldSpent}:{kv.Value.GoldLost}:{kv.Value.GoldNow}:{kv.Value.CursesGained}:{kv.Value.CursesRemoved}:{kv.Value.UnavoidableBlock:F1}:{kv.Value.RestSiteChoices.Values.Sum()}:{kv.Value.RestSiteChoices.Count}:{kv.Value.ChifumiWon}:{kv.Value.ChifumiPlayed}:{kv.Value.BlockEnabledForAllies:F1}:{kv.Value.SavedForAllies:F1}")) +
+            $"{kv.Value.MaxHpGained}:{kv.Value.MaxHpLost}:{kv.Value.HpLostOutside}:{kv.Value.HealedOutside}:{kv.Value.GoldGained}:{kv.Value.GoldSpent}:{kv.Value.GoldLost}:{kv.Value.GoldNow}:{kv.Value.CursesGained}:{kv.Value.CursesRemoved}:{kv.Value.UnavoidableBlock:F1}:{kv.Value.RestSiteChoices.Values.Sum()}:{kv.Value.RestSiteChoices.Count}:{kv.Value.ChifumiWon}:{kv.Value.ChifumiPlayed}:{kv.Value.BlockEnabledForAllies:F1}:{kv.Value.SavedForAllies:F1}:{kv.Value.FightSeconds:F0}:{kv.Value.HpLostByKind.Count}:{kv.Value.HealingBySource.Count}:{kv.Value.DamageByEnchantment.Count}")) +
         $"|{Cfg.HideZeroColumns}|{Cfg.ShowGroupLine}|{string.Join(',', Cfg.Detached)}";
 
     /// Rounded, never "-0" (a tiny negative rounding error).

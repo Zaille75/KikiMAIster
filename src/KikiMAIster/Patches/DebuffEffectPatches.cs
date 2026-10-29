@@ -37,6 +37,7 @@ public static class DebuffEffectPatches
             {
                 DebuffEffect d => d with { Amount = d.Amount * scale },
                 StrengthUsed u => u with { Damage = u.Damage * scale },
+                DamagePart part => part with { Amount = part.Amount * scale },
                 _ => e
             });
     }
@@ -82,7 +83,7 @@ public static class DebuffEffectPatches
             var mods = modifiers;
             if (mods is not ICollection<AbstractModel> collection) return;
             // Strength down needs no modifier: the enemy's Strength may be back to 0 (+2 of its own, −2 from a player).
-            if (collection.Count == 0 && !(dealer.IsEnemy && props.IsPoweredAttack())) return;
+            if (collection.Count == 0 && !(dealer.IsEnemy && props.IsPoweredAttack()) && cardSource?.Enchantment == null) return;
             var baseDamage = damage;
             Capture.Safe("Hook.ModifyDamage", () =>
             {
@@ -187,8 +188,39 @@ public static class DebuffEffectPatches
                     effects.Add(new DebuffEffect(Capture.ToActor(dealer), $"{ModelDb.GetId<StrengthPower>().Entry}~DOWN", Capture.ToActor(target),
                         down * factor, Offense: false, Credit: DebuffCredit.Stacks));
                 }
+                // Damage added by the card's enchantment (v0.17.39): the hit without it, through the same modifiers.
+                if (cardSource?.Enchantment is { } enchantment && target.IsEnemy && Capture.ToActor(dealer).IsPlayerSide)
+                    Capture.Safe("enchantment damage", () =>
+                    {
+                        var without = WithoutEnchantment(runState, combatState, target, dealer, baseDamage, props, cardSource, cardPlay);
+                        var extra = (double)(__result - without);
+                        if (extra > 0) effects.Add(new DamagePart(Capture.ToActor(dealer), $"Enchantment:{Capture.IdOf(enchantment)}", extra));
+                    });
                 _last = effects.Count > 0 ? new Pending(mods, effects, vulnerable, dealer, target) : null;
             });
+        }
+
+        private static readonly System.Reflection.MethodInfo? Internal = AccessTools.Method(typeof(Hook), "ModifyDamageInternal");
+
+        /// The game's damage computation without the card's enchantment (its private step after the enchantment).
+        private static decimal WithoutEnchantment(IRunState runState, ICombatState? combatState, Creature target, Creature dealer, decimal damage,
+            ValueProp props, CardModel cardSource, CardPlay? cardPlay)
+        {
+            if (Internal == null) return decimal.MaxValue;
+#if GAME_DEFAULT
+            var args = new object?[] { runState, combatState, target, dealer, damage, props, cardSource, ModifyDamageHookType.All, null };
+#else
+            var args = new object?[] { runState, combatState, target, dealer, damage, props, cardSource, cardPlay, ModifyDamageHookType.All, null };
+#endif
+            Computing = true;
+            try
+            {
+                return Math.Max(0, (decimal)Internal.Invoke(null, args)!);
+            }
+            finally
+            {
+                Computing = false;
+            }
         }
 
         /// Intangible / Dur à cuire capped the hit before the block: what the hit would have done without the cap, minus
@@ -254,7 +286,7 @@ public static class DebuffEffectPatches
         {
             if (_last == null || !ReferenceEquals(_last.Modifiers, modifiers)) return;
             // Damage avoided (Weak…) is resolved by the engine against the hit; extra damage waits for the hit's HP.
-            var offense = _last.Effects.Where(e => e is DebuffEffect { Offense: true } or StrengthUsed).ToList();
+            var offense = _last.Effects.Where(e => e is DebuffEffect { Offense: true } or StrengthUsed or DamagePart).ToList();
             foreach (var e in _last.Effects.Except(offense)) Capture.Emit(e);
             if (offense.Count > 0 && _last.Target.IsEnemy)
             {

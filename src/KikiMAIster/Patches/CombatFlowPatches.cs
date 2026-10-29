@@ -24,6 +24,9 @@ public static class CombatFlowPatches
     private static bool _combatOpen;
     private static string? _runKey;
     private static int _floor;
+    /// The fight being played: its real time, and its record key (encounter, ascension, players, solo character, v0.17.39).
+    private static readonly System.Diagnostics.Stopwatch FightClock = new();
+    private static string? _fightKey;
 
     /// The ascension level of the run being played (group compositions are counted per level).
     public static int Ascension { get; private set; }
@@ -42,7 +45,15 @@ public static class CombatFlowPatches
         BlockAlternatives.ResolveCombat();
         BlockAndPowerPatches.Reset();
         Capture.Safe("rest before the boss", () => RestSitePatches.OnCombatEnded(victory));
-        Capture.Emit(new CombatEnded(victory));
+        var seconds = FightClock.Elapsed.TotalSeconds;
+        FightClock.Reset();
+        Capture.Emit(new CombatEnded(victory, seconds));
+        if (victory && _fightKey != null && Capture.Engine.LastCombat is { } fight)
+        {
+            var key = _fightKey;
+            Capture.Safe("fight records", () => UI.FightRecordStore.Add(key, fight.Number, fight.LastRound, seconds));
+        }
+        _fightKey = null;
         RunHistoryPatches.Read(CurrentRun);
         Summary.LogCombat(Capture.Engine);
         if (_runKey != null) RunStore.Save(_runKey, _floor, Capture.Engine);
@@ -120,6 +131,15 @@ public static class CombatFlowPatches
             BlockAlternatives.Reset();
             BlockAndPowerPatches.Reset();
             _combatOpen = true;
+            FightClock.Restart();
+            _fightKey = null;
+            Capture.Safe("fight key", () =>
+            {
+                var fighters = combatState?.Players ?? runState.Players;
+                if (combatState?.Encounter is { } e)
+                    _fightKey = FightRecords.Key(runState.AscensionLevel, fighters.Count, fighters.Count == 1 ? fighters[0].Character.Id.Entry : "",
+                        e.Id.Entry);
+            });
             RunHistoryPatches.PreFight(runState);
             if (combatState?.Encounter is { } encounter)
                 Capture.Safe("rest before the boss", () => RestSitePatches.OnCombatStarted(runState, encounter.RoomType));

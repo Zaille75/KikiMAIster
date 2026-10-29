@@ -293,7 +293,9 @@ public static class BlockAndPowerPatches
                         Actor.Player(target.PlayerId, 0)));
                 return;
             }
-            Capture.Emit(new Healed(healer, target, healed));
+            // What healed (v0.17.39): the potion being drunk, else the relic, card or power calling.
+            var source = Capture.CurrentOrigin != "" ? Capture.CurrentOrigin : Capture.SourceOf(Capture.CallingModelType()).ToString();
+            Capture.Emit(new Healed(healer, target, healed, source));
         });
     }
 

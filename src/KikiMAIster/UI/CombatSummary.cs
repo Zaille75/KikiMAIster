@@ -199,6 +199,9 @@ public static class CombatSummary
         close.Pressed += () => Capture.Safe("CombatSummary.Close", () => _panel!.Visible = false);
         header.AddChild(close);
         _content.AddChild(header);
+        // A fight that beat its encounter's record (fewest rounds or fastest, v0.17.39).
+        if (!combat.InProgress && FightRecordStore.Notes.TryGetValue(combat.Number, out var note))
+            _content.AddChild(Overlay.MakeLabel(note, Overlay.Accent));
 
         // Stat selector, then cumulative / per round.
         var coop = Players(combat).Count > 1;
@@ -256,7 +259,8 @@ public static class CombatSummary
         var name = c.Name == "" ? "" : $" · {c.Name}";
         return c.InProgress
             ? $"▶ {Loc.T("summary.title")} {c.Number}{name} · {Loc.T("summary.inProgress")} ({Loc.T("summary.round").ToLowerInvariant()} {c.LastRound})"
-            : $"{Loc.T("summary.title")} {c.Number}{name} · {Loc.T(c.Victory == true ? "summary.victory" : "summary.defeat")} · {c.LastRound} {Loc.T("summary.rounds")}";
+            : $"{Loc.T("summary.title")} {c.Number}{name} · {Loc.T(c.Victory == true ? "summary.victory" : "summary.defeat")} · {c.LastRound} {Loc.T("summary.rounds")}" +
+              (c.Stats.Values.FirstOrDefault()?.FightSeconds is double s and > 0 ? $" · {FightRecordStore.Duration(s)}" : "");
     }
 
     private static List<ulong> Players(CombatRecord combat) =>

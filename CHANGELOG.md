@@ -28,6 +28,8 @@ Summary by version line. The detailed notes of every version are in [docs/specs/
   attack computed for each player; status and curse damage go to whoever created the card; kills once per enemy; heals
   after fights and the Ancients' heals in "Soins hors combat" (Neow left out); Oubli's block enabled for the giver;
   Paresse, Résonnant, Entraves and extra turns handled.
+- **Details and records (0.17.39):** enchantment damage, HP lost by kind and heals by source in the details; fight length
+  (rounds, time) and fastest-win records per encounter across runs (ascension, players, solo character), with a notice.
 - **Interface:** "Erreurs" (Gâché + Choix) in every tab, sections in their own windows, hide columns at 0, richer details (Protection by block source),
   clicked window comes to the front, draggable settings, visible checkboxes, explanations kept across Save & Quit,
   previous session's log kept.

@@ -43,11 +43,14 @@ public sealed record CombatStarted(IReadOnlyList<PlayerInfo> Players, string Nam
 /// A new round starts (player turn then enemy turn = one round).
 public sealed record RoundStarted(int Round) : StatEvent;
 
-public sealed record CombatEnded(bool Victory) : StatEvent;
+/// Seconds: real time since the fight started (v0.17.39; 0 = unknown).
+public sealed record CombatEnded(bool Victory, double Seconds = 0) : StatEvent;
 
 /// One damage instance. Hp excludes overkill. For damage-over-time, Dealer is None and Source is Dot.
+/// Kind (v0.17.39), on a player only: "attack" (an enemy's move), "reaction" (an enemy's power: Thorns…), "status" (a status
+/// or curse card), "dot" (Poison, Doom… on the player); "" = from the dealer (self, ally, other).
 public sealed record DamageDealt(
-    Actor Dealer, Actor Target, int Blocked, int Hp, int Overkill, bool Killed, Source Source) : StatEvent;
+    Actor Dealer, Actor Target, int Blocked, int Hp, int Overkill, bool Killed, Source Source, string Kind = "") : StatEvent;
 
 /// Block added on Receiver. Giver is the player who created it (card owner, potion user…).
 /// PlayId: the card play that gave the block (0 = not a card the player chose: relic, power, potion, auto-play).
@@ -100,7 +103,8 @@ public sealed record BlockRemoved(Actor Creature, int Amount, bool SpentByCard) 
 public sealed record PowerChanged(Actor Applier, Actor Target, string PowerId, double Amount, bool IsDebuff, string Origin = "",
     Actor EnabledBy = default, string EnabledSource = "") : StatEvent;
 
-public sealed record Healed(Actor Healer, Actor Target, int Amount) : StatEvent;
+/// Source (v0.17.39): what healed ("Relic:BURNING_BLOOD", "Card:…", "Potion:…"); "" = unknown.
+public sealed record Healed(Actor Healer, Actor Target, int Amount, string Source = "") : StatEvent;
 
 /// A debuff changed a damage instance (spec 01-metrics §B2). Holder: the creature carrying the debuff.
 /// Beneficiary: the player (or pet) who dealt more damage (Offense: Vulnerable on an enemy, Bully's bonus) or took
@@ -177,6 +181,10 @@ public sealed record RunEconomy(double GoldGained, double GoldSpent, double Gold
 /// HP lost or healed by an event just before the fight it starts (heal 22 then fight…, v0.17.36): the player's HP when the
 /// fight starts minus their HP at the end of the previous floor. Key: the floor, counted once (fight reloaded…).
 public sealed record PreFightEvent(Actor Player, string Key, double Lost, double Healed) : StatEvent;
+
+/// Part of a hit's damage that came from something on the card itself (Key "Enchantment:<ID>": Tranchant, Tezcatara's
+/// ember…, v0.17.39), for its share of the HP the hit removed. Dealer: the player (or pet) hitting.
+public sealed record DamagePart(Actor Dealer, string Key, double Amount) : StatEvent;
 
 /// HP healed right after a won fight (Sang ardent, Sang noir, Os à viande…, v0.17.38): outside the fight, counted with the
 /// heals outside fights (kind "afterFight").

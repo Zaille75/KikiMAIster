@@ -1,4 +1,4 @@
-# Handoff — state of the project (2026-10-29, v0.17.38)
+# Handoff — state of the project (2026-10-29, v0.17.39)
 
 > **Next session starts with Zaille75's next co-op test (beta branch, v0.17.38 or later).** He will send it with
 > `Envoyer-a-Claude.bat` → `logs/inbox/<date_time>/` (both logs + F9 `feedback/` folders). **Review and summarize every
@@ -142,6 +142,13 @@ Order: test → default branch → release prep → publish → maintenance. The
 
 Optional roadmap items (only if asked): JSON export, end-of-run Totals / Per act tabs, MVP line, opacity / scale /
 hotkey settings, chart history across Save & Quit.
+
+## v0.17.39 — review section 3, items 4–7 (2026-10-29, not tested in game)
+Enchantment damage, HP lost by kind, heals by source (details only), fight length and fight records
+(`KikiMAIster.fights.cfg`, `UI/FightRecordStore.cs`, `Core/FightRecords.cs`). Check in the log: `fight record …` lines after
+each win; the "★ Nouveau record" line in the combat summary; enchantment damage uses the game's private
+`Hook.ModifyDamageInternal` by reflection (if it is renamed, the detail is silently empty). Items 1–3 of section 3 (event
+outcomes, stolen cards, afflictions) not requested.
 
 ## v0.17.38 — code review fixes (2026-10-29, not tested in game)
 Full review of the mod against the decompiled game: `docs/REVIEW-2026-10-29.md` (findings, game code, fixes). Zaille75's

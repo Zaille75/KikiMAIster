@@ -80,6 +80,7 @@ public static class GameNames
             "Potion" => new[] { "potions" },
             "Relic" => new[] { "relics" },
             "Orb" => new[] { "orbs" },
+            "Enchantment" => new[] { "enchantments" },
             "Character" => new[] { "characters" },
             _ => new[] { "powers", "cards" }
         };
@@ -137,6 +138,7 @@ public static class GameNames
                 RelicModel r => r.Title.GetFormattedText(),
                 PotionModel p => p.Title.GetFormattedText(),
                 OrbModel o => o.Title.GetFormattedText(),
+                EnchantmentModel e => e.Title.GetFormattedText(),
                 _ => null
             };
             return string.IsNullOrWhiteSpace(title) ? null : title;

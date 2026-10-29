@@ -253,6 +253,9 @@ public sealed class StatsEngine
                 s.HealedOutside += p.Healed;
                 break;
             }
+            case DamagePart part when part.Dealer.IsPlayerSide && part.Dealer.PlayerId != 0 && part.Amount > 0:
+                Each(part.Dealer.PlayerId, s => PlayerStats.Add(s.DamageByEnchantment, part.Key, part.Amount));
+                break;
             case AfterFightHealed a when a.Player.Kind == ActorKind.Player && a.Amount > 0:
             {
                 var s = Stats(Scope.Run, a.Player.PlayerId);
@@ -353,6 +356,18 @@ public sealed class StatsEngine
 
     private void OnCombatEnded(CombatEnded c)
     {
+        // Fight length (v0.17.39): rounds played and real time, per fight and in total over the run.
+        if (InCombat)
+            foreach (var id in _stats[Scope.Combat].Keys)
+            {
+                var s = Stats(Scope.Combat, id);
+                s.FightTurns = Round;
+                s.FightSeconds = c.Seconds;
+                var r = Stats(Scope.Run, id);
+                r.FightTurns += Round;
+                r.FightSeconds += c.Seconds;
+                r.FightsTimed++;
+            }
         FlushDefense();
         ResolveBlockKept(combatEnded: true);
         // Block left at the end of combat counts as wasted / useless help (spec §F, decision F2).
@@ -555,6 +570,14 @@ public sealed class StatsEngine
             return;
         }
 
+        if (d.Hp > 0)
+        {
+            var kind = d.Kind != "" ? d.Kind
+                : d.Dealer.IsPlayerSide && d.Dealer.PlayerId == owner ? "self"
+                : d.Dealer.IsPlayerSide ? "ally"
+                : d.Dealer.IsEnemy ? "attack" : "other";
+            Each(owner, s => PlayerStats.Add(s.HpLostByKind, kind, d.Hp));
+        }
         if (d.Dealer.IsEnemy)
         {
             Each(owner, s => s.HpLostFromEnemies += d.Hp);
@@ -912,6 +935,7 @@ public sealed class StatsEngine
         var healer = h.Healer.IsPlayerSide ? h.Healer.PlayerId : target;
         Each(healer, s =>
         {
+            PlayerStats.Add(s.HealingBySource, h.Source == "" ? "Unknown" : h.Source, h.Amount);
             if (healer == target) s.HealingSelf += h.Amount;
             else
             {

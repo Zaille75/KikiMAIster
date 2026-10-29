@@ -153,6 +153,17 @@ public sealed class PlayerStats
     public double PreFightHpLost { get; set; }
     public double PreFightHealed { get; set; }
     public Dictionary<string, double> PreFightFloors { get; } = new();
+    /// Damage added by card enchantments, by "Enchantment:<ID>" (v0.17.39, details of Dégâts; already in DamageDealt).
+    public Dictionary<string, double> DamageByEnchantment { get; } = new();
+    /// HP lost by kind (v0.17.39, details): "attack", "reaction", "status", "dot", "self", "ally", "other".
+    public Dictionary<string, double> HpLostByKind { get; } = new();
+    /// Heals this player gave (to self and allies), by source ("Relic:…", "Card:…", "Potion:…"; v0.17.39).
+    public Dictionary<string, double> HealingBySource { get; } = new();
+    /// Fight length (v0.17.39): combat scope = this fight's rounds and real seconds; run scope = totals, and FightsTimed =
+    /// fights counted.
+    public double FightTurns { get; set; }
+    public double FightSeconds { get; set; }
+    public double FightsTimed { get; set; }
     /// HP healed right after won fights (Sang ardent…, v0.17.38), already in HealedOutside ("afterFight").
     public double AfterFightHealed { get; set; }
     /// Gold and curses over the run (v0.17.36, run scope, from the game's map history).

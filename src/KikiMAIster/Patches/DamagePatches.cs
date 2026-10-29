@@ -206,8 +206,15 @@ public static class DamagePatches
             if (dealer == null && source.Kind == SourceKind.Card) dealer = Capture.CurrentActingPlayer?.Creature;
         }
 
-        Capture.Emit(new DamageDealt(dealerOverride ?? Capture.ToActor(dealer), Capture.ToActor(target),
-            r.BlockedDamage, r.UnblockedDamage, r.OverkillDamage, r.WasTargetKilled, source));
+        // On a player: what kind of damage it was (v0.17.39, details of HP lost).
+        var dealerActor = dealerOverride ?? Capture.ToActor(dealer);
+        var kind = target.IsEnemy ? ""
+            : source.Kind == SourceKind.DamageOverTime ? "dot"
+            : card is { Type: CardType.Status or CardType.Curse } ? "status"
+            : dealerActor.IsEnemy && source.Kind == SourceKind.Power ? "reaction"
+            : dealerActor.IsEnemy ? "attack" : "";
+        Capture.Emit(new DamageDealt(dealerActor, Capture.ToActor(target),
+            r.BlockedDamage, r.UnblockedDamage, r.OverkillDamage, r.WasTargetKilled, source, kind));
         if (card != null && target.IsEnemy && r.UnblockedDamage > 0) CreditHelpers(card, dealer, target, r.UnblockedDamage);
         if (card == null && source.Kind == SourceKind.Potion && target.IsEnemy && r.WasTargetKilled && Capture.PotionUser is { } drinker)
             Capture.Safe("potion after attacks", () => BlockAlternatives.OnPotionHit(drinker, $"Potion:{source.Id}", target,
