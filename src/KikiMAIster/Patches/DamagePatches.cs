@@ -186,8 +186,9 @@ public static class DamagePatches
         Source source;
         Actor? dealerOverride = null;
         // A status or curse hurting its holder (Brûlure, Déclin, Regrets…, v0.17.38): the enemy that put it in the deck, the
-        // ally who did, or the player themself (their own card, or a card of their deck).
-        if (card is { Type: CardType.Status or CardType.Curse } && dealer == null && !target.IsEnemy)
+        // ally who did, or the player themself (their own card, or a card of their deck). The game gives the holder as the
+        // dealer (CreatureCmd.Damage with a card source: its owner), so that one is replaced too (v0.17.44).
+        if (card is { Type: CardType.Status or CardType.Curse } && (dealer == null || dealer == card.Owner.Creature) && !target.IsEnemy)
         {
             if (!StatusCreators.TryGetValue(card, out var creator)) dealer = card.Owner.Creature;
             else if (creator.Value != null) dealer = creator.Value.Creature;

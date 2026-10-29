@@ -37,6 +37,7 @@ Summary by version line. The detailed notes of every version are in [docs/specs/
   Max HP gained after a capped heal (new "Hors combat" misplays); fight time stops at the last kill; HP outside fights
   shown again (history read fixed); trophy hover texts to the right of the mouse.
 - **0.17.43:** play-by-play log of each fight (turns, cards, targets, energy, effects), readable in co-op.
+- **0.17.44:** status and curse damage credited to the card's creator for real; cards costing other hand cards (HORS DE MA VUE !…) kept on purpose.
 - **Details and records (0.17.39):** enchantment damage, HP lost by kind and heals by source in the details; fight length
   (rounds, time) and fastest-win records per encounter across runs (ascension, players, solo character), with a notice.
 - **Interface:** "Erreurs" (Gâché + Choix) in every tab, sections in their own windows, hide columns at 0, richer details (Protection by block source),

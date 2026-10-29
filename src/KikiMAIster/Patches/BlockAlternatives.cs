@@ -822,10 +822,19 @@ public static class BlockAlternatives
 
     /// A card the player may keep on purpose, so not playing it is never a misplay (spec §E0, v0.17.0): it is retained
     /// (Retain, or the whole hand is kept: Main retenue…), it costs Stars (they are not refilled each turn), or it Exhausts
-    /// (gone once played: v0.17.34, Zaille75 — Surins and Entrave des ténèbres included; missed lethal still uses it).
+    /// (gone once played: v0.17.34, Zaille75 — Surins and Entrave des ténèbres included; missed lethal still uses it), or it
+    /// exhausts or transforms other cards of the hand (v0.17.44, Zaille75: HORS DE MA VUE ! kept not to lose a card).
     private static bool KeptOnPurpose(CardModel card, ICombatState combat) =>
         card.ShouldRetainThisTurn || card.CurrentStarCost > 0 || card.HasStarCostX || card.Keywords.Contains(CardKeyword.Exhaust) ||
-        !Hook.ShouldFlush(combat, card.Owner);
+        ConsumesHand.Contains(card.Id.Entry) || !Hook.ShouldFlush(combat, card.Owner);
+
+    /// Cards that exhaust or transform other cards of the hand, chosen or not (audit of every card, v0.17.44). Compactage is
+    /// left out: it only transforms status cards.
+    private static readonly HashSet<string> ConsumesHand = new()
+    {
+        "BEGONE", "BRAND", "BURNING_PACT", "GUARDS", "PURITY", "SCAVENGE", "TRUE_GRIT", "CINDER", "FIEND_FIRE", "SECOND_WIND",
+        "STOKE", "THRASH", "EIDOLON", "PRIMAL_FORCE"
+    };
 
     /// The player has not enough Stars for this card.
     private static bool LacksStars(CardModel card)

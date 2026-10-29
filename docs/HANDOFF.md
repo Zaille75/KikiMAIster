@@ -1,4 +1,4 @@
-# Handoff — state of the project (2026-10-29, v0.17.43)
+# Handoff — state of the project (2026-10-29, v0.17.44)
 
 > **Next session starts with Zaille75's next co-op test (beta branch, v0.17.38 or later).** He will send it with
 > `Envoyer-a-Claude.bat` → `logs/inbox/<date_time>/` (both logs + F9 `feedback/` folders). **Review and summarize every
@@ -143,6 +143,12 @@ Order: test → default branch → release prep → publish → maintenance. The
 
 Optional roadmap items (only if asked): JSON export, end-of-run Totals / Per act tabs, MVP line, opacity / scale /
 hotkey settings, chart history across Save & Quit.
+
+## v0.17.44 — partial check of the Régent run (2026-10-29)
+Partial card-by-card check of `logs/inbox/2026-10-29_20-06-37/` (no hands in that log): one bug, status / curse damage always
+Auto-infligés (the game passes the holder as dealer) → fixed; Zaille75: HORS DE MA VUE ! kept is not a misplay → cards
+that exhaust / transform hand cards are kept on purpose. Everything else matched the cards' code. The full check needs
+a v0.17.43+ log.
 
 ## v0.17.43 — play-by-play log (2026-10-29, not tested in game)
 `PlayLog.cs` (see 03-technical). Next step agreed with Zaille75: when he says so, a **partial card-by-card check of his
