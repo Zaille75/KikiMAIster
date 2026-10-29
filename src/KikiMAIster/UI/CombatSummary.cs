@@ -63,7 +63,8 @@ public static class CombatSummary
         if (last != null && last.Number != _shownCombat)
         {
             _shownCombat = last.Number;
-            if (!Cfg.AutoSummary) return;
+            // Not while the panel is hidden with F7 (v0.17.45: the chart goes with it).
+            if (!Cfg.AutoSummary || !Cfg.Visible) return;
             _selected = last.Number;
             Show();
             _autoShown = true;

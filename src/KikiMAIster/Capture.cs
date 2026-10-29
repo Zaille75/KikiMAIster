@@ -128,12 +128,26 @@ public static class Capture
                 var name = PlatformUtil.GetPlayerNameRaw(RunManager.Instance.NetService.Platform, p.NetId);
                 if (!string.IsNullOrWhiteSpace(name)) return name;
             }
-            catch (Exception e)
+            catch (Exception)
             {
-                ModLog.Error("player name", e);
+                // Early in a run the platform cannot tell yet (v0.17.45): the character, then the id.
             }
         }
-        return p.Creature.Name;
+        try
+        {
+            return p.Creature.Name;
+        }
+        catch (Exception)
+        {
+            try
+            {
+                return UI.GameNames.Of($"Character:{p.Character.Id.Entry}");
+            }
+            catch (Exception)
+            {
+                return p.NetId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+        }
     }
 
     public static string IdOf(AbstractModel model)

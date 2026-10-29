@@ -4,6 +4,7 @@ using KikiMAIster.UI;
 using MegaCrit.Sts2.Core.Nodes;
 using MegaCrit.Sts2.Core.Nodes.Screens.CharacterSelect;
 using MegaCrit.Sts2.Core.Nodes.Screens.Map;
+using MegaCrit.Sts2.Core.Nodes.Screens.PauseMenu;
 
 namespace KikiMAIster.Patches;
 
@@ -34,6 +35,19 @@ public static class UiPatches
     public static class LobbyClosed
     {
         public static void Postfix() => Capture.Safe("CharacterSelect.Closed", () => CompositionWindow.Lobby = null);
+    }
+
+    /// The game's menu (Échap) hides the mod's windows while it is open (v0.17.45, Zaille75).
+    [HarmonyPatch(typeof(NPauseMenu), nameof(NPauseMenu.OnSubmenuOpened))]
+    public static class PauseMenuOpened
+    {
+        public static void Postfix() => Capture.Safe("PauseMenu.Opened", () => Overlay.SetGameMenuOpen(true));
+    }
+
+    [HarmonyPatch(typeof(NPauseMenu), nameof(NPauseMenu.OnSubmenuClosed))]
+    public static class PauseMenuClosed
+    {
+        public static void Postfix() => Capture.Safe("PauseMenu.Closed", () => Overlay.SetGameMenuOpen(false));
     }
 
     [HarmonyPatch(typeof(NGame), nameof(NGame._Input))]

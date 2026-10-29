@@ -45,6 +45,9 @@ public sealed class ModConfig
     /// Sections shown in their own window (v0.17.0), and each window's position ("section" → x, y).
     public HashSet<string> Detached { get; set; } = new();
     public Dictionary<string, (float X, float Y)> DetachedPositions { get; set; } = new();
+    /// Trophies window (v0.17.45): the fun trophies' section shown, the chifumi records' section open.
+    public bool FunTrophiesShown { get; set; } = true;
+    public bool ChifumiRecordsOpen { get; set; } = true;
     /// The "Maître des malus" records were cleared once (v0.17.1: they counted À l'attaque !, which is no debuff).
     public bool DebuffRecordsCleared { get; set; }
     /// Not saved: every section starts folded when the game starts.
@@ -98,6 +101,8 @@ public sealed class ModConfig
                     case "compoLobbyOpen": c.CompoLobbyOpen = v == "true"; break;
                     case "compoFolded": c.CompoFolded = v == "true"; break;
                     case "debuffRecordsCleared": c.DebuffRecordsCleared = v == "true"; break;
+                    case "funTrophiesShown": c.FunTrophiesShown = v == "true"; break;
+                    case "chifumiRecordsOpen": c.ChifumiRecordsOpen = v == "true"; break;
                     case "detached": c.Detached = v.Split(',', StringSplitOptions.RemoveEmptyEntries).ToHashSet(); break;
                     default:
                         // "pos.<section>=x;y": a detached section's window.
@@ -136,7 +141,8 @@ public sealed class ModConfig
                 $"compoGroupOnly={(CompoGroupOnly ? "true" : "false")}", $"compoGrid={(CompoGrid ? "true" : "false")}",
                 $"lobbyPanelVisible={(LobbyPanelVisible ? "true" : "false")}", $"compoLobbyOpen={(CompoLobbyOpen ? "true" : "false")}",
                 $"compoFolded={(CompoFolded ? "true" : "false")}", $"detached={string.Join(',', Detached)}",
-                $"debuffRecordsCleared={(DebuffRecordsCleared ? "true" : "false")}"
+                $"debuffRecordsCleared={(DebuffRecordsCleared ? "true" : "false")}",
+                $"funTrophiesShown={(FunTrophiesShown ? "true" : "false")}", $"chifumiRecordsOpen={(ChifumiRecordsOpen ? "true" : "false")}"
             }.Concat(DetachedPositions.Select(kv => $"pos.{kv.Key}={kv.Value.X.ToString(ci)};{kv.Value.Y.ToString(ci)}")));
         }
         catch (Exception e)

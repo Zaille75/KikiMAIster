@@ -62,7 +62,9 @@ public sealed record DamageDealt(
 
 /// Block added on Receiver. Giver is the player who created it (card owner, potion user…).
 /// PlayId: the card play that gave the block (0 = not a card the player chose: relic, power, potion, auto-play).
-public sealed record BlockGained(Actor Receiver, Actor Giver, int Amount, Source Source, int PlayId = 0) : StatEvent;
+/// Dexterity (v0.17.45): the part of Amount added by the receiver's Dexterity (after Frail) or, for a Frost orb, by its Focus;
+/// split by where those stacks came from (a relic's share counts for the relic).
+public sealed record BlockGained(Actor Receiver, Actor Giver, int Amount, Source Source, int PlayId = 0, double Dexterity = 0) : StatEvent;
 
 /// HP given to a pet (summon, max HP gain, heal). Giver: the player who gave it. Separate from block:
 /// never wasted or useless.
@@ -105,7 +107,8 @@ public sealed record BlockObserved(Actor Creature, int ActualBlock) : StatEvent;
 public sealed record BlockRemoved(Actor Creature, int Amount, bool SpentByCard) : StatEvent;
 
 /// A power's amount changed on Target (Amount < 0 = stacks removed, e.g. decay). IsDebuff from the game.
-/// Origin: "Potion:<ID>" when a potion applied it (its damage then counts as potion damage), else "".
+/// Origin: "Potion:<ID>" when a potion applied it (its damage then counts as potion damage), "Relic:<ID>" when a relic did
+/// (v0.17.45: its share of the damage and block counts for the relic), else "".
 /// EnabledBy: an ally whose buff made the applier apply it (Concoct: Poison when the holder hits); the damage stays the
 /// applier's, the ally gets it as damage enabled. EnabledSource: that buff ("CONCOCT_POWER").
 public sealed record PowerChanged(Actor Applier, Actor Target, string PowerId, double Amount, bool IsDebuff, string Origin = "",
@@ -118,8 +121,10 @@ public sealed record Healed(Actor Healer, Actor Target, int Amount, string Sourc
 /// Beneficiary: the player (or pet) who dealt more damage (Offense: Vulnerable on an enemy, Bully's bonus) or took
 /// less (Weak / Strength down on the attacking enemy). Credit: who is responsible (see DebuffCredit).
 /// Applier: for Credit = Direct, the player responsible (the power remembers who applied it: Flanking, One for All…).
+/// HitSource (offense): the hit's damage key ("Card:…", "Pet"…): the share of stacks a relic applied moves there to the relic
+/// (v0.17.45).
 public sealed record DebuffEffect(Actor Holder, string PowerId, Actor Beneficiary, double Amount, bool Offense, DebuffCredit Credit,
-    Actor Applier = default) : StatEvent;
+    Actor Applier = default, string HitSource = "") : StatEvent;
 
 /// CurrentTurn: the applier of the current turn of a duration debuff (Vulnerable, Weak: first in, first out).
 /// RemainingTurns: every applier, by the turns each still has in the queue (effects that use all the stacks at once:
@@ -145,7 +150,32 @@ public sealed record StrengthBorrowed(Actor Player, Actor Holder, string PowerId
 /// A real attack hit of this player (or pet) got Damage extra from their Strength (Strength points in total): the
 /// share of borrowed Strength is damage enabled for whoever it was borrowed from.
 /// Temporary: Strength points from temporary powers given by another player (Coordinate), by giver.
-public sealed record StrengthUsed(Actor Player, double Strength, double Damage, IReadOnlyList<(Actor From, double Points)>? Temporary = null) : StatEvent;
+/// HitSource: the hit's damage key ("Card:…"): the Strength a relic or potion gave moves that share of the damage to them
+/// (v0.17.45).
+public sealed record StrengthUsed(Actor Player, double Strength, double Damage, IReadOnlyList<(Actor From, double Points)>? Temporary = null,
+    string HitSource = "") : StatEvent;
+
+/// Part of a player's (or pet's) hit due to something they hold (v0.17.45): Modifier "Relic:<ID>" (Pointe de stylo…) or
+/// "Power:<ID>" (Vigueur, Létalité…). The part a relic or potion gave (the relic itself, or the power's stacks it applied)
+/// moves from HitSource to it; the rest stays with the hit. Scaled to the HP the hit removed, like the other parts.
+public sealed record DamageModifier(Actor Dealer, string Modifier, double Amount, string HitSource) : StatEvent;
+
+/// An enemy's attack on a player or pet got Damage more from its Strength (v0.17.45): the share of that Strength a player's
+/// relic gave it (Soufre, Pierre philosophale) is charged to that player, for the HP it really took.
+public sealed record EnemyStrengthHit(Actor Enemy, Actor Target, double Damage) : StatEvent;
+
+/// Damage a cap stopped on an enemy (Carapace endurcie, Dur à cuire; v0.17.45): beyond what it could take, like overkill.
+public sealed record DamageCapped(Actor Dealer, Actor Target, double Amount) : StatEvent;
+
+/// The players of the run and their names (v0.17.45: known before the first fight, for the panel and the records).
+public sealed record PlayersSeen(IReadOnlyList<PlayerInfo> Players) : StatEvent;
+
+/// Each player at the start of a round (v0.17.45, fun trophies): dead, or alive with that many HP; Alone: the only player
+/// alive in a co-op fight.
+public sealed record PlayerRoundState(Actor Player, int Hp, bool Alive, bool Alone) : StatEvent;
+
+/// The other players waited Seconds for this one to choose the next floor on the map (v0.17.45, Godot).
+public sealed record WaitedFor(Actor Player, double Seconds) : StatEvent;
 
 /// A player could have killed every enemy with the attacks in hand at the start of the turn (front hand),
 /// but the enemies were still alive at the end of it. Cards: "Card:ID" keys of the lethal combination.
@@ -172,14 +202,17 @@ public sealed record RunEnded(bool Victory) : StatEvent;
 
 /// Several players picked the same treasure relic and the game settled it with rock-paper-scissors (spec 01-metrics
 /// §C4). FightId: identifies the fight in the run (a reloaded treasure room is not counted twice).
-public sealed record ChifumiFought(string FightId, Actor Winner, IReadOnlyList<Actor> Players) : StatEvent;
+/// Moves (v0.17.45): what each player threw in each round ("Rock", "Paper", "Scissors"); Rounds: rounds until a winner.
+public sealed record ChifumiFought(string FightId, Actor Winner, IReadOnlyList<Actor> Players,
+    IReadOnlyDictionary<ulong, IReadOnlyList<string>>? Moves = null, int Rounds = 0) : StatEvent;
 
 /// What the game's map history says about one player so far in the run: Max HP gained and lost, campfire choices
 /// (option id → times), HP lost and healed outside fights by kind of floor ("event", "restSite", "other"; v0.17.34–35).
-/// Replaces the previous values (the history is complete each time).
+/// Replaces the previous values (the history is complete each time). CardPicks (v0.17.45): cards offered, taken and offers
+/// skipped, by kind of floor ("offered.fight", "taken.event", "skipped.fight"…).
 public sealed record RunHistoryRead(Actor Player, double MaxHpGained, double MaxHpLost, IReadOnlyDictionary<string, double> RestSiteChoices,
     IReadOnlyDictionary<string, double>? HpLostOutside = null, IReadOnlyDictionary<string, double>? HealedOutside = null,
-    RunEconomy? Economy = null) : StatEvent;
+    RunEconomy? Economy = null, IReadOnlyDictionary<string, double>? CardPicks = null) : StatEvent;
 
 /// Gold and curses over the run so far, from the game's map history (v0.17.36). Lost: lost + stolen. Peak: most gold held
 /// at the end of a floor. Now: gold held at the end of the last floor. Purchases: relics, potions and colorless cards bought.

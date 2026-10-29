@@ -10,8 +10,9 @@ public static class Trophies
     /// CoopOnly: needs allies. Fun: a "shame" trophy (most wasted…), shown after the others.
     /// VictoryOnly: only counted (and shown) for a victory, like every LowerIsBetter category.
     /// Eligible: who can win it (null = everyone).
+    /// Participation (v0.17.45): won by every player who won no other trophy of the run; never a record.
     public sealed record Category(string Key, Func<PlayerStats, double> Value, bool LowerIsBetter = false, bool CoopOnly = false,
-        bool Fun = false, bool VictoryOnly = false, Func<PlayerStats, bool>? Eligible = null)
+        bool Fun = false, bool VictoryOnly = false, Func<PlayerStats, bool>? Eligible = null, bool Participation = false)
     {
         public bool CanWin(PlayerStats s) => Eligible?.Invoke(s) ?? true;
         public bool NeedsVictory => LowerIsBetter || VictoryOnly;
@@ -49,18 +50,39 @@ public static class Trophies
         new("trophy.goldSpent", s => s.GoldSpent, Fun: true),
         new("trophy.goldLeft", s => s.GoldNow, Fun: true),
         new("trophy.curses", s => s.CursesGained, Fun: true),
+        // Chifumi (v0.17.45): the most fights won, the most lost.
+        new("trophy.chifumiWon", s => s.ChifumiWon, CoopOnly: true),
+        new("trophy.chifumiLost", s => s.ChifumiLost, CoopOnly: true, Fun: true),
+        // Zaille75's fun trophies (v0.17.45).
+        new("trophy.rests", s => s.RestSiteChoices.GetValueOrDefault("HEAL"), Fun: true),
+        new("trophy.turnsDead", s => s.TurnsDead, CoopOnly: true, Fun: true),
+        new("trophy.alone", s => s.TurnsAlone, CoopOnly: true, Fun: true),
+        new("trophy.oneHp", s => s.TurnsAtOneHp, Fun: true),
+        new("trophy.waited", s => Math.Round(s.WaitedSeconds), CoopOnly: true, Fun: true),
+        new("trophy.participation", _ => 1, CoopOnly: true, Fun: true, Participation: true),
     };
 
-    /// The winner of a category (null when nobody scored, or for a tie at 0).
-    public static (ulong Id, double Value)? Winner(Category c, IReadOnlyDictionary<ulong, PlayerStats> run)
+    /// Every winner of a category (ties included, v0.17.45), best first; empty when nobody scored.
+    /// Victory false: the trophies only a victory gives are not awarded (Participation does not count them).
+    public static List<(ulong Id, double Value)> Winners(Category c, IReadOnlyDictionary<ulong, PlayerStats> run, bool victory = true)
     {
-        if (run.Count == 0 || (c.CoopOnly && run.Count < 2)) return null;
+        if (run.Count == 0 || (c.CoopOnly && run.Count < 2)) return new();
+        if (c.Participation)
+        {
+            var won = All.Where(o => !o.Participation && !(o.CoopOnly && run.Count < 2) && (victory || !o.NeedsVictory))
+                .SelectMany(o => Winners(o, run)).Select(w => w.Id).ToHashSet();
+            return run.Keys.Where(id => !won.Contains(id)).OrderBy(id => id).Select(id => (id, 1.0)).ToList();
+        }
         var ranked = run.Where(kv => c.CanWin(kv.Value)).Select(kv => (Id: kv.Key, Value: c.Value(kv.Value))).ToList();
-        if (ranked.Count == 0) return null;
-        var best = c.LowerIsBetter ? ranked.OrderBy(x => x.Value).ThenBy(x => x.Id).First()
-            : ranked.OrderByDescending(x => x.Value).ThenBy(x => x.Id).First();
-        return !c.LowerIsBetter && best.Value <= 0 ? null : best;
+        if (ranked.Count == 0) return new();
+        var best = c.LowerIsBetter ? ranked.Min(x => x.Value) : ranked.Max(x => x.Value);
+        if (!c.LowerIsBetter && best <= 0) return new();
+        return ranked.Where(x => Math.Abs(x.Value - best) < 1e-9).OrderBy(x => x.Id).ToList();
     }
+
+    /// The winner of a category (null when nobody scored, or for a tie at 0).
+    public static (ulong Id, double Value)? Winner(Category c, IReadOnlyDictionary<ulong, PlayerStats> run) =>
+        Winners(c, run) is { Count: > 0 } w ? w[0] : null;
 }
 
 /// All-time records, personal bests and records per character, per category; one run = one value per player.
@@ -112,7 +134,7 @@ public sealed class RecordBook
             var mode = Mode(coop, level);
             foreach (var c in Trophies.All)
             {
-                if (c.NeedsVictory && !victory) continue;
+                if (c.Participation || (c.NeedsVictory && !victory)) continue;
                 if (c.CoopOnly && run.Count < 2) continue;
                 foreach (var (id, s) in run)
                 {

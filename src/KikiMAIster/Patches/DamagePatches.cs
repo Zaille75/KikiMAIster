@@ -182,7 +182,12 @@ public static class DamagePatches
 
         // An enemy shown with infinite HP (Waterfall Giant about to explode) cannot be hurt for real: not counted. Carapace
         // endurcie shows "infinite with numbers" once its limit is reached: the hit reaching it was real (v0.17.34).
-        if (target.IsEnemy && target.HpDisplay == HpDisplay.InfiniteWithoutNumbers) return;
+        // v0.17.45: the attack did nothing, like one into a Carapace endurcie at its limit (energy spent for nothing).
+        if (target.IsEnemy && target.HpDisplay == HpDisplay.InfiniteWithoutNumbers)
+        {
+            if (card != null) BlockAlternatives.OnShellCapped(card);
+            return;
+        }
         Source source;
         Actor? dealerOverride = null;
         // A status or curse hurting its holder (Brûlure, Déclin, Regrets…, v0.17.38): the enemy that put it in the deck, the
@@ -192,6 +197,8 @@ public static class DamagePatches
         {
             if (!StatusCreators.TryGetValue(card, out var creator)) dealer = card.Owner.Creature;
             else if (creator.Value != null) dealer = creator.Value.Creature;
+            // The enemy that created it (v0.17.45), when known; else "an enemy".
+            else if (StatusEnemies.TryGetValue(card, out var enemy)) dealer = enemy;
             else dealerOverride = Actor.Enemy(0);
         }
         if (card != null) source = Source.Card(Capture.IdOf(card));
@@ -219,6 +226,13 @@ public static class DamagePatches
         var avoidable = r.OverkillDamage > 0 && card is { Type: CardType.Attack, TargetType: TargetType.AnyEnemy } && dealer is { IsEnemy: false } &&
                         target.IsEnemy && target.CombatState is { } cs &&
                         cs.HittableEnemies.Any(e => e != target && e.IsAlive && e.HpDisplay == HpDisplay.Normal);
+        // The player's own card killed their pet (Détonation osseuse, v0.17.45).
+        if (target.IsPet && r.WasTargetKilled && target.PetOwner is { } petOwner && dealer == petOwner.Creature)
+            BlockAlternatives.OnPetSacrificed(petOwner);
+        // A Lightning / Glass orb hit: its Focus part (the stacks a relic or potion gave count for it, v0.17.45).
+        if (source is { Kind: SourceKind.Orb } hitOrb && target.IsEnemy && r.UnblockedDamage > 0 && dealer?.GetPower<FocusPower>() is { Amount: > 0 } focus &&
+            (hitOrb.Id == ModelDb.GetId<LightningOrb>().Entry || hitOrb.Id == ModelDb.GetId<GlassOrb>().Entry))
+            Capture.Emit(new DamageModifier(dealerActor, $"Power:{Capture.IdOf(focus)}", Math.Min(r.UnblockedDamage, (double)focus.Amount), source.ToString()));
         Capture.Emit(new DamageDealt(dealerActor, Capture.ToActor(target),
             r.BlockedDamage, r.UnblockedDamage, r.OverkillDamage, r.WasTargetKilled, source, kind, avoidable));
         if (card != null && target.IsEnemy && r.UnblockedDamage > 0) CreditHelpers(card, dealer, target, r.UnblockedDamage);
@@ -270,6 +284,8 @@ public static class DamagePatches
 
     /// Status and curse cards created during the fight, by who created them (null = an enemy; v0.17.38).
     public static readonly ConditionalWeakTable<CardModel, StrongBox<MegaCrit.Sts2.Core.Entities.Players.Player?>> StatusCreators = new();
+    /// The enemy whose move created a status or curse card (v0.17.45).
+    public static readonly ConditionalWeakTable<CardModel, Creature> StatusEnemies = new();
 
     /// The holder of the Haunt power triggering right now (two Nécrolieurs may both hold it, v0.17.38).
     private static Creature? HauntOwner;
@@ -313,6 +329,20 @@ public static class DamagePatches
         // HP lost count as self-inflicted, from allies or from enemies (v0.17.7).
         else if (!target.IsEnemy && power.Applier != null) applier = power.Applier;
         return call with { DotPowerId = Capture.IdOf(power), DotApplier = applier };
+    }
+
+    /// Carapace endurcie cutting a hit at its limit (v0.17.45): the damage it stopped is beyond what the enemy could take,
+    /// counted in Excédent like overkill.
+    [HarmonyPatch(typeof(HardenedShellPower), nameof(HardenedShellPower.ModifyHpLostBeforeOstyLate))]
+    public static class ShellCut
+    {
+        public static void Postfix(HardenedShellPower __instance, Creature target, decimal amount, Creature? dealer, decimal __result) =>
+            Capture.Safe("HardenedShell.Cut", () =>
+            {
+                if (DebuffEffectPatches.Computing || target != __instance.Owner || __result >= amount || !CombatManager.Instance.IsInProgress) return;
+                var dealerActor = Capture.ToActor(dealer);
+                if (dealerActor.IsPlayerSide) Capture.Emit(new DamageCapped(dealerActor, Capture.ToActor(target), (double)(amount - __result)));
+            });
     }
 
     /// A Dark orb charging (its passive) during a card play: a later Focus would have stored more damage (v0.17.32).

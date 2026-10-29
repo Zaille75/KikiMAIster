@@ -7,6 +7,10 @@ Summary by version line. The detailed notes of every version are in [docs/specs/
 - README (English / French), MIT license, icon.
 
 ## 0.17 — co-op feedback, pets, compositions, campfires
+- **0.17.45:** relics get their share of damage and block (Reliques), Soufre's enemy Strength charged to its owner,
+  caps in Excédent; co-op Vulnérable order; misplay fixes (dead pet, energy-only cards, Détonation osseuse, Orichalque,
+  attacks into caps); card rewards; Chifumi section and records; tied trophies, fun section, 8 new trophies; F7 / Échap
+  hide every window; names before the first fight; Panier percé agrees between players; clearer play-by-play log.
 - **Compositions:** every composition listed, sorted by games or win rate; "this group of players" stats from the
   game's run history; a table of who played what (2 players: my character × my partner's; 3–4 players: each player ×
   character); never-played / never-won suggestions with a random pick; opens by itself in the lobby, can be folded.

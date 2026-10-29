@@ -124,24 +124,129 @@ public static class RunSummary
         }
     }
 
-    /// Chifumi: this run's fights per player, then every pair of this run's players across all runs (v0.17.0).
+    /// Chifumi records (v0.17.45, their own foldable section): every pair of this run's players across all runs, what each
+    /// one threw over all fights, and the longest fight. This run's figures are in the panel (Chifumi section).
     private static void AddChifumi(IReadOnlyDictionary<ulong, PlayerStats> run, StatsEngine engine)
     {
         string Name(ulong id) => engine.Players.GetValueOrDefault(id)?.Name ?? ChifumiStore.Book.NameOf(id);
-        _content!.AddChild(Overlay.MakeLabel(Loc.T("run.chifumi"), Overlay.Accent));
-        var lines = run.Where(kv => kv.Value.ChifumiPlayed > 0).OrderByDescending(kv => kv.Value.ChifumiWon).ThenBy(kv => kv.Key)
-            .Select(kv => string.Format(Loc.T("run.chifumiRun"), Name(kv.Key), Overlay.N(kv.Value.ChifumiWon), Overlay.N(kv.Value.ChifumiPlayed))).ToList();
+        var open = ModConfig.Current.ChifumiRecordsOpen;
+        var header = Overlay.MakeButton($"{(open ? "▾" : "▸")} {Loc.T("run.chifumi")}");
+        header.Alignment = HorizontalAlignment.Left;
+        header.AddThemeColorOverride("font_color", Overlay.Accent);
+        header.Pressed += () => Capture.Safe("RunSummary.ChifumiFold", () =>
+        {
+            ModConfig.Current.ChifumiRecordsOpen = !ModConfig.Current.ChifumiRecordsOpen;
+            ModConfig.Current.Save();
+            Refresh();
+        });
+        _content!.AddChild(header);
+        if (!open) return;
+        var book = ChifumiStore.Book;
+        var lines = new List<string>();
         var ids = run.Keys.OrderBy(id => id).ToList();
         for (var i = 0; i < ids.Count; i++)
             for (var j = i + 1; j < ids.Count; j++)
             {
-                var (won, lost) = ChifumiStore.Book.Against(ids[i], ids[j]);
+                var (won, lost) = book.Against(ids[i], ids[j]);
                 if (won + lost == 0) continue;
                 var rate = ((double)won / (won + lost)).ToString("P0", CultureInfo.InvariantCulture);
                 lines.Add(string.Format(Loc.T("run.chifumiPair"), Name(ids[i]), Name(ids[j]), won, lost, rate));
             }
+        foreach (var id in ids)
+        {
+            var moves = book.MovesOf(id);
+            if (moves.Count == 0) continue;
+            lines.Add(string.Format(Loc.T("run.chifumiMoves"), Name(id), moves.GetValueOrDefault("Rock"), moves.GetValueOrDefault("Paper"),
+                moves.GetValueOrDefault("Scissors")));
+        }
+        if (book.Longest.Rounds > 0)
+            lines.Add(string.Format(Loc.T("run.chifumiLongest"), book.Longest.Rounds, Name(book.Longest.Winner), book.Longest.Date));
         if (lines.Count == 0) lines.Add(Loc.T("run.chifumiNone"));
-        foreach (var line in lines) _content.AddChild(Overlay.MakeLabel(line, Overlay.Text));
+        foreach (var line in lines) _content.AddChild(Overlay.MakeLabel("  " + line, Overlay.Text));
+    }
+
+    private static string NameOf(StatsEngine engine, ulong id) =>
+        engine.Players.GetValueOrDefault(id)?.Name ?? id.ToString(CultureInfo.InvariantCulture);
+
+    /// A grid of trophies with its column headers.
+    private static GridContainer NewGrid()
+    {
+        var grid = new GridContainer { Columns = 6, MouseFilter = Control.MouseFilterEnum.Pass };
+        grid.AddThemeConstantOverride("h_separation", 14);
+        grid.AddThemeConstantOverride("v_separation", 1);
+        foreach (var h in new[] { "run.trophy", "run.winner", "run.value", "run.record", "run.personal", "run.character" })
+        {
+            var l = Overlay.MakeLabel(Loc.T(h), Overlay.Muted);
+            if (Loc.Has($"{h}.tip")) HoverTip.Set(l, Loc.T($"{h}.tip"));
+            grid.AddChild(l);
+        }
+        return grid;
+    }
+
+    /// One trophy: its winners (every tied player, v0.17.45), the value, the records.
+    private static void AddTrophy(GridContainer grid, Trophies.Category c, IReadOnlyDictionary<ulong, PlayerStats> run, StatsEngine engine,
+        RecordBook.Update? update, bool ended)
+    {
+        var level = Patches.CombatFlowPatches.Ascension;
+        var book = RecordStore.Book;
+        var coop = run.Count > 1;
+        var winners = Trophies.Winners(c, run, victory: !ended || _victory);
+        var name = Overlay.MakeLabel(Loc.T(c.Key), c.Fun ? Overlay.Muted : Overlay.Text);
+        HoverTip.Set(name, Loc.T($"{c.Key}.tip"));
+        grid.AddChild(name);
+        (ulong Id, double Value)? winner = winners.Count > 0 ? winners[0] : null;
+        if (winner is not { } w)
+        {
+            grid.AddChild(Overlay.MakeLabel("-", Overlay.Muted));
+            grid.AddChild(Overlay.MakeLabel("", Overlay.Muted));
+        }
+        else
+        {
+            var names = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Pass };
+            names.AddThemeConstantOverride("separation", 0);
+            for (var i = 0; i < winners.Count; i++)
+                names.AddChild(Overlay.MakeLabel((i > 0 ? ", " : "") + NameOf(engine, winners[i].Id), Overlay.PlayerColor(winners[i].Id)));
+            grid.AddChild(names);
+            if (c.Participation) grid.AddChild(Overlay.MakeLabel("", Overlay.Muted));
+            else
+            {
+                // Hovering the winning value shows every player's score (v0.17.0).
+                var value = Overlay.MakeLabel(Overlay.N(w.Value), Overlay.Text, HorizontalAlignment.Right);
+                HoverTip.Set(value, Loc.T("run.others") + ":\n" + string.Join('\n', run.Where(kv => c.CanWin(kv.Value))
+                    .Select(kv => (Id: kv.Key, Value: c.Value(kv.Value)))
+                    .OrderBy(x => c.LowerIsBetter ? x.Value : -x.Value).ThenBy(x => x.Id)
+                    .Select(x => $"{NameOf(engine, x.Id)}: {Overlay.N(x.Value)}")));
+                grid.AddChild(value);
+            }
+        }
+        if (c.Participation)
+        {
+            for (var i = 0; i < 3; i++) grid.AddChild(Overlay.MakeLabel("", Overlay.Muted));
+            return;
+        }
+        // Records at this run's ascension level (v0.17.24); hovering shows the record of every level together.
+        var best = book.Best(c.Key, coop, level);
+        var newRecord = update?.NewRecords.Contains(c.Key) == true;
+        var recordCell = Overlay.MakeLabel(best == null ? "-" : $"{(newRecord ? "★ " : "")}{Overlay.N(best.Value)} ({best.Name}, {best.Date})",
+            newRecord ? Overlay.Accent : Overlay.Muted);
+        if (book.Best(c.Key, coop) is { } anyLevel)
+            HoverTip.Set(recordCell, $"{Loc.T("run.allLevels")}: {Overlay.N(anyLevel.Value)} ({anyLevel.Name}, {anyLevel.Date})");
+        grid.AddChild(recordCell);
+        var personal = winner is { } pw ? book.Personal(c.Key, pw.Id, coop, level) : null;
+        var newPersonal = winner is { } nw && update?.NewPersonal.Contains((c.Key, nw.Id)) == true;
+        grid.AddChild(Overlay.MakeLabel(personal == null ? "-" : $"{(newPersonal ? "★ " : "")}{Overlay.N(personal.Value)}",
+            newPersonal ? Overlay.Accent : Overlay.Muted));
+        // The best of the winner's character (in solo: the character played); the tooltip lists every character.
+        var character = winner is { } cw ? engine.Players.GetValueOrDefault(cw.Id)?.Character ?? "" : "";
+        var ofCharacter = character == "" ? null : book.OfCharacter(c.Key, character, coop, level);
+        var newCharacter = update?.NewCharacter.Contains((c.Key, character)) == true;
+        var cell = Overlay.MakeLabel(ofCharacter == null ? "-" : $"{(newCharacter ? "★ " : "")}{Overlay.N(ofCharacter.Value)} ({ofCharacter.Name}, {ofCharacter.Date})",
+            newCharacter ? Overlay.Accent : Overlay.Muted);
+        var all = book.Characters(c.Key, coop, level).ToList();
+        if (all.Count > 0)
+            HoverTip.Set(cell, string.Join('\n', all.Select(x =>
+                $"{GameNames.Of($"Character:{x.Character}")}: {Overlay.N(x.Entry.Value)} ({x.Entry.Name}, {x.Entry.Date})")));
+        grid.AddChild(cell);
     }
 
     private static void Rebuild(bool ended)
@@ -160,6 +265,15 @@ public static class RunSummary
             (ended ? Loc.T(_victory ? "summary.victory" : "summary.defeat") : Loc.T("summary.inProgress")), Overlay.Accent);
         title.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         header.AddChild(title);
+        // The fun trophies have their own section, shown or not (v0.17.45).
+        var fun = Overlay.MakeButton(Loc.T(ModConfig.Current.FunTrophiesShown ? "run.funHide" : "run.funShow"));
+        fun.Pressed += () => Capture.Safe("RunSummary.Fun", () =>
+        {
+            ModConfig.Current.FunTrophiesShown = !ModConfig.Current.FunTrophiesShown;
+            ModConfig.Current.Save();
+            Refresh();
+        });
+        header.AddChild(fun);
         var compos = Overlay.MakeButton(Loc.T("compo.button"));
         compos.TooltipText = Loc.T("compo.buttonTip");
         compos.Pressed += () => Capture.Safe("RunSummary.Compositions", CompositionWindow.Toggle);
@@ -169,77 +283,19 @@ public static class RunSummary
         header.AddChild(close);
         _content.AddChild(header);
 
-        var grid = new GridContainer { Columns = 6, MouseFilter = Control.MouseFilterEnum.Pass };
-        grid.AddThemeConstantOverride("h_separation", 14);
-        grid.AddThemeConstantOverride("v_separation", 1);
-        foreach (var h in new[] { "run.trophy", "run.winner", "run.value", "run.record", "run.personal", "run.character" })
-        {
-            var l = Overlay.MakeLabel(Loc.T(h), Overlay.Muted);
-            if (Loc.Has($"{h}.tip"))
-            {
-                HoverTip.Set(l, Loc.T($"{h}.tip"));
-            }
-            grid.AddChild(l);
-        }
-
         var level = Patches.CombatFlowPatches.Ascension;
-        var book = RecordStore.Book;
         var coop = run.Count > 1;
-        foreach (var c in Trophies.All.OrderBy(c => c.Fun))
-        {
-            if (c.CoopOnly && run.Count < 2) continue;
-            // A victory-only trophy (Intouchable) is not shown after a defeat.
-            if (ended && c.NeedsVictory && !_victory) continue;
-            var winner = Trophies.Winner(c, run);
-            var name = Overlay.MakeLabel(Loc.T(c.Key), c.Fun ? Overlay.Muted : Overlay.Text);
-            HoverTip.Set(name, Loc.T($"{c.Key}.tip"));
-            grid.AddChild(name);
-            if (winner is not { } w)
-            {
-                grid.AddChild(Overlay.MakeLabel("-", Overlay.Muted));
-                grid.AddChild(Overlay.MakeLabel("", Overlay.Muted));
-            }
-            else
-            {
-                grid.AddChild(Overlay.MakeLabel(engine.Players.GetValueOrDefault(w.Id)?.Name ?? w.Id.ToString(CultureInfo.InvariantCulture),
-                    Overlay.PlayerColor(w.Id)));
-                // Hovering the winning value shows every player's score (v0.17.0).
-                var value = Overlay.MakeLabel(Overlay.N(w.Value), Overlay.Text, HorizontalAlignment.Right);
-                HoverTip.Set(value, Loc.T("run.others") + ":\n" + string.Join('\n', run.Where(kv => c.CanWin(kv.Value))
-                    .Select(kv => (Id: kv.Key, Value: c.Value(kv.Value)))
-                    .OrderBy(x => c.LowerIsBetter ? x.Value : -x.Value).ThenBy(x => x.Id)
-                    .Select(x => $"{engine.Players.GetValueOrDefault(x.Id)?.Name ?? x.Id.ToString(CultureInfo.InvariantCulture)}: {Overlay.N(x.Value)}")));
-                grid.AddChild(value);
-            }
-            // Records at this run's ascension level (v0.17.24); hovering shows the record of every level together.
-            var best = book.Best(c.Key, coop, level);
-            var newRecord = update?.NewRecords.Contains(c.Key) == true;
-            var recordCell = Overlay.MakeLabel(best == null ? "-" : $"{(newRecord ? "★ " : "")}{Overlay.N(best.Value)} ({best.Name}, {best.Date})",
-                newRecord ? Overlay.Accent : Overlay.Muted);
-            if (book.Best(c.Key, coop) is { } anyLevel)
-            {
-                HoverTip.Set(recordCell, $"{Loc.T("run.allLevels")}: {Overlay.N(anyLevel.Value)} ({anyLevel.Name}, {anyLevel.Date})");
-            }
-            grid.AddChild(recordCell);
-            var personal = winner is { } pw ? book.Personal(c.Key, pw.Id, coop, level) : null;
-            var newPersonal = winner is { } nw && update?.NewPersonal.Contains((c.Key, nw.Id)) == true;
-            grid.AddChild(Overlay.MakeLabel(personal == null ? "-" : $"{(newPersonal ? "★ " : "")}{Overlay.N(personal.Value)}",
-                newPersonal ? Overlay.Accent : Overlay.Muted));
-            // The best of the winner's character (in solo: the character played); the tooltip lists every character.
-            var character = winner is { } cw ? engine.Players.GetValueOrDefault(cw.Id)?.Character ?? "" : "";
-            var ofCharacter = character == "" ? null : book.OfCharacter(c.Key, character, coop, level);
-            var newCharacter = update?.NewCharacter.Contains((c.Key, character)) == true;
-            var cell = Overlay.MakeLabel(ofCharacter == null ? "-" : $"{(newCharacter ? "★ " : "")}{Overlay.N(ofCharacter.Value)} ({ofCharacter.Name}, {ofCharacter.Date})",
-                newCharacter ? Overlay.Accent : Overlay.Muted);
-            var all = book.Characters(c.Key, coop, level).ToList();
-            if (all.Count > 0)
-            {
-                HoverTip.Set(cell, string.Join('\n', all.Select(x =>
-                    $"{GameNames.Of($"Character:{x.Character}")}: {Overlay.N(x.Entry.Value)} ({x.Entry.Name}, {x.Entry.Date})")));
-            }
-            grid.AddChild(cell);
-        }
+        bool Shown(Trophies.Category c) => !(c.CoopOnly && run.Count < 2) && !(ended && c.NeedsVictory && !_victory);
+        var grid = NewGrid();
+        foreach (var c in Trophies.All.Where(c => !c.Fun && Shown(c))) AddTrophy(grid, c, run, engine, update, ended);
         _content.AddChild(grid);
+        if (ModConfig.Current.FunTrophiesShown)
+        {
+            _content.AddChild(Overlay.MakeLabel(Loc.T("run.funTitle"), Overlay.Accent));
+            var funGrid = NewGrid();
+            foreach (var c in Trophies.All.Where(c => c.Fun && Shown(c))) AddTrophy(funGrid, c, run, engine, update, ended);
+            _content.AddChild(funGrid);
+        }
         if (coop) AddChifumi(run, engine);
         _content.AddChild(Overlay.MakeLabel(Loc.T(coop ? "run.coopRecords" : "run.soloRecords") + $" A{level.ToString(CultureInfo.InvariantCulture)} · " +
             Loc.T(ended ? "run.recordsNote" : "run.inProgressNote"), Overlay.Muted));
@@ -275,10 +331,12 @@ public static class ChifumiStore
         }
     }
 
-    public static void Record(string fightId, ulong winner, IEnumerable<ulong> players, IReadOnlyDictionary<ulong, string> names) =>
+    public static void Record(string fightId, ulong winner, IEnumerable<ulong> players, IReadOnlyDictionary<ulong, string> names,
+        IReadOnlyDictionary<ulong, IReadOnlyList<string>>? moves = null, int rounds = 0) =>
         Capture.Safe("ChifumiStore.Save", () =>
         {
-            if (Book.Record(fightId, winner, players, names) && FilePath != null) File.WriteAllText(FilePath, Book.Write());
+            if (Book.Record(fightId, winner, players, names, moves, rounds, DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)) &&
+                FilePath != null) File.WriteAllText(FilePath, Book.Write());
         });
 }
 

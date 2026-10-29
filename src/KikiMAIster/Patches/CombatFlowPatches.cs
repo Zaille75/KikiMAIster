@@ -176,7 +176,25 @@ public static class CombatFlowPatches
             DebuffEffectPatches.ResetOffense();
             Capture.Emit(new RoundStarted(combatState.RoundNumber));
             BlockAndPowerPatches.GiveNextTurnHelp();
+            ActingEnemy = null;
+            // Each player's state for the fun trophies (v0.17.45): dead, alone alive (co-op), at 1 HP.
+            var players = combatState.Players;
+            foreach (var p in players)
+            {
+                var alive = p.Creature.IsAlive;
+                var alone = alive && players.Count > 1 && players.All(o => o == p || !o.Creature.IsAlive);
+                Capture.Emit(new PlayerRoundState(Capture.ToActor(p), p.Creature.CurrentHp, alive, alone));
+            }
         });
+    }
+
+    /// The enemy whose move is being played (v0.17.45): status cards it creates name it as their creator.
+    public static Creature? ActingEnemy;
+
+    [HarmonyPatch(typeof(MonsterModel), nameof(MonsterModel.PerformMove))]
+    public static class EnemyMove
+    {
+        public static void Prefix(MonsterModel __instance) => Capture.Safe("MonsterModel.PerformMove", () => ActingEnemy = __instance.Creature);
     }
 
 #if GAME_DEFAULT
@@ -357,8 +375,11 @@ public static class CombatFlowPatches
             if (card.Type is CardType.Status or CardType.Curse)
             {
                 DamagePatches.StatusCreators.AddOrUpdate(card, new StrongBox<Player?>(creator));
+                if (creator == null && ActingEnemy is { } enemy) DamagePatches.StatusEnemies.AddOrUpdate(card, enemy);
+                PlayLog.Note($"{card.Title} created in {PlayLog.Who(card.Owner)}'s deck");
                 return;
             }
+            PlayLog.Note($"{card.Title} created for {PlayLog.Who(card.Owner)}");
             // A card created in another player's piles (Blade Symphony passes no creator: the player acting made it).
             var giver = creator ?? Capture.CurrentActingPlayer;
             // Âme sœur: the Soul copied into the ally's draw pile is "created" by that ally; it is the Soulbound
@@ -404,6 +425,7 @@ public static class CombatFlowPatches
         public static void Prefix(decimal amount, Player player) => Capture.Safe("PlayerCmd.GainEnergy", () =>
         {
             BlockAlternatives.OnEffect();
+            PlayLog.Note($"{PlayLog.Who(player)} +{amount} energy");
             if (Capture.CurrentActingPlayer is { } giver && giver != player) Capture.Emit(new HelpGiven(Capture.ToActor(giver), "energy", (double)amount));
         });
     }
@@ -430,7 +452,11 @@ public static class CombatFlowPatches
     [HarmonyPatch(typeof(Hook), nameof(Hook.AfterStarsGained))]
     public static class StarsGained
     {
-        public static void Prefix() => Capture.Safe("AfterStarsGained", () => BlockAlternatives.OnEffect());
+        public static void Prefix(int amount, Player gainer) => Capture.Safe("AfterStarsGained", () =>
+        {
+            BlockAlternatives.OnEffect();
+            PlayLog.Note($"{PlayLog.Who(gainer)} +{amount} stars");
+        });
     }
 
     [HarmonyPatch(typeof(Hook), nameof(Hook.BeforePotionUsed))]

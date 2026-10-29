@@ -64,6 +64,8 @@ public static class BlockAlternatives
     /// Players who take an extra turn right after this one (Ambre gris, Œil de Paël, v0.17.38): no enemy attacks before
     /// their block is cleared.
     private static readonly HashSet<Player> ExtraTurn = new();
+    /// Players whose own card killed their pet this turn (Détonation osseuse, v0.17.45).
+    private static readonly HashSet<Player> PetSacrificed = new();
 
     public static void Reset()
     {
@@ -85,7 +87,11 @@ public static class BlockAlternatives
         _justFinished = null;
         TurnPlays.Clear();
         PendingVulnerable.Clear();
+        PetSacrificed.Clear();
     }
+
+    /// The player's own card killed their pet (v0.17.45): an attack the pet makes, left in hand, could have come first.
+    public static void OnPetSacrificed(Player player) => PetSacrificed.Add(player);
 
     /// Something other than block happened (power applied, damage, heal, draw, orb, card created…):
     /// credited to the card play in progress, if any.
@@ -160,7 +166,11 @@ public static class BlockAlternatives
             {
                 // The game's multiplier (×1.5, more with some relics, v0.17.38).
                 var extra = VulnerableFactor(power, power.Owner, player.Creature) - 1;
-                foreach (var e in earlier.Where(p => p.Card.Type == CardType.Attack && !p.HadNonDamageEffect))
+                // Co-op (v0.17.45, Zaille75): an ally's attack made while this card was already in the player's hand should
+                // have come after it; the miss is the attacker's.
+                var allies = play == null ? new List<Play>()
+                    : ThisTurn.TakeWhile(p => p != play).Where(p => p.Player != player && p.AlliesHandAtPlay.Contains(play.Card)).ToList();
+                foreach (var e in earlier.Concat(allies).Where(p => p.Card.Type == CardType.Attack && !p.HadNonDamageEffect))
                 {
                     var raw = e.Hits.Where(h => ReferenceEquals(h.Target, power.Owner)).Sum(h => h.Raw);
                     if (raw > 0) OrderLosses.Add(new OrderLoss(e, boost, "order", power.Owner, raw * extra));
@@ -457,7 +467,9 @@ public static class BlockAlternatives
             NothingToKill = real.Count == 0,
             EnemyAsleep = real.Any(e => e.HasPower<AsleepPower>()),
             OpenEnemy = real.Any(e => !(e.GetPower<HardenedShellPower>() is { } p && p.DisplayAmount <= 0)),
-            ShellKey = $"Power:{ModelDb.GetId<HardenedShellPower>().Entry}"
+            // The cap met: Carapace endurcie, or the enemy shown with infinite HP (Géant de la Cascade about to explode).
+            ShellKey = real.Count == 0 && combat.Enemies.FirstOrDefault(e => e.IsAlive && e.Monster != null) is { Monster: { } giant }
+                ? $"Monster:{Capture.IdOf(giant)}" : $"Power:{ModelDb.GetId<HardenedShellPower>().Entry}"
         };
         foreach (var e in combat.Enemies.Where(e => e.IsAlive)) s.EnemiesLeft[e] = e.CurrentHp + e.Block;
         foreach (var player in combat.Players)
@@ -494,6 +506,8 @@ public static class BlockAlternatives
             Hand = st.Hand.Cards.Select(c => CardView(c, combat, creature)).ToList(),
             GambitActive = creature.GetPower<TheGambitPower>() != null,
             AlliesAlive = combat.Players.Any(p => p != player && p.Creature.IsAlive),
+            PetAlive = !player.IsOstyMissing,
+            PetSacrificedThisTurn = PetSacrificed.Contains(player),
             Plays = (TurnPlays.GetValueOrDefault(player) ?? new()).ToDictionary(kv => KindOf(kv.Key), kv => kv.Value)
         };
     }
@@ -510,6 +524,8 @@ public static class BlockAlternatives
         PlayableInstead = PlayableInstead(c),
         LacksStars = LacksStars(c),
         KeptOnPurpose = KeptOnPurpose(c, combat),
+        NeedsPet = c.Tags.Contains(CardTag.OstyAttack),
+        SacrificesPet = SacrificesPet.Contains(c.Id.Entry),
         GainsBlock = c.GainsBlock,
         Block = c.GainsBlock ? EstimateBlock(c) : 0,
         // Mimic copies the block of an ally onto the player: block for the player.
@@ -826,7 +842,18 @@ public static class BlockAlternatives
     /// exhausts or transforms other cards of the hand (v0.17.44, Zaille75: HORS DE MA VUE ! kept not to lose a card).
     private static bool KeptOnPurpose(CardModel card, ICombatState combat) =>
         card.ShouldRetainThisTurn || card.CurrentStarCost > 0 || card.HasStarCostX || card.Keywords.Contains(CardKeyword.Exhaust) ||
-        ConsumesHand.Contains(card.Id.Entry) || !Hook.ShouldFlush(combat, card.Owner);
+        ConsumesHand.Contains(card.Id.Entry) || EnergyOnly.Contains(card.Id.Entry) || SacrificesPet.Contains(card.Id.Entry) ||
+        !Hook.ShouldFlush(combat, card.Owner);
+
+    /// Cards that only give energy (audit of every card, v0.17.45: Sursis…): they cannot use the energy left.
+    private static readonly HashSet<string> EnergyOnly = new()
+    {
+        "ALIGNMENT", "BELIEVE_IN_YOU", "BLOODLETTING", "BORROWED_TIME", "DOUBLE_ENERGY", "ENERGY_SURGE", "EXPECT_A_FIGHT",
+        "FORGOTTEN_RITUAL", "LUMINESCE", "PRODUCTION", "SUPERCRITICAL", "TACTICIAN", "TURBO", "WISP"
+    };
+
+    /// Cards that kill the player's own pet (v0.17.45, Zaille75: a side effect nobody wants, except for a missed lethal).
+    private static readonly HashSet<string> SacrificesPet = new() { "BONE_SHARDS", "SACRIFICE" };
 
     /// Cards that exhaust or transform other cards of the hand, chosen or not (audit of every card, v0.17.44). Compactage is
     /// left out: it only transforms status cards.

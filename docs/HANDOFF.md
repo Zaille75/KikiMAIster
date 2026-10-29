@@ -1,4 +1,4 @@
-# Handoff — state of the project (2026-10-29, v0.17.44)
+# Handoff — state of the project (2026-10-29, v0.17.45)
 
 > **Next session starts with Zaille75's next co-op test (beta branch, v0.17.38 or later).** He will send it with
 > `Envoyer-a-Claude.bat` → `logs/inbox/<date_time>/` (both logs + F9 `feedback/` folders). **Review and summarize every
@@ -144,6 +144,17 @@ Order: test → default branch → release prep → publish → maintenance. The
 Optional roadmap items (only if asked): JSON export, end-of-run Totals / Per act tabs, MVP line, opacity / scale /
 hotkey settings, chart history across Save & Quit.
 
+## v0.17.45 — co-op runs of 2026-10-29 (not tested in game)
+Inbox `logs/inbox/2026-10-29_22-44-39/` (Kiki, main, v0.17.44: two co-op runs with Max, 31 fights) + Max's reports in
+`logs/inbox/feedback-2/`. Full card-by-card check of the log: every stat recomputed from the events matched the mod (run 1 at
+21:29, run 2 at the end), block values matched the cards, all damage differences came from game effects. Fixed: player names
+failing at run start (Player#1 / Steam ids), Cliquetis counted with Osty dead, Sursis named as a card for the energy left,
+Orichalque with the same block, other player's shop gold read as lost. New: relic shares (Reliques), Soufre's harm, caps in
+Excédent, co-op Vulnérable order, card rewards, chifumi moves / longest / trophies, fun trophies, Godot (map votes), Échap
+hides the windows. Check in the next logs: `PowerChanged … Origin = Relic:…` on relic buffs (the origin comes from a stack walk
+in `CombatHistory.PowerReceived`: if it stays empty, the relic shares stay 0), `map vote: … chose last`, `DamageCapped`,
+`EnemyStrengthHit` with Soufre, the Reliques column moving and the totals unchanged; both PCs' Panier percé.
+
 ## v0.17.44 — partial check of the Régent run (2026-10-29)
 Partial card-by-card check of `logs/inbox/2026-10-29_20-06-37/` (no hands in that log): one bug, status / curse damage always
 Auto-infligés (the game passes the holder as dealer) → fixed; Zaille75: HORS DE MA VUE ! kept is not a misplay → cards
@@ -216,6 +227,8 @@ check especially:
   if `dist/` is ever wiped.
 
 ## Open topics for the next conversation
+- **"Ce groupe" differs between players (2026-10-29, kept open by Zaille75):** each PC reads its own game run history (Kiki
+  524 runs, Max 149), so the group stats differ. Fixing it would need sending the history between players.
 - **Event outcomes not tracked yet (audit v0.17.35, decision pending with Zaille75):** cards gained / removed, upgrades,
   transforms, enchantments, relics gained / lost / traded, potions gained / thrown away, which event option was chosen,
   who decided in the 8 shared co-op events (JungleMazeAdventure, DenseVegetation, MorphicGrove, PunchOff,

@@ -58,7 +58,8 @@ public static class BlockAndPowerPatches
             PendingGiver.TryGetValue(receiver, out var call);
             PendingGiver.Remove(receiver);
             var giver = call?.Giver != null ? Capture.ToActor(call.Giver) : Capture.ToActor(receiver);
-            Capture.Emit(new BlockGained(Capture.ToActor(receiver), giver, amount, call?.Source ?? Source.Unknown, call?.PlayId ?? 0));
+            Capture.Emit(new BlockGained(Capture.ToActor(receiver), giver, amount, call?.Source ?? Source.Unknown, call?.PlayId ?? 0,
+                StatPart(receiver, amount, call?.Source)));
             // Sacrifice: its block comes from the pet's max HP (allies who gave those HP enabled it).
             if (call?.Source is { Kind: SourceKind.Card } src && src.Id == ModelDb.GetId<Sacrifice>().Entry)
                 Capture.Emit(new PetHpBlock(Capture.ToActor(receiver)));
@@ -69,6 +70,18 @@ public static class BlockAndPowerPatches
             if (call?.Source is { Kind: SourceKind.Orb } orb && orb.Id == ModelDb.GetId<FrostOrb>().Entry && receiver.Player is { } owner)
                 BlockAlternatives.OnOrbTriggered(owner, null, "orderBlock");
         });
+    }
+
+    /// The part of a block gain due to the receiver's Dexterity (a card's block, after Frail) or Focus (a Frost orb), so the
+    /// share a relic or potion gave counts for it (v0.17.45).
+    private static double StatPart(Creature receiver, int amount, Source? source)
+    {
+        if (amount <= 0 || source is not { } src) return 0;
+        if (src.Kind == SourceKind.Card && receiver.GetPower<DexterityPower>() is { Amount: > 0 } dex)
+            return Math.Min(amount, (double)dex.Amount * (receiver.HasPower<FrailPower>() ? 0.75 : 1));
+        if (src.Kind == SourceKind.Orb && src.Id == ModelDb.GetId<FrostOrb>().Entry && receiver.GetPower<FocusPower>() is { Amount: > 0 } focus)
+            return Math.Min(amount, (double)focus.Amount);
+        return 0;
     }
 
     /// Temporary Dexterity given by allies (Oubli): each ally's points, within the Dexterity the player really has, added
@@ -175,7 +188,15 @@ public static class BlockAndPowerPatches
             if (id.EndsWith("~DOWN") && TakeSuppressed(power.Owner)) return;
             if (power is StrengthPower && amount < 0 && power.Owner.IsEnemy && applier is { IsPlayer: true })
                 PermanentStrengthDown.GetOrCreateValue(power.Owner).Value += (double)-amount;
-            Capture.Emit(new PowerChanged(Capture.ToActor(applier), Capture.ToActor(power.Owner), id, value, debuff, Capture.CurrentOrigin,
+            // A relic applying it (Vajra, Soufre, Sac de billes…, v0.17.45): its origin, and its owner as the applier when the game
+            // gives none (Soufre's Strength on the enemies).
+            var origin = Capture.CurrentOrigin;
+            if (origin == "" && Capture.CallingModelType() is { } caller && typeof(RelicModel).IsAssignableFrom(caller))
+            {
+                origin = Capture.SourceOf(caller).ToString();
+                if (applier == null && power.Owner.CombatState is { } cs) applier = Capture.UniqueOwnerOf(caller, cs.Players)?.Creature;
+            }
+            Capture.Emit(new PowerChanged(Capture.ToActor(applier), Capture.ToActor(power.Owner), id, value, debuff, origin,
                 enabledBy is { } e ? Capture.ToActor(e.Giver) : default, enabledBy?.Source ?? ""));
         });
     }

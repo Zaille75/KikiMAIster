@@ -38,6 +38,7 @@ public static class DebuffEffectPatches
                 DebuffEffect d => d with { Amount = d.Amount * scale },
                 StrengthUsed u => u with { Damage = u.Damage * scale },
                 DamagePart part => part with { Amount = part.Amount * scale },
+                DamageModifier m => m with { Amount = m.Amount * scale },
                 _ => e
             });
     }
@@ -94,8 +95,14 @@ public static class DebuffEffectPatches
                 if (caps.Count > 0 && Capture.ToActor(target).IsPlayerSide)
                     Capture.Safe("damage cap", () => AddCapped(effects, caps, runState, combatState, target, dealer, baseDamage, props, cardSource,
                         cardPlay, __result));
+                // Enemies with a cap (Dur à cuire) hit by a player: what the cap stopped counts in Excédent (v0.17.45).
+                if (caps.Count > 0 && target.IsEnemy && Capture.ToActor(dealer).IsPlayerSide)
+                    Capture.Safe("enemy damage cap", () => AddEnemyCapped(effects, runState, combatState, target, dealer, baseDamage, props,
+                        cardSource, cardPlay, __result));
                 var vulnerable = new List<Creature>();
                 var damage = (double)__result;
+                // The damage key of this hit in the stats (v0.17.45): parts a relic gave move from it to the relic.
+                var hitSource = dealer.IsPet ? "Pet" : cardSource != null ? $"Card:{Capture.IdOf(cardSource)}" : "";
                 // Vulnerable multiplier of this hit (1 if none): the other effects are measured before it.
                 var vulnFactor = mods.OfType<VulnerablePower>().Where(v => v.Owner == target)
                     .Select(v => (double)Mult(v, target, __result, props, dealer, cardSource, cardPlay))
@@ -120,7 +127,7 @@ public static class DebuffEffectPatches
                             var factor = (double)Mult(v, target, __result, props, dealer, cardSource, cardPlay);
                             if (factor > 1)
                             {
-                                Add(effects, target, v, dealer, damage - damage / factor, offense: true, fifo: true);
+                                Add(effects, target, v, dealer, damage - damage / factor, offense: true, fifo: true, hitSource);
                                 vulnerable.Add(target);
                             }
                             break;
@@ -141,7 +148,7 @@ public static class DebuffEffectPatches
                             var temporary = dealer.Powers.OfType<TemporaryStrengthPower>()
                                 .Where(t => t.Amount > 0 && t.Applier is { IsPlayer: true } a && a != dealer)
                                 .Select(t => (Capture.ToActor(t.Applier), (double)t.Amount)).ToList();
-                            effects.Add(new StrengthUsed(Capture.ToActor(dealer), s.Amount, Math.Min(damage, s.Amount * vulnFactor), temporary));
+                            effects.Add(new StrengthUsed(Capture.ToActor(dealer), s.Amount, Math.Min(damage, s.Amount * vulnFactor), temporary, hitSource));
                             break;
                         }
                         // Any other power that remembers which player applied it: a debuff on the enemy hit (Flanking,
@@ -187,6 +194,19 @@ public static class DebuffEffectPatches
                         .Aggregate(1.0, (f, p) => f * (double)Mult(p, target, __result, props, dealer, cardSource, cardPlay));
                     effects.Add(new DebuffEffect(Capture.ToActor(dealer), $"{ModelDb.GetId<StrengthPower>().Entry}~DOWN", Capture.ToActor(target),
                         down * factor, Offense: false, Credit: DebuffCredit.Stacks));
+                }
+                // What the dealer holds that made the hit bigger (v0.17.45): its relics (Pointe de stylo…) and its own powers
+                // (Vigueur, Létalité…). The parts are scaled so that together with Strength and Vulnerable they never exceed
+                // the hit; the engine moves to a relic or potion only the share it gave.
+                if (target.IsEnemy && target.HpDisplay == HpDisplay.Normal && caps.Count == 0 && hitSource != "" && Capture.ToActor(dealer).IsPlayerSide)
+                    Capture.Safe("damage modifiers", () => AddModifiers(effects, mods, target, dealer, props, cardSource, cardPlay, __result, vulnFactor, hitSource));
+                // An enemy's Strength on a player's hit (v0.17.45): the share a player's relic gave it (Soufre) is charged to them.
+                if (dealer.IsEnemy && props.IsPoweredAttack() && target.IsPlayer && caps.Count == 0 && dealer.GetPower<StrengthPower>() is { Amount: > 0 } enemyStrength)
+                {
+                    var factor = mods.OfType<WeakPower>().Where(w => w.Owner == dealer)
+                        .Concat<PowerModel>(mods.OfType<VulnerablePower>().Where(v => v.Owner == target))
+                        .Aggregate(1.0, (f, p) => f * (double)Mult(p, target, __result, props, dealer, cardSource, cardPlay));
+                    effects.Add(new EnemyStrengthHit(Capture.ToActor(dealer), Capture.ToActor(target), Math.Min(damage, (double)enemyStrength.Amount * factor)));
                 }
                 // Damage added by the card's enchantment (v0.17.39): the hit without it, through the same modifiers.
                 if (cardSource?.Enchantment is { } enchantment && target.IsEnemy && Capture.ToActor(dealer).IsPlayerSide)
@@ -251,6 +271,58 @@ public static class DebuffEffectPatches
                 effects.Add(new HpLossPrevented(Capture.ToActor(target), saved / caps.Count, $"Power:{Capture.IdOf(cap)}"));
         }
 
+        private static void AddModifiers(List<StatEvent> effects, IEnumerable<AbstractModel> mods, Creature target, Creature dealer, ValueProp props,
+            CardModel? cardSource, CardPlay? cardPlay, decimal result, double vulnFactor, string hitSource)
+        {
+            var damage = (double)result;
+            var owner = dealer.PetOwner ?? dealer.Player;
+            var parts = new List<(string Key, double Amount)>();
+            foreach (var m in mods)
+            {
+                string key;
+                if (m is RelicModel relic && owner != null && relic.Owner == owner) key = $"Relic:{Capture.IdOf(relic)}";
+                else if (m is PowerModel power && power.Owner == dealer && power is not (StrengthPower or VulnerablePower or WeakPower or TemporaryStrengthPower))
+                    key = $"Power:{Capture.IdOf(power)}";
+                else continue;
+                var factor = (double)Mult(m, target, result, props, dealer, cardSource, cardPlay);
+                var additive = (double)Additive(m, target, result, props, dealer, cardSource, cardPlay);
+                var amount = (factor > 1 ? damage - damage / factor : 0) + (additive > 0 ? additive * vulnFactor : 0);
+                if (amount > 0) parts.Add((key, amount));
+            }
+            if (parts.Count == 0) return;
+            // Strength and Vulnerable are already measured: the modifiers share what is left of the hit at most.
+            var taken = effects.Sum(e => e switch { StrengthUsed u => u.Damage, DebuffEffect { Offense: true } d => d.Amount, _ => 0 });
+            var room = Math.Max(0, damage - taken);
+            var total = parts.Sum(x => x.Amount);
+            var scale = total > room ? room / total : 1;
+            foreach (var (key, amount) in parts)
+                effects.Add(new DamageModifier(Capture.ToActor(dealer), key, amount * scale, hitSource));
+        }
+
+        /// Dur à cuire on an enemy capped a player's hit: the damage without the cap minus the hit, counted in Excédent.
+        private static void AddEnemyCapped(List<StatEvent> effects, IRunState runState, ICombatState? combatState, Creature target, Creature dealer,
+            decimal damage, ValueProp props, CardModel? cardSource, CardPlay? cardPlay, decimal capped)
+        {
+            decimal uncapped;
+            Computing = true;
+            try
+            {
+#if GAME_DEFAULT
+                uncapped = Hook.ModifyDamage(runState, combatState, target, dealer, damage, props, cardSource,
+                    ModifyDamageHookType.Additive | ModifyDamageHookType.Multiplicative, CardPreviewMode.None, out _);
+#else
+                uncapped = Hook.ModifyDamage(runState, combatState, target, dealer, damage, props, cardSource, cardPlay,
+                    ModifyDamageHookType.Additive | ModifyDamageHookType.Multiplicative, CardPreviewMode.None, out _);
+#endif
+            }
+            finally
+            {
+                Computing = false;
+            }
+            var stopped = (double)(uncapped - capped);
+            if (stopped > 0) effects.Add(new DamageCapped(Capture.ToActor(dealer), Capture.ToActor(target), stopped));
+        }
+
         private static void AddApplied(List<StatEvent> effects, PowerModel p, Creature applier, Creature target, Creature dealer,
             ValueProp props, CardModel? cardSource, CardPlay? cardPlay, decimal result, double vulnFactor)
         {
@@ -271,11 +343,11 @@ public static class DebuffEffectPatches
         }
 
         private static void Add(List<StatEvent> effects, Creature holder, PowerModel power, Creature beneficiary, double amount,
-            bool offense, bool fifo)
+            bool offense, bool fifo, string hitSource = "")
         {
             if (amount <= 0) return;
             effects.Add(new DebuffEffect(Capture.ToActor(holder), Capture.IdOf(power), Capture.ToActor(beneficiary), amount, offense,
-                fifo ? DebuffCredit.CurrentTurn : DebuffCredit.RemainingTurns));
+                fifo ? DebuffCredit.CurrentTurn : DebuffCredit.RemainingTurns, HitSource: hitSource));
         }
     }
 
@@ -286,7 +358,7 @@ public static class DebuffEffectPatches
         {
             if (_last == null || !ReferenceEquals(_last.Modifiers, modifiers)) return;
             // Damage avoided (Weak…) is resolved by the engine against the hit; extra damage waits for the hit's HP.
-            var offense = _last.Effects.Where(e => e is DebuffEffect { Offense: true } or StrengthUsed or DamagePart).ToList();
+            var offense = _last.Effects.Where(e => e is DebuffEffect { Offense: true } or StrengthUsed or DamagePart or DamageModifier).ToList();
             foreach (var e in _last.Effects.Except(offense)) Capture.Emit(e);
             if (offense.Count > 0 && _last.Target.IsEnemy)
             {

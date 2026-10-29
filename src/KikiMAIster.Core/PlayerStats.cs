@@ -46,6 +46,9 @@ public sealed class PlayerStats
     public Dictionary<string, PowerTally> SelfDebuffs { get; } = new();
     public double FriendlyDamage { get; set; }
     public double SelfDamage { get; set; }
+    /// HP that the Strength this player's relics gave enemies made the players lose (Soufre, Pierre philosophale; v0.17.45),
+    /// by "Relic:<ID>": already in SelfDamage / FriendlyDamage.
+    public Dictionary<string, double> HarmByRelic { get; } = new();
 
     // C. Protection & support
     public double BlockGainedSelf { get; set; }
@@ -190,6 +193,24 @@ public sealed class PlayerStats
     /// Rock-paper-scissors when several players picked the same treasure relic: fights won / fought.
     public double ChifumiWon { get; set; }
     public double ChifumiPlayed { get; set; }
+    /// What the player threw ("Rock", "Paper", "Scissors": times) and the longest chifumi they took part in (rounds), v0.17.45.
+    public Dictionary<string, double> ChifumiMoves { get; } = new();
+    public double ChifumiLongest { get; set; }
+    public double ChifumiLost => ChifumiPlayed - ChifumiWon;
+    /// Card rewards over the run (v0.17.45, from the game's history): "offered.<kind>", "taken.<kind>", "skipped.<kind>" with
+    /// kind "fight", "event" or "other" (shop…).
+    public Dictionary<string, double> CardPicks { get; } = new();
+    public double CardsOffered => Sum(CardPicks, "offered.");
+    public double CardsTaken => Sum(CardPicks, "taken.");
+    public double CardOffersSkipped => Sum(CardPicks, "skipped.");
+    /// Fun trophies (v0.17.45): rounds spent dead, alone alive (co-op), at 1 HP; seconds the others waited for this player
+    /// on the map.
+    public double TurnsDead { get; set; }
+    public double TurnsAlone { get; set; }
+    public double TurnsAtOneHp { get; set; }
+    public double WaitedSeconds { get; set; }
+    /// Damage a cap stopped (Carapace endurcie, Dur à cuire; v0.17.45), already in Overkill.
+    public double DamageCapped { get; set; }
 
     // D. Damage taken
     public double HpLostFromEnemies { get; set; }
@@ -216,6 +237,9 @@ public sealed class PlayerStats
         t.Count++;
         t.Stacks += stacks;
     }
+
+    private static double Sum(Dictionary<string, double> map, string prefix) =>
+        map.Where(kv => kv.Key.StartsWith(prefix, StringComparison.Ordinal)).Sum(kv => kv.Value);
 
     internal static void Add(Dictionary<string, double> map, string key, double amount) =>
         map[key] = map.GetValueOrDefault(key) + amount;

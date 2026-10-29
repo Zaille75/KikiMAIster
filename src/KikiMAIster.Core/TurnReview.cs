@@ -28,8 +28,13 @@ public sealed class TurnCard
     /// Playable instead of a card already played: a limit on cards per turn (Paresse, Résonnant) does not count.
     public bool PlayableInstead { get; init; } = true;
     public bool LacksStars { get; init; }
-    /// Retained, paid with Stars or Exhaust: not playing it is a choice.
+    /// Retained, paid with Stars or Exhaust, consuming the hand, only giving energy (Sursis…), or killing the player's pet
+    /// (Détonation osseuse…): not playing it is a choice.
     public bool KeptOnPurpose { get; init; }
+    /// An attack made by the pet (Cliquetis…, v0.17.45): it does nothing while the pet is dead.
+    public bool NeedsPet { get; init; }
+    /// Playing it kills the player's own pet (Détonation osseuse, Sacrifice; v0.17.45).
+    public bool SacrificesPet { get; init; }
     public bool GainsBlock { get; init; }
     /// The game's block estimate (0 when computed another way).
     public int Block { get; init; }
@@ -152,6 +157,10 @@ public sealed class TurnPlayer
     /// La grande manœuvre's power is already on the player.
     public bool GambitActive { get; init; }
     public bool AlliesAlive { get; init; }
+    /// The player's pet is alive, or was killed this turn by one of the player's own cards (v0.17.45: an attack it makes could
+    /// have been played before).
+    public bool PetAlive { get; init; } = true;
+    public bool PetSacrificedThisTurn { get; init; }
     /// Cards played this turn (auto-plays included, as relics count them), by kind.
     public Dictionary<CardKind, int> Plays { get; init; } = new();
 
@@ -328,9 +337,12 @@ public static class TurnReview
     /// Cards the player paid energy for this turn that did nothing useful: a block card with no other effect whose block
     /// was not needed (block at the end of the turn minus its block still covers the incoming attack), or a card whose
     /// only effect was a useless debuff (F8).
+    /// v0.17.45: also an attack whose every hit met a cap already reached (Carapace endurcie at its limit, Géant de la Cascade
+    /// about to explode) and that did nothing else.
     public static List<TurnPlay> UselessPlays(TurnState s, TurnPlayer p) =>
         s.Plays.Where(x => x.Owner == p.Actor && x.EnergySpent > 0 && !x.HadOtherEffect &&
-            ((x.GaveBlock && !x.Ethereal && p.Block - x.BlockAmount >= p.Incoming) || (x.UselessDebuff && !x.GaveBlock))).ToList();
+            ((x.GaveBlock && !x.Ethereal && p.Block - x.BlockAmount >= p.Incoming) || (x.UselessDebuff && !x.GaveBlock) ||
+             (x.Kind == CardKind.Attack && x.ShellCapped > 0 && x.FirstHit == null && !x.HadNonDamageEffect))).ToList();
 
     /// Per player: unused energy, growing card affordable, block card kept, Orichalcum beaten by a small block, relic
     /// triggers missed by one card.
@@ -347,7 +359,11 @@ public static class TurnReview
         var thornsRoom = Math.Max(0, p.Block - p.Incoming);
         bool Punished(TurnCard c) => c.Punished || c.Thorns > thornsRoom;
         bool NeedlessBlock(TurnCard c) => blockCovered && c.GainsBlock && c.Kind == CardKind.Skill;
-        bool WouldHelp(TurnCard c) => p.Affordable(c) && !c.KeptOnPurpose && !NeedlessBlock(c) && !Punished(c);
+        // v0.17.45: an attack is no use when every enemy is at its damage cap (Carapace endurcie), nor a pet attack while the
+        // pet is dead (unless the player's own card killed it this turn: the attack could have come first).
+        bool CanHit(TurnCard c) => c.Kind != CardKind.Attack || (s.OpenEnemy && !s.NothingToKill);
+        bool PetReady(TurnCard c) => !c.NeedsPet || p.PetAlive || p.PetSacrificedThisTurn;
+        bool WouldHelp(TurnCard c) => p.Affordable(c) && !c.KeptOnPurpose && !NeedlessBlock(c) && !Punished(c) && CanHit(c) && PetReady(c);
         if (energy > 0 && !s.NothingToKill && !s.EnemyAsleep && energyLost && hand.Any(WouldHelp))
         {
             // Args: the energy, then the cards it could have paid (most expensive first, at most 3).
@@ -357,7 +373,7 @@ public static class TurnReview
         }
         // Energy lost with nothing useful to spend it on (v0.17.29): counted for the trophy "Batterie pleine".
         else if (energy > 0 && !s.EnemyAsleep && energyLost &&
-                 (s.NothingToKill || !hand.Any(c => p.Affordable(c) && !NeedlessBlock(c) && !Punished(c))))
+                 (s.NothingToKill || !hand.Any(c => p.Affordable(c) && !NeedlessBlock(c) && !Punished(c) && CanHit(c) && PetReady(c))))
             r.Events.Add(new HelpGiven(actor, "energySurplus", energy));
 
         // Energy spent for nothing (v0.17.37); Pael's Tears: that energy would have been left.
@@ -374,7 +390,8 @@ public static class TurnReview
 
         // Block card kept: not one for a single ally (only the ally check below), not La grande manœuvre (its own rule),
         // never an Exhaust card (v0.17.34).
-        var kept = hand.Where(c => c.GainsBlock && p.Affordable(c) && !c.Exhausts && !c.Gambit && c.BlockFor != BlockTarget.OneAlly && c.Block > 0)
+        var kept = hand.Where(c => c.GainsBlock && p.Affordable(c) && !c.Exhausts && !c.Gambit && !c.SacrificesPet && c.BlockFor != BlockTarget.OneAlly &&
+                                   c.Block > 0)
             .OrderByDescending(c => c.Block).FirstOrDefault();
         if (kept != null) r.Events.Add(new BlockCardKept(actor, kept.Key, kept.Block));
         // La grande manœuvre kept in hand (v0.17.23): judged later (HP lost this round, none the next one).
@@ -389,8 +406,9 @@ public static class TurnReview
                 r.Events.Add(new AllyBlockCardKept(actor, forAllies.Key, forAllies.Block, forAllies.BlockFor == BlockTarget.AllAllies));
         }
 
-        // Orichalcum gives its block only when the player has none: a smaller block card played instead was a loss.
-        if (p.Orichalcum is { } orichalcum && p.Block > 0 && p.Block <= p.OrichalcumBlock &&
+        // Orichalcum gives its block only when the player has none: a smaller block card played instead was a loss (v0.17.45:
+        // strictly smaller; the same block lost nothing, Zaille75).
+        if (p.Orichalcum is { } orichalcum && p.Block > 0 && p.Block < p.OrichalcumBlock &&
             s.Plays.Any(x => x.Owner == actor && x.GaveBlock && !x.HadOtherEffect && !x.Ethereal))
             r.Events.Add(new MissedChance(actor, "orichalcum", new[] { orichalcum, N(p.Block), N(p.OrichalcumBlock) }));
 

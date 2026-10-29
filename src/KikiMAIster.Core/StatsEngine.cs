@@ -35,6 +35,9 @@ public sealed class StatsEngine
     /// same fight. Owner → saved effects not yet credited; owners whose pet died since.
     private readonly Dictionary<ulong, List<PetSave>> _petSaved = new();
     private readonly HashSet<ulong> _petDied = new();
+    /// Damage an enemy's Strength added to the hit about to land on a player, from a player's relic (Soufre…, v0.17.45): who
+    /// owns the relic, which relic, and how much; resolved by that hit.
+    private readonly Dictionary<ulong, List<(ulong Owner, string Relic, double Amount)>> _pendingHarm = new();
     /// Enemies already killed in this fight (a kill counts once per enemy, v0.17.38).
     private readonly HashSet<int> _killed = new();
     /// The same saved pet HP, for the pet's current life only (attacks that grow with the pet's HP: Déchaînement).
@@ -136,6 +139,30 @@ public sealed class StatsEngine
             case PetHpBlock b when b.Receiver.Kind == ActorKind.Player: OnPetHpBlock(b.Receiver.PlayerId); break;
             case StrengthBorrowed b: OnStrengthBorrowed(b); break;
             case StrengthUsed u: OnStrengthUsed(u); break;
+            case DamageModifier m when m.Dealer.IsPlayerSide && m.Dealer.PlayerId != 0 && m.Amount > 0: OnDamageModifier(m); break;
+            case EnemyStrengthHit h when h.Target.Kind == ActorKind.Player && h.Damage > 0: OnEnemyStrengthHit(h); break;
+            case DamageCapped c when c.Dealer.IsPlayerSide && c.Dealer.PlayerId != 0 && c.Amount > 0:
+                Each(c.Dealer.PlayerId, s =>
+                {
+                    s.Overkill += c.Amount;
+                    s.DamageCapped += c.Amount;
+                });
+                break;
+            case PlayersSeen seen:
+                foreach (var p in seen.Players.Where(p => p.Name != "")) _players[p.PlayerId] = p;
+                break;
+            case PlayerRoundState r when r.Player.Kind == ActorKind.Player && r.Player.PlayerId != 0:
+                Each(r.Player.PlayerId, s =>
+                {
+                    if (!r.Alive) s.TurnsDead++;
+                    else
+                    {
+                        if (r.Hp == 1) s.TurnsAtOneHp++;
+                        if (r.Alone) s.TurnsAlone++;
+                    }
+                });
+                break;
+            case WaitedFor w when w.Player.Kind == ActorKind.Player && w.Seconds > 0: Each(w.Player.PlayerId, s => s.WaitedSeconds += w.Seconds); break;
             case StrengthGiven g when g.Amount > 0 && g.Player.Kind == ActorKind.Player && g.Giver.IsPlayerSide:
             {
                 if (!_borrowed.TryGetValue(g.Player.PlayerId, out var from)) _borrowed[g.Player.PlayerId] = from = new();
@@ -211,6 +238,8 @@ public sealed class StatsEngine
                     var s = Stats(Scope.Run, p);
                     s.ChifumiPlayed++;
                     if (p == f.Winner.PlayerId) s.ChifumiWon++;
+                    s.ChifumiLongest = Math.Max(s.ChifumiLongest, f.Rounds);
+                    foreach (var move in f.Moves?.GetValueOrDefault(p) ?? Array.Empty<string>()) PlayerStats.Add(s.ChifumiMoves, move, 1);
                 }
                 break;
             case RunHistoryRead h when h.Player.IsPlayerSide && h.Player.PlayerId != 0:
@@ -239,6 +268,11 @@ public sealed class StatsEngine
                 }
                 s.RestSiteChoices.Clear();
                 foreach (var (k, v) in h.RestSiteChoices) s.RestSiteChoices[k] = v;
+                if (h.CardPicks != null)
+                {
+                    s.CardPicks.Clear();
+                    foreach (var (k, v) in h.CardPicks) s.CardPicks[k] = v;
+                }
                 break;
             }
             case PreFightEvent p when p.Player.IsPlayerSide && p.Player.PlayerId != 0:
@@ -405,6 +439,7 @@ public sealed class StatsEngine
         _petDied.Clear();
         _petSavedAlive.Clear();
         _killed.Clear();
+        _pendingHarm.Clear();
     }
 
     // ---------- Damage ----------
@@ -582,6 +617,7 @@ public sealed class StatsEngine
         if (d.Dealer.IsEnemy)
         {
             Each(owner, s => s.HpLostFromEnemies += d.Hp);
+            ResolveHarm(owner, d.Hp);
             if (_blockKept.TryGetValue(owner, out var kept)) _blockKept[owner] = kept with { Lost = kept.Lost + d.Hp };
             if (_riskyKept.TryGetValue(owner, out var risky)) _riskyKept[owner] = risky with { Lost = risky.Lost + d.Hp };
             if (_riskyWait.TryGetValue(owner, out var wait)) _riskyWait[owner] = wait with { LostAfter = wait.LostAfter + d.Hp };
@@ -612,7 +648,9 @@ public sealed class StatsEngine
         var giver = b.Giver.IsPlayerSide ? b.Giver.PlayerId : owner;
         // Plating gives its block at the end of the turn, known in advance: it counts as already there, so it absorbs
         // first and a block card the Plating made unnecessary can be gâché (spec 01-metrics §F, v0.17.0).
-        Ledger(owner).Add(giver, b.Amount, Round, b.PlayId, first: b.Source == Source.Power(PlatingPowerId), source: b.Source.ToString());
+        // A relic's or potion's share (Dexterity it gave, Placage from Gorgerette…) is its own layer (v0.17.45).
+        foreach (var (source, amount) in BlockParts(b))
+            Ledger(owner).Add(giver, amount, Round, b.PlayId, first: b.Source == Source.Power(PlatingPowerId), source: source);
         Each(giver, s =>
         {
             if (giver == owner) s.BlockGainedSelf += b.Amount;
@@ -621,6 +659,105 @@ public sealed class StatsEngine
     }
 
     internal const string PlatingPowerId = "PLATING_POWER";
+    internal const string DexterityPowerId = "DEXTERITY_POWER";
+    internal const string StrengthPowerId = "STRENGTH_POWER";
+    internal const string FocusPowerId = "FOCUS_POWER";
+
+    /// The block gained split by where it came from (v0.17.45): the Dexterity part and a power's block go to the relics or
+    /// potions that gave those stacks, in proportion; the rest stays with the block's source.
+    private List<(string Source, double Amount)> BlockParts(BlockGained b)
+    {
+        var main = b.Source.ToString();
+        var parts = new List<(string, double)>();
+        double moved = 0;
+        void Split(string powerId, double amount)
+        {
+            if (amount <= 0) return;
+            foreach (var (origin, share) in GivenShares(b.Receiver.CreatureId, powerId))
+            {
+                parts.Add((origin, amount * share));
+                moved += amount * share;
+            }
+        }
+        Split(b.Source.Kind == SourceKind.Orb ? FocusPowerId : DexterityPowerId, Math.Min(b.Dexterity, b.Amount));
+        if (b.Source.Kind == SourceKind.Power) Split(b.Source.Id, b.Amount - moved);
+        parts.Insert(0, (main, b.Amount - moved));
+        return parts;
+    }
+
+    /// The shares of a power's stacks on a creature that a relic or a potion gave (v0.17.45), by "Relic:…" / "Potion:…".
+    private IEnumerable<(string Origin, double Share)> GivenShares(int creatureId, string powerId) =>
+        !_dots.TryGetValue((creatureId, powerId), out var ledger) ? Enumerable.Empty<(string, double)>()
+            : ledger.Shares().Where(x => x.Origin != "").GroupBy(x => x.Origin).Select(g => (g.Key, g.Sum(x => x.Share)));
+
+    /// Part of a hit moves from the card (or pet) that dealt it to the relic or potion it is due to (v0.17.45): the total
+    /// damage stays the same.
+    private void MoveDamage(ulong playerId, string from, string to, double amount)
+    {
+        if (amount <= 0 || from == "" || from == to) return;
+        Each(playerId, s =>
+        {
+            PlayerStats.Add(s.DamageBySource, from, -amount);
+            PlayerStats.Add(s.DamageBySource, to, amount);
+        });
+    }
+
+    /// A modifier of a player's hit: a relic's own part moves to it; a power's part moves to the relics / potions that gave
+    /// its stacks.
+    private void OnDamageModifier(DamageModifier m)
+    {
+        if (m.Modifier.StartsWith("Relic:", StringComparison.Ordinal))
+        {
+            MoveDamage(m.Dealer.PlayerId, m.HitSource, m.Modifier, m.Amount);
+            return;
+        }
+        var powerId = m.Modifier.StartsWith("Power:", StringComparison.Ordinal) ? m.Modifier[6..] : m.Modifier;
+        foreach (var (origin, share) in GivenShares(m.Dealer.CreatureId, powerId))
+            MoveDamage(m.Dealer.PlayerId, m.HitSource, origin, m.Amount * share);
+    }
+
+    /// An enemy's Strength made its hit bigger: the share a player's relic gave it waits for the hit (v0.17.45).
+    private void OnEnemyStrengthHit(EnemyStrengthHit h)
+    {
+        if (!_dots.TryGetValue((h.Enemy.CreatureId, StrengthPowerId), out var ledger)) return;
+        var parts = ledger.Shares().Where(x => x.ApplierId != 0 && x.Origin.StartsWith("Relic:", StringComparison.Ordinal))
+            .Select(x => (x.ApplierId, x.Origin, h.Damage * x.Share)).ToList();
+        if (parts.Count == 0) return;
+        if (!_pendingHarm.TryGetValue(h.Target.PlayerId, out var list)) _pendingHarm[h.Target.PlayerId] = list = new();
+        list.AddRange(parts);
+    }
+
+    /// The hit landed: the HP the relic's Strength added (at most the HP lost) are charged to the relic's owner, as damage
+    /// they did to themself or to that ally, instead of the enemy's (v0.17.45).
+    private void ResolveHarm(ulong target, double hpLost)
+    {
+        if (!_pendingHarm.Remove(target, out var parts) || hpLost <= 0) return;
+        var total = parts.Sum(x => x.Amount);
+        if (total <= 0) return;
+        var scale = Math.Min(1, hpLost / total);
+        foreach (var (owner, relic, amount) in parts)
+        {
+            var x = amount * scale;
+            Each(target, s =>
+            {
+                s.HpLostFromEnemies -= x;
+                PlayerStats.Add(s.HpLostByKind, "attack", -x);
+                if (owner == target)
+                {
+                    s.HpLostFromSelf += x;
+                    s.SelfDamage += x;
+                    PlayerStats.Add(s.HpLostByKind, "self", x);
+                }
+                else
+                {
+                    s.HpLostFromAllies += x;
+                    PlayerStats.Add(s.HpLostByKind, "ally", x);
+                }
+            });
+            if (owner != target) Each(owner, s => s.FriendlyDamage += x);
+            Each(owner, s => PlayerStats.Add(s.HarmByRelic, relic, x));
+        }
+    }
 
     private void OnBlockCleared(BlockCleared b)
     {
@@ -703,7 +840,7 @@ public sealed class StatsEngine
         var applierId = p.Applier.IsPlayerSide ? p.Applier.PlayerId : 0;
         var enabler = p.EnabledBy.IsPlayerSide && p.EnabledBy.PlayerId != applierId ? p.EnabledBy.PlayerId : 0;
         Dot(p.Target.CreatureId, p.PowerId).Apply(applierId, p.Amount, p.Origin, enabler, p.EnabledSource);
-        if (p.IsDebuff) Fifo(p.Target.CreatureId, p.PowerId).Apply(applierId, p.Amount);
+        if (p.IsDebuff) Fifo(p.Target.CreatureId, p.PowerId).Apply(applierId, p.Amount, p.Origin);
         if (p.Amount <= 0 || !p.IsDebuff) return;
 
         if (p.Applier.IsPlayerSide && p.Target.IsEnemy)
@@ -828,6 +965,11 @@ public sealed class StatsEngine
             list.Add(x);
             return;
         }
+        // Vulnerable a relic applied (Sac de billes, Perceuse): the stacks of this turn are the relic's, their extra damage counts
+        // for it (v0.17.45).
+        if (x.HitSource != "" && x.Credit == DebuffCredit.CurrentTurn && _fifo.TryGetValue((x.Holder.CreatureId, x.PowerId), out var fifo) &&
+            fifo.CurrentOrigin.StartsWith("Relic:", StringComparison.Ordinal))
+            MoveDamage(x.Beneficiary.PlayerId, x.HitSource, fifo.CurrentOrigin, x.Amount);
         CreditDebuffEffect(x);
     }
 
@@ -905,6 +1047,10 @@ public sealed class StatsEngine
     private void OnStrengthUsed(StrengthUsed u)
     {
         if (u.Strength <= 0 || u.Damage <= 0 || !u.Player.IsPlayerSide) return;
+        // The Strength a relic or a potion gave (Vajra, Soufre, Potion de force…): its share of the damage counts for it
+        // (v0.17.45).
+        foreach (var (origin, share) in GivenShares(u.Player.CreatureId, StrengthPowerId))
+            MoveDamage(u.Player.PlayerId, u.HitSource, origin, u.Damage * share);
         var from = new Dictionary<ulong, double>();
         if (_borrowed.TryGetValue(u.Player.PlayerId, out var lasting))
             foreach (var (id, points) in lasting) from[id] = points;

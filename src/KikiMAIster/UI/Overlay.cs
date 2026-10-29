@@ -59,6 +59,12 @@ public static class Overlay
     /// Overkill / of which unavoidable (v0.17.42), then what your debuffs changed.
     private static readonly string[] DebuffEffectColumns = { "col.overkill", "col.extraDamage", "col.avoided" };
 
+    private static readonly string[] ChifumiColumns = { "col.chifumi", "col.rock", "col.paper", "col.scissors", "col.chifumiLongest" };
+
+    /// Cards, potions and energy; card rewards (v0.17.45, run tab: offered, taken, offers skipped).
+    private static readonly string[] OtherColumns =
+        { "col.drawn", "col.played", "col.exhausted", "col.discarded", "col.potions", "col.energySurplus", "col.energyUseless", "col.cardsOffered", "col.cardsTaken", "col.offersSkipped" };
+
     private static readonly string[] TakenColumns = { "col.hpLost", "col.fromSelf", "col.fromAllies", "col.hpOutside", "col.healOutside", "col.maxHp" };
 
     private static readonly Section[] Sections =
@@ -73,12 +79,13 @@ public static class Overlay
             return cols.Count > 0 ? cols : new[] { "col.noDebuff" };
         }, s => s.DebuffsApplied.Values.Sum(t => t.Stacks)),
         new("missed", MissedRow, MissedColumnsShown, s => -(s.MissedTotal * 100 + s.MissedByKind.GetValueOrDefault("energy"))),
-        new("coop", CoopRow, () => Visible("coop", new[] { "col.blockGiven", "col.blockEnabled", "col.saved", "col.takenForAllies", "col.enabled", "col.energyGiven", "col.cardsGiven", "col.friendly", "col.deaths", "col.chifumi" }),
+        new("coop", CoopRow, () => Visible("coop", new[] { "col.blockGiven", "col.blockEnabled", "col.saved", "col.takenForAllies", "col.enabled", "col.energyGiven", "col.cardsGiven", "col.friendly", "col.deaths" }),
             s => s.SavedForAllies + s.DamageEnabledAllies + s.BlockGivenToAllies * 0.01, CoopOnly: true),
+        // This run's rock-paper-scissors (v0.17.45: moved from Coop; the records are in the trophies window).
+        new("chifumi", ChifumiRow, () => Visible("chifumi", ChifumiColumns), s => s.ChifumiWon * 100 - s.ChifumiPlayed, CoopOnly: true, RunOnly: true),
         new("rest", RestRow, () => _restColumns.Count > 0 ? _restColumns : new[] { "col.noRest" }, s => s.RestSiteChoices.Values.Sum(), RunOnly: true),
         new("gold", GoldRow, () => Visible("gold", new[] { "col.goldGained", "col.goldSpent", "col.goldLost", "col.goldNow", "col.cursesGained", "col.cursesRemoved" }), s => s.GoldGained, RunOnly: true),
-        new("other", OtherRow, () => Visible("other", new[] { "col.drawn", "col.played", "col.exhausted", "col.discarded", "col.potions", "col.energySurplus", "col.energyUseless" }),
-            s => s.CardsPlayed),
+        new("other", OtherRow, () => Visible("other", OtherColumns), s => s.CardsPlayed),
     };
 
     /// What the settings menu can hide: every section, and its fixed columns (damage kinds and debuff effect included).
@@ -88,10 +95,11 @@ public static class Overlay
         ("protection", new[] { "col.byBlock", "col.byPet", "col.useless", "col.petHp" }),
         ("debuffs", Array.Empty<string>()),
         ("missed", MissedColumns),
-        ("coop", new[] { "col.blockGiven", "col.blockEnabled", "col.saved", "col.takenForAllies", "col.enabled", "col.energyGiven", "col.cardsGiven", "col.friendly", "col.deaths", "col.chifumi" }),
+        ("coop", new[] { "col.blockGiven", "col.blockEnabled", "col.saved", "col.takenForAllies", "col.enabled", "col.energyGiven", "col.cardsGiven", "col.friendly", "col.deaths" }),
+        ("chifumi", ChifumiColumns),
         ("rest", Array.Empty<string>()),
         ("gold", new[] { "col.goldGained", "col.goldSpent", "col.goldLost", "col.goldNow", "col.cursesGained", "col.cursesRemoved" }),
-        ("other", new[] { "col.drawn", "col.played", "col.exhausted", "col.discarded", "col.potions", "col.energySurplus", "col.energyUseless" }),
+        ("other", OtherColumns),
     };
 
     private static ModConfig Cfg => ModConfig.Current;
@@ -178,6 +186,15 @@ public static class Overlay
         SyncVisibility();
     }
 
+    /// The game's pause menu is open (Échap).
+    internal static bool GameMenuOpen;
+
+    public static void SetGameMenuOpen(bool open)
+    {
+        GameMenuOpen = open;
+        SyncVisibility();
+    }
+
     /// Shows the panel only in a run (and when not hidden with F7); outside a run every mod window is closed.
     private static void SyncVisibility()
     {
@@ -197,8 +214,14 @@ public static class Overlay
         if (!show || !inRun)
             foreach (var w in DetachedWindows.Values)
                 if (GodotObject.IsInstanceValid(w.Panel)) w.Panel.Visible = false;
-        // The settings window belongs to the panel: F7 / ✕ hide it too (v0.17.13).
-        if (!show) SettingsMenu.Hide();
+        // The settings window and the fight summary (its chart) belong to the panel: F7 / ✕ hide them too (v0.17.13, v0.17.45).
+        if (!show)
+        {
+            SettingsMenu.Hide();
+            CombatSummary.Hide();
+        }
+        // The game's menu (Échap) hides every mod window while it is open (v0.17.45).
+        if (_layer != null && GodotObject.IsInstanceValid(_layer) && _layer.Visible == GameMenuOpen) _layer.Visible = !GameMenuOpen;
         if (!inRun)
         {
             CombatSummary.Hide();
@@ -431,6 +454,8 @@ public static class Overlay
         foreach (var section in Sections)
         {
             if (Cfg.Hidden.Contains($"section:{section.Key}") || (section.CoopOnly && _solo) || (section.RunOnly && CurrentScope != Scope.Run)) continue;
+            // Nothing to show in it (v0.17.45, Zaille75): not even its title.
+            if (IsEmpty(section, stats)) continue;
             // A detached section has its own window (v0.17.0); in co-op its table is always open.
             var detached = Cfg.Detached.Contains(section.Key);
             var target = detached ? DetachedBody(section.Key) : _body;
@@ -479,6 +504,15 @@ public static class Overlay
         if (!Cfg.HideZeroColumns) return columns;
         var rows = stats.Select(kv => section.Row(kv.Key, kv.Value)).ToList();
         return columns.Where(col => col == "col.total" || rows.Any(cells => !IsZero(CellFor(cells, col).Text))).ToList();
+    }
+
+    /// Every column of the section is 0 (or a "nothing yet" placeholder) for every player.
+    private static bool IsEmpty(Section section, IReadOnlyDictionary<ulong, PlayerStats> stats)
+    {
+        var columns = section.Columns().Where(c => c is not ("col.noRest" or "col.noDebuff")).ToList();
+        if (columns.Count == 0) return true;
+        var rows = stats.Select(kv => section.Row(kv.Key, kv.Value)).ToList();
+        return columns.All(col => rows.All(cells => IsZero(CellFor(cells, col).Text)));
     }
 
     private static bool IsZero(string text) => text is "0" or "-0" or "-" or "0/0" or "+0" or "" || text.StartsWith("0 (");
@@ -745,12 +779,15 @@ public static class Overlay
         // Biggest hit / best card are trophies, not shown here (v0.17.17).
         var extra = s.DamageEnabledSelf + s.DamageEnabledAllies;
         var avoided = s.PreventedByDebuffsSelf + s.PreventedByDebuffsAllies;
-        var tip = Line(("tip.intoBlock", s.DamageIntoBlock, false), ("tip.overkill", s.Overkill, false), ("tip.kills", s.Kills, false))
+        var tip = Line(("tip.intoBlock", s.DamageIntoBlock, false), ("tip.overkill", s.Overkill, false), ("tip.capped", s.DamageCapped, false),
+                      ("tip.kills", s.Kills, false))
                   + Block(Lines(s.DamageBySource))
                   // Damage added by card enchantments (v0.17.39): already in the cards' damage.
                   + (s.DamageByEnchantment.Values.Sum() >= 0.5 ? Block($"{Loc.T("tip.enchantments")}:\n{Lines(s.DamageByEnchantment)}") : "")
                   + (extra + avoided > 0 ? Block(Line(("tip.enabled", extra, false), ("tip.byDebuffs", avoided, false)) + Block(Lines(s.DebuffEffectBySource))) : "")
                   + Block(taken == "" ? "" : $"{Loc.T("col.hpLost")} {N(s.HpLost)}: {taken}")
+                  // Strength the player's relics gave the enemies (Soufre…, v0.17.45): HP it made the players lose.
+                  + (s.HarmByRelic.Values.Sum() >= 0.5 ? Block($"{Loc.T("tip.harmByRelic")}:\n{Lines(s.HarmByRelic)}") : "")
                   // HP lost by kind (v0.17.39): attacks, reactions (Thorns…), status cards, damage over time, self, allies.
                   + (s.HpLostByKind.Count == 0 ? "" : Block($"{Loc.T("tip.byKind")}: " + string.Join(", ", s.HpLostByKind
                       .Where(kv => Math.Round(kv.Value) != 0).OrderByDescending(kv => kv.Value).Select(kv => $"{Loc.T($"tip.kind.{kv.Key}")} {N(kv.Value)}"))))
@@ -963,7 +1000,6 @@ public static class Overlay
             new Cell("col.cardsGiven", N(s.CardsGiven), tip),
             new Cell("col.friendly", N(s.FriendlyDamage), tip),
             new Cell("col.deaths", N(s.Deaths), tip),
-            new Cell("col.chifumi", $"{N(s.ChifumiWon)}/{N(s.ChifumiPlayed)}", tip),
             new Cell("col.blockEnabled", N(s.BlockEnabledForAllies), tip)
         };
     }
@@ -986,14 +1022,31 @@ public static class Overlay
                 ? string.Format(Loc.T("tip.fightsLength"), N(s.FightsTimed), N(s.FightTurns), FightRecordStore.Duration(s.FightSeconds),
                     FightRecordStore.Duration(s.FightSeconds / s.FightsTimed))
                 : string.Format(Loc.T("tip.fightLength"), N(s.FightTurns), FightRecordStore.Duration(s.FightSeconds));
+        // Card rewards by kind of floor (fights, events, others).
+        var picks = s.CardPicks.Count == 0 ? "" : string.Join('\n', new[] { "fight", "event", "other" }
+            .Where(k => s.CardPicks.GetValueOrDefault($"offered.{k}") > 0)
+            .Select(k => string.Format(Loc.T("tip.cardPicks"), Loc.T($"tip.picks.{k}"), N(s.CardPicks.GetValueOrDefault($"taken.{k}")),
+                N(s.CardPicks.GetValueOrDefault($"offered.{k}")), N(s.CardPicks.GetValueOrDefault($"skipped.{k}")))));
         return new[]
         {
             new Cell("col.drawn", N(s.CardsDrawn), tip), new Cell("col.played", N(s.CardsPlayed), tip),
             new Cell("col.exhausted", N(s.CardsExhausted), tip), new Cell("col.discarded", N(s.CardsDiscarded), tip),
             new Cell("col.potions", N(s.PotionsUsed), tip), new Cell("col.energySurplus", N(s.EnergySurplus), tip),
-            new Cell("col.energyUseless", N(s.EnergyUseless), tip)
+            new Cell("col.energyUseless", N(s.EnergyUseless), tip),
+            new Cell("col.cardsOffered", N(s.CardsOffered), picks), new Cell("col.cardsTaken", N(s.CardsTaken), picks),
+            new Cell("col.offersSkipped", N(s.CardOffersSkipped), picks)
         };
     }
+
+    /// This run's chifumi: fights won / fought, what the player threw, the longest fight (rounds).
+    private static IReadOnlyList<Cell> ChifumiRow(ulong id, PlayerStats s) => new[]
+    {
+        new Cell("col.chifumi", $"{N(s.ChifumiWon)}/{N(s.ChifumiPlayed)}"),
+        new Cell("col.rock", N(s.ChifumiMoves.GetValueOrDefault("Rock"))),
+        new Cell("col.paper", N(s.ChifumiMoves.GetValueOrDefault("Paper"))),
+        new Cell("col.scissors", N(s.ChifumiMoves.GetValueOrDefault("Scissors"))),
+        new Cell("col.chifumiLongest", N(s.ChifumiLongest))
+    };
 
     // ---------- Helpers ----------
 
@@ -1007,7 +1060,9 @@ public static class Overlay
             $"{kv.Value.HealingSelf + kv.Value.HealingAllies:F1}:{kv.Value.PetHpGiven:F1}:{kv.Value.WastedPlays.Count}:{kv.Value.Kills}:" +
             $"{kv.Value.DamageEnabledSelf + kv.Value.DamageEnabledAllies:F1}:{kv.Value.MissedLethals}:{kv.Value.WeakAttacks}:{kv.Value.EnergyGiven + kv.Value.CardsGiven + kv.Value.OrbsGiven + kv.Value.TakenForAllies:F1}:{kv.Value.MissedEntries.Count}:{kv.Value.Deaths}:" +
             $"{kv.Value.CardsDrawn + kv.Value.CardsPlayed + kv.Value.CardsExhausted + kv.Value.CardsDiscarded + kv.Value.PotionsUsed + kv.Value.EnergySurplus + kv.Value.EnergyUseless}:" +
-            $"{kv.Value.MaxHpGained}:{kv.Value.MaxHpLost}:{kv.Value.HpLostOutside}:{kv.Value.HealedOutside}:{kv.Value.GoldGained}:{kv.Value.GoldSpent}:{kv.Value.GoldLost}:{kv.Value.GoldNow}:{kv.Value.CursesGained}:{kv.Value.CursesRemoved}:{kv.Value.UnavoidableBlock:F1}:{kv.Value.RestSiteChoices.Values.Sum()}:{kv.Value.RestSiteChoices.Count}:{kv.Value.ChifumiWon}:{kv.Value.ChifumiPlayed}:{kv.Value.BlockEnabledForAllies:F1}:{kv.Value.SavedForAllies:F1}:{kv.Value.FightSeconds:F0}:{kv.Value.HpLostByKind.Count}:{kv.Value.HealingBySource.Count}:{kv.Value.DamageByEnchantment.Count}")) +
+            $"{kv.Value.MaxHpGained}:{kv.Value.MaxHpLost}:{kv.Value.HpLostOutside}:{kv.Value.HealedOutside}:{kv.Value.GoldGained}:{kv.Value.GoldSpent}:{kv.Value.GoldLost}:{kv.Value.GoldNow}:{kv.Value.CursesGained}:{kv.Value.CursesRemoved}:{kv.Value.UnavoidableBlock:F1}:{kv.Value.RestSiteChoices.Values.Sum()}:{kv.Value.RestSiteChoices.Count}:{kv.Value.ChifumiWon}:{kv.Value.ChifumiPlayed}:{kv.Value.BlockEnabledForAllies:F1}:{kv.Value.SavedForAllies:F1}:{kv.Value.FightSeconds:F0}:{kv.Value.HpLostByKind.Count}:{kv.Value.HealingBySource.Count}:{kv.Value.DamageByEnchantment.Count}:" +
+            $"{kv.Value.Overkill:F1}:{kv.Value.CardsOffered}:{kv.Value.CardsTaken}:{kv.Value.ChifumiMoves.Values.Sum()}:{kv.Value.ChifumiLongest}:" +
+            $"{kv.Value.HpLostFromSelf:F1}:{kv.Value.HpLostFromAllies:F1}:{Capture.Engine.Players.GetValueOrDefault(kv.Key)?.Name}")) +
         $"|{Cfg.HideZeroColumns}|{Cfg.ShowGroupLine}|{string.Join(',', Cfg.Detached)}";
 
     /// Rounded, never "-0" (a tiny negative rounding error).

@@ -9,6 +9,8 @@ using MegaCrit.Sts2.Core.Models.Events;
 using MegaCrit.Sts2.Core.Saves.Runs;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
+using MegaCrit.Sts2.Core.Map;
+using MegaCrit.Sts2.Core.Multiplayer.Game;
 
 namespace KikiMAIster.Patches;
 
@@ -25,6 +27,7 @@ public static class RunHistoryPatches
     public static void Read(IRunState? run) => Capture.Safe("RunHistory.Read", () =>
     {
         if (run == null) return;
+        SeePlayers(run);
         var floors = run.MapPointHistory.Sum(a => a.Count());
         if (floors == _failedAt) return;
         try
@@ -41,7 +44,10 @@ public static class RunHistoryPatches
     private static void ReadHistory(IRunState run)
     {
         var totals = run.Players.ToDictionary(p => p.NetId, _ => (Gained: 0, Lost: 0, Choices: new Dictionary<string, double>(),
-            HpLost: new Dictionary<string, double>(), Healed: new Dictionary<string, double>(), Eco: new double[9]));
+            HpLost: new Dictionary<string, double>(), Healed: new Dictionary<string, double>(), Eco: new double[9],
+            Picks: new Dictionary<string, double>()));
+        // Each game records the other players' shop purchases as gold lost, not spent (v0.17.45, both logs of 2026-10-29).
+        var local = LocalId();
         foreach (var act in run.MapPointHistory)
             foreach (var point in act)
             {
@@ -68,6 +74,20 @@ public static class RunHistoryPatches
                     t.Eco[0] += entry.GoldGained;
                     t.Eco[1] += entry.GoldSpent;
                     t.Eco[2] += entry.GoldLost;
+                    if (entry.PlayerId != local && run.Players.Count > 1 && point.Rooms.Any(r => r.RoomType == RoomType.Shop))
+                    {
+                        t.Eco[1] += entry.GoldLost;
+                        t.Eco[2] -= entry.GoldLost;
+                    }
+                    // Card rewards (v0.17.45): cards offered and taken, offers where none was taken, by kind of floor.
+                    if (entry.CardChoices.Count > 0)
+                    {
+                        var pickKind = fight ? "fight" : point.Rooms.Any(r => r.RoomType == RoomType.Event) ? "event" : "other";
+                        var taken = entry.CardChoices.Count(c => c.wasPicked);
+                        Add(t.Picks, $"offered.{pickKind}", entry.CardChoices.Count);
+                        Add(t.Picks, $"taken.{pickKind}", taken);
+                        if (taken == 0) Add(t.Picks, $"skipped.{pickKind}", 1);
+                    }
                     t.Eco[3] += entry.GoldStolen;
                     t.Eco[4] = Math.Max(t.Eco[4], entry.CurrentGold);
                     t.Eco[5] = entry.CurrentGold;
@@ -79,7 +99,7 @@ public static class RunHistoryPatches
                 }
             }
         var signature = string.Join(';', totals.OrderBy(kv => kv.Key).Select(kv =>
-            $"{kv.Key}:{kv.Value.Gained}:{kv.Value.Lost}:{Sig(kv.Value.HpLost)}:{Sig(kv.Value.Healed)}:{string.Join(',', kv.Value.Eco)}:{string.Join(',', kv.Value.Choices.OrderBy(r => r.Key, StringComparer.Ordinal).Select(r => $"{r.Key}={r.Value}"))}"));
+            $"{kv.Key}:{kv.Value.Gained}:{kv.Value.Lost}:{Sig(kv.Value.HpLost)}:{Sig(kv.Value.Healed)}:{Sig(kv.Value.Picks)}:{string.Join(',', kv.Value.Eco)}:{string.Join(',', kv.Value.Choices.OrderBy(r => r.Key, StringComparer.Ordinal).Select(r => $"{r.Key}={r.Value}"))}"));
         if (signature == _signature) return;
         _signature = signature;
         foreach (var p in run.Players)
@@ -89,7 +109,7 @@ public static class RunHistoryPatches
             // The event's own text shows dictionaries as type names: the HP figures, readable (v0.17.38).
             ModLog.Info($"run history {p.NetId}: HP lost outside [{Sig(t.HpLost)}], healed outside [{Sig(t.Healed)}]");
             Capture.Emit(new RunHistoryRead(Capture.ToActor(p), t.Gained, t.Lost, t.Choices, t.HpLost, t.Healed,
-                new RunEconomy(e[0], e[1], e[2] + e[3], e[3], e[4], e[5], e[6], e[7], e[8])));
+                new RunEconomy(e[0], e[1], e[2] + e[3], e[3], e[4], e[5], e[6], e[7], e[8]), t.Picks));
         }
     }
 
@@ -117,6 +137,34 @@ public static class RunHistoryPatches
         }
     });
 
+    private static void Add(Dictionary<string, double> d, string key, double v) => d[key] = d.GetValueOrDefault(key) + v;
+
+    /// This game's player (0 when unknown).
+    private static ulong LocalId()
+    {
+        try
+        {
+            return RunManager.Instance.NetService.NetId;
+        }
+        catch (Exception)
+        {
+            return 0;
+        }
+    }
+
+    private static string _playersSig = "";
+
+    /// The run's players and their names, as soon as the game knows them (v0.17.45: the panel showed Steam ids before the
+    /// first fight).
+    private static void SeePlayers(IRunState run)
+    {
+        var players = run.Players.Select(p => new PlayerInfo(p.NetId, Capture.PlayerName(p, run.Players.Count), p.Character.Id.Entry)).ToList();
+        var sig = string.Join(';', players.Select(p => $"{p.PlayerId}={p.Name}"));
+        if (sig == _playersSig) return;
+        _playersSig = sig;
+        Capture.Emit(new PlayersSeen(players));
+    }
+
     private static string Sig(Dictionary<string, double> d) =>
         string.Join(',', d.OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => $"{kv.Key}={kv.Value}"));
 
@@ -124,7 +172,41 @@ public static class RunHistoryPatches
     public static void Reset()
     {
         _signature = "";
+        _playersSig = "";
         _failedAt = -1;
+    }
+
+    /// Map votes (v0.17.45, Godot): when every player has chosen the next floor, the last one made the others wait the time
+    /// since the one before. Counted once per floor; a vote changed or withdrawn keeps the latest time.
+    private static string _voteSource = "";
+    private static readonly Dictionary<ulong, double> VoteTimes = new();
+    private static bool _voteDone;
+    private static readonly System.Diagnostics.Stopwatch Clock = System.Diagnostics.Stopwatch.StartNew();
+
+    [HarmonyPatch(typeof(MapSelectionSynchronizer), nameof(MapSelectionSynchronizer.PlayerVotedForMapCoord))]
+    public static class MapVoted
+    {
+        public static void Postfix(MapSelectionSynchronizer __instance, Player player, MapLocation source, MapVote? destination) =>
+            Capture.Safe("MapVote", () =>
+            {
+                var key = source.ToString();
+                if (key != _voteSource)
+                {
+                    _voteSource = key;
+                    VoteTimes.Clear();
+                    _voteDone = false;
+                }
+                if (destination.HasValue) VoteTimes[player.NetId] = Clock.Elapsed.TotalSeconds;
+                else VoteTimes.Remove(player.NetId);
+                var players = player.RunState?.Players ?? new List<Player>();
+                if (_voteDone || players.Count < 2 || players.Any(p => !__instance.GetVote(p).HasValue || !VoteTimes.ContainsKey(p.NetId))) return;
+                _voteDone = true;
+                var order = VoteTimes.OrderByDescending(kv => kv.Value).ToList();
+                var waited = order[0].Value - order[1].Value;
+                var last = players.First(p => p.NetId == order[0].Key);
+                ModLog.Info($"map vote: {Capture.PlayerName(last, players.Count)} chose last, {waited:0.0} s after the others");
+                Capture.Emit(new WaitedFor(Capture.ToActor(last), waited));
+            });
     }
 
     /// Several players picked the same relic: the game plays rock-paper-scissors until one is left.
@@ -139,8 +221,13 @@ public static class RunHistoryPatches
             var names = players.ToDictionary(p => p.NetId, p => Capture.PlayerName(p, players.Count));
             ModLog.Info($"chifumi for {relic.Id.Entry}: {names[winner.NetId]} won against " +
                         string.Join(", ", players.Where(p => p != winner).Select(p => names[p.NetId])));
-            Capture.Emit(new ChifumiFought(fightId, Capture.ToActor(winner), players.Select(p => Capture.ToActor(p)).ToList()));
-            UI.ChifumiStore.Record(fightId, winner.NetId, players.Select(p => p.NetId), names);
+            // What each one threw, round by round (v0.17.45); a player out of the fight has no move.
+            var rounds = __result.fight?.rounds ?? new List<RelicPickingFightRound>();
+            var moves = players.Select((p, i) => (p.NetId, Moves: (IReadOnlyList<string>)rounds
+                    .Select(r => i < r.moves.Count ? r.moves[i] : null).OfType<RelicPickingFightMove>().Select(m => m.ToString()).ToList()))
+                .ToDictionary(x => x.NetId, x => x.Moves);
+            Capture.Emit(new ChifumiFought(fightId, Capture.ToActor(winner), players.Select(p => Capture.ToActor(p)).ToList(), moves, rounds.Count));
+            UI.ChifumiStore.Record(fightId, winner.NetId, players.Select(p => p.NetId), names, moves, rounds.Count);
         });
     }
 }

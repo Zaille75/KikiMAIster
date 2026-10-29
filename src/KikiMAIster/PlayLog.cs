@@ -30,9 +30,42 @@ public static class PlayLog
 
     public static void Install() => Actor.Namer = NameOf;
 
-    private static string NameOf(Actor a) =>
-        Names.TryGetValue(a.CreatureId, out var n) ? n
-        : a.Kind switch { ActorKind.None => "-", ActorKind.Enemy => $"Enemy#{a.CreatureId}", _ => $"{a.Kind}#{a.CreatureId}" };
+    private static string NameOf(Actor a)
+    {
+        if (Names.TryGetValue(a.CreatureId, out var n)) return n;
+        // A player or pet first seen before the run was ready (v0.17.45): named as soon as the game knows them.
+        if (a.Kind is ActorKind.Player or ActorKind.Pet && PlayerById(a.PlayerId) is { } player)
+        {
+            try
+            {
+                var name = a.Kind == ActorKind.Player ? Who(player) : $"{player.Osty?.Name ?? "Pet"} ({Who(player)})";
+                if (!name.Contains('?')) Names[a.CreatureId] = name;
+                return name;
+            }
+            catch (Exception)
+            {
+                // Not ready yet: the id below.
+            }
+        }
+        return a.Kind switch
+        {
+            ActorKind.None => "-",
+            ActorKind.Enemy => a.CreatureId == 0 ? "an enemy" : $"Enemy#{a.CreatureId}",
+            _ => $"{a.Kind}#{a.CreatureId}"
+        };
+    }
+
+    private static Player? PlayerById(ulong id)
+    {
+        try
+        {
+            return Patches.CombatFlowPatches.CurrentRun?.Players.FirstOrDefault(p => p.NetId == id);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
 
     /// Remembers a creature's readable name (called when the mod first sees it); enemies joining a fight are logged.
     public static void Seen(Creature c, int id, bool isNew)
@@ -40,9 +73,9 @@ public static class PlayLog
         try
         {
             if (Names.ContainsKey(id) && !isNew) return;
-            var name = c.IsPlayer && c.Player is { } p ? Who(p)
-                : c.IsPet && c.PetOwner is { } owner ? $"{c.Name} ({Who(owner)})"
-                : $"{c.Name}#{id.ToString(Inv)}";
+            // Players and pets are named when needed (NameOf): early in a run the game cannot give their names yet.
+            if (c.IsPlayer || c.IsPet) return;
+            var name = $"{c.Name}#{id.ToString(Inv)}";
             Names[id] = name;
             if (isNew && c.IsEnemy && Settings.LogEvents)
                 ModLog.Info($"+ {name} HP {c.CurrentHp}/{c.MaxHp}, block {c.Block}, powers {Powers(c)}");
@@ -53,12 +86,19 @@ public static class PlayLog
         }
     }
 
-    /// "Régent" in solo, "Max/Régent" in co-op.
+    /// "Régent" in solo, "Max/Régent" in co-op; "?" when the game cannot tell yet.
     public static string Who(Player p)
     {
-        var count = p.RunState?.Players.Count ?? 1;
-        var character = GameNames.Of($"Character:{p.Character.Id.Entry}");
-        return count > 1 ? $"{Capture.PlayerName(p, count)}/{character}" : character;
+        try
+        {
+            var count = p.RunState?.Players.Count ?? 1;
+            var character = GameNames.Of($"Character:{p.Character.Id.Entry}");
+            return count > 1 ? $"{Capture.PlayerName(p, count)}/{character}" : character;
+        }
+        catch (Exception)
+        {
+            return "?";
+        }
     }
 
     /// The game's title, upgrade included ("Frappe+"), and the card's id.
@@ -154,10 +194,21 @@ public static class PlayLog
             BlockGained b => $"{NameOf(b.Receiver)} +{b.Amount} block ({b.Source})",
             PowerChanged p => $"{NameOf(p.Target)} {GameNames.Of(p.PowerId)} {(p.Amount > 0 ? "+" : "")}{p.Amount.ToString(Inv)} (by {NameOf(p.Applier)})",
             Healed h => $"{NameOf(h.Target)} +{h.Amount} HP healed",
+            // v0.17.45: what used to show as "nothing seen".
+            PetHpGiven g => $"{NameOf(g.Owner)}'s pet +{g.Amount} HP",
+            HelpGiven { Kind: "energy" } g => $"{NameOf(g.Giver)} gave {g.Amount} energy",
+            HelpGiven { Kind: "cards" } g => $"{NameOf(g.Giver)} gave {g.Amount} card",
+            DamageCapped c => $"{NameOf(c.Target)} cap stopped {c.Amount:0} damage of {NameOf(c.Dealer)}",
             MissedChance m => $"MISS {m.Kind}",
             _ => null
         };
         if (text != null) play.Effects.Add(text);
+    }
+
+    /// Something the card play in progress did that no stat event tells (Stars, energy, cards created; v0.17.45).
+    public static void Note(string text)
+    {
+        if (Open.TryPeek(out var play)) play.Effects.Add(text);
     }
 
     public static void Potion(PotionModel potion, Creature? target) => Capture.Safe("play log", () =>

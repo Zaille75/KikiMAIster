@@ -5,19 +5,21 @@ namespace KikiMAIster.Core;
 /// Example: A applies 2 Vulnerable, then B applies 2 → turns 1-2 count for A, turns 3-4 for B.
 public sealed class FifoLedger
 {
-    private sealed class Chunk(ulong applier)
+    private sealed class Chunk(ulong applier, string origin)
     {
         public ulong Applier { get; } = applier;
+        /// "Relic:<ID>" / "Potion:<ID>" when a relic or potion applied these stacks (v0.17.45), else "".
+        public string Origin { get; } = origin;
         public double Amount { get; set; }
     }
 
     private readonly LinkedList<Chunk> _chunks = new();
 
-    public void Apply(ulong applierId, double amount)
+    public void Apply(ulong applierId, double amount, string origin = "")
     {
         if (amount > 0)
         {
-            _chunks.AddLast(new Chunk(applierId) { Amount = amount });
+            _chunks.AddLast(new Chunk(applierId, origin) { Amount = amount });
             return;
         }
         var remove = -amount;
@@ -32,6 +34,9 @@ public sealed class FifoLedger
 
     /// The player whose stacks are active now (0 = none, or an enemy's own stacks).
     public ulong Current => _chunks.First?.Value.Applier ?? 0;
+
+    /// Where the stacks active now came from ("Relic:…", "Potion:…" or "").
+    public string CurrentOrigin => _chunks.First?.Value.Origin ?? "";
 
     /// Each applier's share of the turns still queued (sum = 1; applier 0 = enemy or unknown).
     public IEnumerable<(ulong ApplierId, double Share)> Remaining()
