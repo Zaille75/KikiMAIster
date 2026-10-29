@@ -49,8 +49,11 @@ public sealed record CombatEnded(bool Victory, double Seconds = 0) : StatEvent;
 /// One damage instance. Hp excludes overkill. For damage-over-time, Dealer is None and Source is Dot.
 /// Kind (v0.17.39), on a player only: "attack" (an enemy's move), "reaction" (an enemy's power: Thorns…), "status" (a status
 /// or curse card), "dot" (Poison, Doom… on the player); "" = from the dealer (self, ally, other).
+/// OverkillAvoidable (v0.17.42): the overkill came from a single-target attack the player aimed while another enemy was
+/// alive (else unavoidable: last enemy, all-enemies or random hits, powers, relics…).
 public sealed record DamageDealt(
-    Actor Dealer, Actor Target, int Blocked, int Hp, int Overkill, bool Killed, Source Source, string Kind = "") : StatEvent;
+    Actor Dealer, Actor Target, int Blocked, int Hp, int Overkill, bool Killed, Source Source, string Kind = "",
+    bool OverkillAvoidable = false) : StatEvent;
 
 /// Block added on Receiver. Giver is the player who created it (card owner, potion user…).
 /// PlayId: the card play that gave the block (0 = not a card the player chose: relic, power, potion, auto-play).

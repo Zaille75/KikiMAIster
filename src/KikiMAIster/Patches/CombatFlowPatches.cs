@@ -26,6 +26,15 @@ public static class CombatFlowPatches
     private static int _floor;
     /// The fight being played: its real time, and its record key (encounter, ascension, players, solo character, v0.17.39).
     private static readonly System.Diagnostics.Stopwatch FightClock = new();
+    /// Time of the last enemy killed: a won fight lasts from its start to that death, not to the end of the last
+    /// animations (v0.17.42, Zaille75). Null when no enemy died (they fled): the fight's end is used.
+    private static double? _lastKillSeconds;
+
+    /// An enemy died (any cause).
+    public static void EnemyKilled()
+    {
+        if (_combatOpen) _lastKillSeconds = FightClock.Elapsed.TotalSeconds;
+    }
     private static string? _fightKey;
 
     /// The ascension level of the run being played (group compositions are counted per level).
@@ -45,8 +54,9 @@ public static class CombatFlowPatches
         BlockAlternatives.ResolveCombat();
         BlockAndPowerPatches.Reset();
         Capture.Safe("rest before the boss", () => RestSitePatches.OnCombatEnded(victory));
-        var seconds = FightClock.Elapsed.TotalSeconds;
+        var seconds = victory && _lastKillSeconds is { } kill ? kill : FightClock.Elapsed.TotalSeconds;
         FightClock.Reset();
+        _lastKillSeconds = null;
         Capture.Emit(new CombatEnded(victory, seconds));
         Capture.LogUnknownSources();
         if (victory && _fightKey != null && Capture.Engine.LastCombat is { } fight)
@@ -134,6 +144,7 @@ public static class CombatFlowPatches
             BlockAndPowerPatches.Reset();
             _combatOpen = true;
             FightClock.Restart();
+            _lastKillSeconds = null;
             _fightKey = null;
             Capture.Safe("fight key", () =>
             {

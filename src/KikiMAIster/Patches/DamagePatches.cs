@@ -125,6 +125,7 @@ public static class DamagePatches
         public static void Postfix(Creature __instance, DamageResult __result) => Capture.Safe("LoseHpInternal", () =>
         {
             if (!CombatManager.Instance.IsInProgress) return;
+            if (__instance.IsEnemy && __instance.CurrentHp <= 0) CombatFlowPatches.EnemyKilled();
             LastCallOnTarget.TryGetValue(__instance, out var call);
             Pending.Add(new PendingHit(__result, call));
         });
@@ -213,15 +214,22 @@ public static class DamagePatches
             : card is { Type: CardType.Status or CardType.Curse } ? "status"
             : dealerActor.IsEnemy && source.Kind == SourceKind.Power ? "reaction"
             : dealerActor.IsEnemy ? "attack" : "";
+        // Overkill of a single-target attack aimed while another enemy was alive: avoidable (v0.17.42).
+        var avoidable = r.OverkillDamage > 0 && card is { Type: CardType.Attack, TargetType: TargetType.AnyEnemy } && dealer is { IsEnemy: false } &&
+                        target.IsEnemy && target.CombatState is { } cs &&
+                        cs.HittableEnemies.Any(e => e != target && e.IsAlive && e.HpDisplay == HpDisplay.Normal);
         Capture.Emit(new DamageDealt(dealerActor, Capture.ToActor(target),
-            r.BlockedDamage, r.UnblockedDamage, r.OverkillDamage, r.WasTargetKilled, source, kind));
+            r.BlockedDamage, r.UnblockedDamage, r.OverkillDamage, r.WasTargetKilled, source, kind, avoidable));
         if (card != null && target.IsEnemy && r.UnblockedDamage > 0) CreditHelpers(card, dealer, target, r.UnblockedDamage);
         if (card == null && source.Kind == SourceKind.Potion && target.IsEnemy && r.WasTargetKilled && Capture.PotionUser is { } drinker)
             Capture.Safe("potion after attacks", () => BlockAlternatives.OnPotionHit(drinker, $"Potion:{source.Id}", target,
                 r.BlockedDamage + r.UnblockedDamage + r.OverkillDamage, r.OverkillDamage));
         if (card is Unleash or Protector && dealer is { IsPet: true } pet && target.IsEnemy && r.UnblockedDamage > 0)
             Capture.Safe("pet HP attack", () => ReportPetHpAttack(card, pet, r.UnblockedDamage));
-        if (card != null) BlockAlternatives.OnHit(card, target, r.BlockedDamage + r.UnblockedDamage, dealer);
+        if (card != null) BlockAlternatives.OnHit(card, target, r.BlockedDamage + r.UnblockedDamage, dealer, r.OverkillDamage, r.WasTargetKilled);
+        // A player's power hitting an enemy right after a card (Trou noir): follow-up of that card (v0.17.42).
+        else if (source.Kind == SourceKind.Power && target.IsEnemy && dealer is { IsPlayer: true })
+            BlockAlternatives.OnFollowUpHit(dealer, source.ToString(), target, r.BlockedDamage + r.UnblockedDamage + r.OverkillDamage);
         // Orb hits Focus boosts (Lightning, Glass). A Dark orb's evoke deals what it stored before: Focus gained now
         // would not change it (its charging is checked in DarkCharged).
         if (source is { Kind: SourceKind.Orb } orb && (orb.Id == ModelDb.GetId<LightningOrb>().Entry || orb.Id == ModelDb.GetId<GlassOrb>().Entry) &&

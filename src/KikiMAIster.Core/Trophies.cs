@@ -36,6 +36,9 @@ public static class Trophies
         // Mirror of the Bricklayer (v0.17.28): the least useless block (victory only).
         new("trophy.efficientBlock", s => s.UnusedBlock, LowerIsBetter: true),
         new("trophy.useless", s => s.UnusedBlock, Fun: true),
+        // Overkill (v0.17.42, Zaille75): the least (victory only) and the most damage beyond the enemies' HP.
+        new("trophy.efficientDamage", s => s.Overkill, LowerIsBetter: true),
+        new("trophy.overkill", s => s.Overkill, Fun: true),
         new("trophy.energySurplus", s => s.EnergySurplus + s.EnergyUseless, Fun: true),
         new("trophy.missed", s => s.MissedTotal, Fun: true),
         new("trophy.friendly", s => s.FriendlyDamage + s.MissedByKind.GetValueOrDefault("allyBlockKept"), CoopOnly: true, Fun: true),

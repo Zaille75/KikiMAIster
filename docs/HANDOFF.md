@@ -1,4 +1,4 @@
-# Handoff — state of the project (2026-10-29, v0.17.41)
+# Handoff — state of the project (2026-10-29, v0.17.42)
 
 > **Next session starts with Zaille75's next co-op test (beta branch, v0.17.38 or later).** He will send it with
 > `Envoyer-a-Claude.bat` → `logs/inbox/<date_time>/` (both logs + F9 `feedback/` folders). **Review and summarize every
@@ -143,6 +143,16 @@ Order: test → default branch → release prep → publish → maintenance. The
 
 Optional roadmap items (only if asked): JSON export, end-of-run Totals / Per act tabs, MVP line, opacity / scale /
 hotkey settings, chart history across Save & Quit.
+
+## v0.17.42 — Régent solo run feedback (2026-10-29, not tested in game)
+Log `logs/inbox/2026-10-29_20-06-37/` (main branch, v0.17.40, A9, 15 fights). Fixed: the map history read crashed on every
+fight room since v0.17.38 (`GetByIdOrNull<EventModel>` on an encounter id) → no HP lost / healed outside fights, 17,000
+log errors; a failed read is no longer retried until a floor is added. New (Zaille75's 6 reports): Excédent column +
+Bulldozer / Chirurgien; Gâché "overkill" / "overkillFollowUp" (Trou noir); Slow order between attacks (co-op too, ≥ 1
+damage); "Hors combat" misplay (Max HP after a capped heal, `maxHpAfterHeal`); fight time stops at the last enemy's death;
+`UI/HoverTip.cs` (trophies window hover texts to the right). Check in the next logs: `max HP after a capped heal`,
+`MissedChance … overkill`, no `RunHistory.Read` error, and `run history …: HP lost outside [...]` filled.
+Zaille75 switches between beta and main: give the install path he asks for.
 
 ## v0.17.41 — review section 4 (2026-10-29, not tested in game)
 The end-of-turn misplay rules moved from `Patches/BlockAlternatives.cs` to `Core/TurnReview.cs` (pure, 10 tests in

@@ -177,8 +177,7 @@ public static class RunSummary
             var l = Overlay.MakeLabel(Loc.T(h), Overlay.Muted);
             if (Loc.Has($"{h}.tip"))
             {
-                l.TooltipText = Loc.T($"{h}.tip");
-                l.MouseFilter = Control.MouseFilterEnum.Stop;
+                HoverTip.Set(l, Loc.T($"{h}.tip"));
             }
             grid.AddChild(l);
         }
@@ -193,8 +192,7 @@ public static class RunSummary
             if (ended && c.NeedsVictory && !_victory) continue;
             var winner = Trophies.Winner(c, run);
             var name = Overlay.MakeLabel(Loc.T(c.Key), c.Fun ? Overlay.Muted : Overlay.Text);
-            name.TooltipText = Loc.T($"{c.Key}.tip");
-            name.MouseFilter = Control.MouseFilterEnum.Stop;
+            HoverTip.Set(name, Loc.T($"{c.Key}.tip"));
             grid.AddChild(name);
             if (winner is not { } w)
             {
@@ -207,11 +205,10 @@ public static class RunSummary
                     Overlay.PlayerColor(w.Id)));
                 // Hovering the winning value shows every player's score (v0.17.0).
                 var value = Overlay.MakeLabel(Overlay.N(w.Value), Overlay.Text, HorizontalAlignment.Right);
-                value.TooltipText = Loc.T("run.others") + ":\n" + string.Join('\n', run.Where(kv => c.CanWin(kv.Value))
+                HoverTip.Set(value, Loc.T("run.others") + ":\n" + string.Join('\n', run.Where(kv => c.CanWin(kv.Value))
                     .Select(kv => (Id: kv.Key, Value: c.Value(kv.Value)))
                     .OrderBy(x => c.LowerIsBetter ? x.Value : -x.Value).ThenBy(x => x.Id)
-                    .Select(x => $"{engine.Players.GetValueOrDefault(x.Id)?.Name ?? x.Id.ToString(CultureInfo.InvariantCulture)}: {Overlay.N(x.Value)}"));
-                value.MouseFilter = Control.MouseFilterEnum.Stop;
+                    .Select(x => $"{engine.Players.GetValueOrDefault(x.Id)?.Name ?? x.Id.ToString(CultureInfo.InvariantCulture)}: {Overlay.N(x.Value)}")));
                 grid.AddChild(value);
             }
             // Records at this run's ascension level (v0.17.24); hovering shows the record of every level together.
@@ -221,8 +218,7 @@ public static class RunSummary
                 newRecord ? Overlay.Accent : Overlay.Muted);
             if (book.Best(c.Key, coop) is { } anyLevel)
             {
-                recordCell.TooltipText = $"{Loc.T("run.allLevels")}: {Overlay.N(anyLevel.Value)} ({anyLevel.Name}, {anyLevel.Date})";
-                recordCell.MouseFilter = Control.MouseFilterEnum.Stop;
+                HoverTip.Set(recordCell, $"{Loc.T("run.allLevels")}: {Overlay.N(anyLevel.Value)} ({anyLevel.Name}, {anyLevel.Date})");
             }
             grid.AddChild(recordCell);
             var personal = winner is { } pw ? book.Personal(c.Key, pw.Id, coop, level) : null;
@@ -238,9 +234,8 @@ public static class RunSummary
             var all = book.Characters(c.Key, coop, level).ToList();
             if (all.Count > 0)
             {
-                cell.TooltipText = string.Join('\n', all.Select(x =>
-                    $"{GameNames.Of($"Character:{x.Character}")}: {Overlay.N(x.Entry.Value)} ({x.Entry.Name}, {x.Entry.Date})"));
-                cell.MouseFilter = Control.MouseFilterEnum.Stop;
+                HoverTip.Set(cell, string.Join('\n', all.Select(x =>
+                    $"{GameNames.Of($"Character:{x.Character}")}: {Overlay.N(x.Entry.Value)} ({x.Entry.Name}, {x.Entry.Date})")));
             }
             grid.AddChild(cell);
         }

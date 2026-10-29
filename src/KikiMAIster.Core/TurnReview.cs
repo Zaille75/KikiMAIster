@@ -63,6 +63,13 @@ public sealed record Better(object Card, string Key, int Value, int Played);
 /// A card seen in hand when a card was played.
 public readonly record struct SeenCard(object Card, string Key);
 
+/// A hit of a card on an enemy: raw damage (HP + block, overkill left out) and the enemy's Slow when hit (cards played
+/// before it this turn, each +10% attack damage; -1 without Slow).
+public readonly record struct EnemyHit(object Target, int Raw, int Slow);
+
+/// Damage dealt right after a card by something it triggered (Trou noir after Stars were spent), on one enemy.
+public readonly record struct FollowUpHit(string Source, object Target, int Raw);
+
 /// A card the player chose to play this turn (auto-plays are not choices). Filled during the turn by the capture layer.
 public class TurnPlay
 {
@@ -96,8 +103,26 @@ public class TurnPlay
     public Better? PenNibBetter { get; set; }
     public Better? BiggerBlock { get; set; }
 
+    /// Hits on enemies (v0.17.42: moved here from the capture layer).
+    public List<EnemyHit> Hits { get; } = new();
+    /// Cards in the allies' hands when it was played (co-op order against Slow, v0.17.42).
+    public HashSet<object> AlliesHandAtPlay { get; init; } = new(ReferenceEqualityComparer.Instance);
+    /// Single-target attack (v0.17.42): the enemy aimed at and its HP + block before the card.
+    public object? Target { get; init; }
+    public int TargetLeftBefore { get; init; }
+    /// The card killed its target, with that much damage beyond its HP.
+    public bool KilledTarget { get; set; }
+    public int Overkill { get; set; }
+    /// The card's estimated damage on each enemy when it was played (enemies whose hit count is unknown are missing).
+    public Dictionary<object, int> DamageOn { get; init; } = new(ReferenceEqualityComparer.Instance);
+    /// Estimated damage on the target of each attack in hand when it was played.
+    public Dictionary<object, int> HandDamageOnTarget { get; init; } = new(ReferenceEqualityComparer.Instance);
+    /// Damage it triggered right after (Trou noir…).
+    public List<FollowUpHit> FollowUps { get; } = new();
+
     /// The first enemy it hit, with all the raw damage it dealt to that enemy; null when it hit no enemy.
-    public virtual (object Target, int Damage)? FirstHit => null;
+    public (object Target, int Damage)? FirstHit =>
+        Hits.Count == 0 ? null : (Hits[0].Target, Hits.Where(h => ReferenceEquals(h.Target, Hits[0].Target)).Sum(h => h.Raw));
 }
 
 /// Damage or block a later card or potion would have added to an earlier play (wrong order, spec §E0).
@@ -172,8 +197,10 @@ public static class TurnReview
     public static TurnResult Resolve(TurnState s)
     {
         var r = new TurnResult();
+        SlowAttackOrder(s);
         ResolveOrder(s, r);
         WeakPlays(s, r);
+        Overkills(s, r);
         foreach (var p in s.Players.Where(p => p.Alive)) EndOfTurnChecks(s, p, r);
         foreach (var p in s.Players.Where(p => p.Alive)) FreeCardsLeft(s, p, r);
         var used = new HashSet<object>(ReferenceEqualityComparer.Instance);
@@ -212,6 +239,71 @@ public static class TurnReview
             if (amount < 1) continue;
             r.Log.Add($"wrong order: {early.CardKey} before {boost}, {kind} {amount}");
             r.Events.Add(new MissedChance(early.Owner, kind, new[] { early.CardKey, boost, N(amount) }));
+        }
+    }
+
+    /// Slow (Ralenti): each card played makes the enemy take 10% more attack damage, so attacks on it should go from the
+    /// smallest to the biggest (v0.17.42, Zaille75). A bigger attack played before a smaller one that was already in a hand
+    /// (the player's own, or an ally's in co-op) lost 10% × (its base − the smaller one's base) per card played between
+    /// them. Counted for the player of the bigger attack, in Choix ("orderSlow"), when at least 1 damage is lost.
+    private static void SlowAttackOrder(TurnState s)
+    {
+        var attacks = s.Plays.Where(p => p.Kind == CardKind.Attack && !p.HadNonDamageEffect).ToList();
+        for (var i = 0; i < attacks.Count; i++)
+            for (var j = i + 1; j < attacks.Count; j++)
+            {
+                var (early, late) = (attacks[i], attacks[j]);
+                var inHand = early.Owner == late.Owner
+                    ? early.HandAtPlay.Any(c => ReferenceEquals(c, late.CardRef))
+                    : early.AlliesHandAtPlay.Contains(late.CardRef);
+                if (!inHand) continue;
+                foreach (var target in early.Hits.Where(h => h.Slow >= 0).Select(h => h.Target).Distinct(ReferenceEqualityComparer.Instance))
+                {
+                    var earlyHits = early.Hits.Where(h => ReferenceEquals(h.Target, target) && h.Slow >= 0).ToList();
+                    var lateHits = late.Hits.Where(h => ReferenceEquals(h.Target, target) && h.Slow >= 0).ToList();
+                    if (lateHits.Count == 0) continue;
+                    double Base(List<EnemyHit> hits) => hits.Sum(h => h.Raw / (1 + 0.1 * h.Slow));
+                    var gap = lateHits[0].Slow - earlyHits[0].Slow;
+                    var extra = 0.1 * gap * (Base(earlyHits) - Base(lateHits));
+                    if (gap > 0 && extra > 0) s.OrderLosses.Add(new OrderLoss(early, late.CardKey, "orderSlow", target, extra));
+                }
+            }
+    }
+
+    /// An attack wasted on an enemy that would have died anyway (v0.17.42, Zaille75), counted in Gâché:
+    /// - "overkillFollowUp": the card killed its target, but what it triggered right after (Trou noir) would have killed it
+    ///   alone; aimed at another enemy still alive at the end of the turn, it would have dealt its damage there;
+    /// - "overkill": the card killed its target with damage to spare, then a smaller attack that was in hand and would have
+    ///   killed it too hit another enemy, still alive at the end of the turn: swapped, that enemy took more.
+    /// The damage lost is capped by what that enemy had left.
+    private static void Overkills(TurnState s, TurnResult r)
+    {
+        int Left(object enemy) => s.EnemiesLeft.GetValueOrDefault(enemy);
+        foreach (var big in s.Plays.Where(p => p.Kind == CardKind.Attack && p.Target != null && p.KilledTarget && p.Overkill > 0 && !p.HadNonDamageEffect))
+        {
+            var others = big.DamageOn.Where(kv => !ReferenceEquals(kv.Key, big.Target) && Left(kv.Key) > 0).ToList();
+            if (others.Count == 0) continue;
+            var followUp = big.FollowUps.Where(f => !ReferenceEquals(f.Target, big.Target)).GroupBy(f => f.Source)
+                .Select(g => (Source: g.Key, Damage: g.Min(f => f.Raw))).Where(x => x.Damage >= big.TargetLeftBefore)
+                .OrderByDescending(x => x.Damage).FirstOrDefault();
+            if (followUp.Source != null)
+            {
+                var lost = others.Max(kv => Math.Min(kv.Value, Left(kv.Key)));
+                if (lost < 1) continue;
+                r.Events.Add(new MissedChance(big.Owner, "overkillFollowUp", new[] { big.CardKey, followUp.Source, N(lost) }));
+                continue;
+            }
+            var after = s.Plays.SkipWhile(p => p != big).Skip(1);
+            foreach (var small in after.Where(p => p.Owner == big.Owner && p.Kind == CardKind.Attack && !p.HadNonDamageEffect))
+            {
+                if (!big.HandDamageOnTarget.TryGetValue(small.CardRef, out var onTarget) || onTarget < big.TargetLeftBefore) continue;
+                if (small.FirstHit is not { } hit || ReferenceEquals(hit.Target, big.Target) || Left(hit.Target) <= 0 ||
+                    !big.DamageOn.TryGetValue(hit.Target, out var bigThere)) continue;
+                var lost = Math.Min(bigThere - hit.Damage, Left(hit.Target));
+                if (lost < 1) continue;
+                r.Events.Add(new MissedChance(big.Owner, "overkill", new[] { big.CardKey, small.CardKey, N(lost) }));
+                break;
+            }
         }
     }
 

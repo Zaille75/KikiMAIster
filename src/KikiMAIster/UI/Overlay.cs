@@ -52,11 +52,12 @@ public static class Overlay
 
     /// Declared before Hideable, which reads it during static initialization.
     private static readonly string[] MissedColumns =
-        { "col.lethal", "col.wastedBlock", "col.choices", "col.unusedEnergy", "col.hpAvoidable", "col.relicTrigger", "col.potionsLeft" };
+        { "col.lethal", "col.wastedBlock", "col.choices", "col.unusedEnergy", "col.hpAvoidable", "col.relicTrigger", "col.potionsLeft", "col.missedOutside" };
 
     /// Damage taken, shown after the damage dealt in the same section (v0.14.0).
     /// What your debuffs changed (v0.17.17: shown in Dégâts, no longer in Affaiblissements).
-    private static readonly string[] DebuffEffectColumns = { "col.extraDamage", "col.avoided" };
+    /// Overkill / of which unavoidable (v0.17.42), then what your debuffs changed.
+    private static readonly string[] DebuffEffectColumns = { "col.overkill", "col.extraDamage", "col.avoided" };
 
     private static readonly string[] TakenColumns = { "col.hpLost", "col.fromSelf", "col.fromAllies", "col.hpOutside", "col.healOutside", "col.maxHp" };
 
@@ -83,7 +84,7 @@ public static class Overlay
     /// What the settings menu can hide: every section, and its fixed columns (damage kinds and debuff effect included).
     internal static readonly (string Section, string[] Columns)[] Hideable =
     {
-        ("damage", new[] { "cat.cards", "cat.dot", "cat.powers", "cat.pet", "cat.orbs", "cat.relics", "cat.potions", "cat.other", "col.extraDamage", "col.avoided", "col.hpLost", "col.fromSelf", "col.fromAllies", "col.hpOutside", "col.healOutside", "col.maxHp" }),
+        ("damage", new[] { "cat.cards", "cat.dot", "cat.powers", "cat.pet", "cat.orbs", "cat.relics", "cat.potions", "cat.other", "col.overkill", "col.extraDamage", "col.avoided", "col.hpLost", "col.fromSelf", "col.fromAllies", "col.hpOutside", "col.healOutside", "col.maxHp" }),
         ("protection", new[] { "col.byBlock", "col.byPet", "col.useless", "col.petHp" }),
         ("debuffs", Array.Empty<string>()),
         ("missed", MissedColumns),
@@ -772,6 +773,8 @@ public static class Overlay
             }.Where(x => x != "")));
         return new[] { new Cell("col.total", totalText, tip) }
             .Concat(_damageColumns.Select(c => new Cell(c, N(byColumn.GetValueOrDefault(c)), tip)))
+            // Overkill / of which unavoidable (v0.17.42), like Inutile for block.
+            .Append(new Cell("col.overkill", $"{N(s.Overkill)}/{N(Math.Max(0, s.Overkill - s.OverkillAvoidable))}", tip))
             .Append(new Cell("col.extraDamage", N(extra), tip))
             .Append(new Cell("col.avoided", N(avoided), tip))
             .Append(new Cell("col.hpLost", N(s.HpLost), tip))
@@ -917,7 +920,7 @@ public static class Overlay
                 // Miniature Tent: "Tente miniature : parti sans Repos, Forge".
                 : m.Kind == "tent" && m.Args.Count > 1
                 ? string.Format(Loc.T("why.tent"), GameNames.Of(m.Args[0]), string.Join(", ", m.Args.Skip(1).Select(GameNames.Of)))
-                : string.Format(Loc.T($"why.{m.Kind}"), m.Args.Select(a => (object)(a.Contains(':') ? GameNames.Of(a) : a)).ToArray())));
+                : string.Format(Loc.T($"why.{m.Kind}"), m.Args.Select(a => (object)(a.Contains(':') || a == "Unknown" ? GameNames.Of(a) : a)).ToArray())));
         var tip = lines.Count == 0 ? (s.MissedTotal > 0 ? "" : Loc.T("tip.none")) : string.Join('\n', lines);
         double K(string kind) => s.MissedByKind.GetValueOrDefault(kind);
         return new[]
@@ -929,7 +932,8 @@ public static class Overlay
             new Cell("col.unusedEnergy", N(K("energy")), tip),
             new Cell("col.hpAvoidable", N(s.AvoidableHp), tip),
             new Cell("col.relicTrigger", N(K("relic") + K("paelsTears")), tip),
-            new Cell("col.potionsLeft", N(K("potion")), tip)
+            new Cell("col.potionsLeft", N(K("potion")), tip),
+            new Cell("col.missedOutside", N(s.MissedOutside), tip)
         };
     }
 

@@ -256,6 +256,40 @@ public static class BlockAndPowerPatches
         });
     }
 
+    /// Heals outside fights cut by the Max HP, per player: the floor, the HP cut and what healed (v0.17.42).
+    private static readonly Dictionary<Player, (int Floor, int Cut, string Source)> CappedHeals = new();
+
+    /// Max HP gained outside fights after a heal of the same floor was cut by the old Max HP (Faux marchand: Fiole de sang
+    /// before Mangue): the heal would have counted in full the other way round. A misplay outside fights (v0.17.42,
+    /// Zaille75), with the HP lost.
+    /// The relic, potion or card healing / raising Max HP; else the event or room of the floor ("Event:FAKE_MERCHANT").
+    private static string HealSource(Player player)
+    {
+        var source = Capture.SourceOf(Capture.CallingModelType());
+        if (source.Kind != SourceKind.Unknown) return source.ToString();
+        if (player.RunState.CurrentMapPointHistoryEntry?.Rooms.LastOrDefault()?.ModelId is { } id &&
+            ModelDb.GetByIdOrNull<AbstractModel>(id) is { } model)
+            return $"Event:{Capture.IdOf(model)}";
+        return "Unknown";
+    }
+
+    [HarmonyPatch(typeof(CreatureCmd), nameof(CreatureCmd.GainMaxHp))]
+    public static class GainMaxHp
+    {
+        public static void Prefix(Creature creature, decimal amount) => Capture.Safe("CreatureCmd.GainMaxHp", () =>
+        {
+            if (CombatManager.Instance.IsInProgress || creature.Player is not { } player ||
+                !CappedHeals.TryGetValue(player, out var heal) || heal.Floor != player.RunState.TotalFloor || heal.Cut <= 0) return;
+            var lost = Math.Min(heal.Cut, (int)amount);
+            if (lost <= 0) return;
+            CappedHeals[player] = heal with { Cut = heal.Cut - lost };
+            var source = HealSource(player);
+            ModLog.Info($"max HP after a capped heal: {heal.Source} before {source}, {lost} HP of heal lost");
+            Capture.Emit(new MissedChance(Capture.ToActor(player), "maxHpAfterHeal",
+                new[] { heal.Source, source, lost.ToString(System.Globalization.CultureInfo.InvariantCulture) }));
+        });
+    }
+
     [HarmonyPatch(typeof(CreatureCmd), nameof(CreatureCmd.Heal))]
     public static class Heal
     {
@@ -264,6 +298,13 @@ public static class BlockAndPowerPatches
             if (creature.IsDead) return;
             if (!CombatManager.Instance.IsInProgress)
             {
+                if (creature.IsPlayer && creature.Player is { } healedPlayer && amount > creature.MaxHp - creature.CurrentHp)
+                {
+                    var floor = healedPlayer.RunState.TotalFloor;
+                    var cut = (int)(amount - (creature.MaxHp - creature.CurrentHp));
+                    var previous = CappedHeals.TryGetValue(healedPlayer, out var h) && h.Floor == floor ? h.Cut : 0;
+                    CappedHeals[healedPlayer] = (floor, previous + cut, HealSource(healedPlayer));
+                }
                 // Réparer at a campfire (v0.17.17): the heal given to the ally counts as HP saved for them.
                 if (RestSitePatches.Mender is { } mender && creature.IsPlayer && creature.Player != mender)
                 {

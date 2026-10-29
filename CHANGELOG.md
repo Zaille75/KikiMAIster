@@ -32,6 +32,10 @@ Summary by version line. The detailed notes of every version are in [docs/specs/
   wins per encounter across runs with a "Nouveau record" notice; the build fails and the log warns when a private game
   member the mod reads is renamed; the misplay rules moved to the tested core (no change in game) and a per-fight log
   count of damage / block whose source was not found.
+- **0.17.42:** overkill column (Excédent, avoidable / unavoidable) with Bulldozer and Chirurgien; big attack wasted on an
+  enemy a smaller one or Trou noir would have killed (Gâché); Slow: bigger attack before a smaller one, allies included;
+  Max HP gained after a capped heal (new "Hors combat" misplays); fight time stops at the last kill; HP outside fights
+  shown again (history read fixed); trophy hover texts to the right of the mouse.
 - **Details and records (0.17.39):** enchantment damage, HP lost by kind and heals by source in the details; fight length
   (rounds, time) and fastest-win records per encounter across runs (ascension, players, solo character), with a notice.
 - **Interface:** "Erreurs" (Gâché + Choix) in every tab, sections in their own windows, hide columns at 0, richer details (Protection by block source),

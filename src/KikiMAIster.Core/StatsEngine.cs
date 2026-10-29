@@ -477,6 +477,7 @@ public sealed class StatsEngine
             s.DamageDealt += d.Hp * share;
             s.DamageIntoBlock += d.Blocked * share;
             s.Overkill += d.Overkill * share;
+            if (d.OverkillAvoidable) s.OverkillAvoidable += d.Overkill * share;
             s.BiggestHit = Math.Max(s.BiggestHit, (d.Hp + d.Blocked + d.Overkill) * share);
             PlayerStats.Add(s.DamageBySource, sourceKey, d.Hp * share);
             if (isDot) s.DotDamage += d.Hp * share;

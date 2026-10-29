@@ -19,6 +19,8 @@ public sealed class PlayerStats
     public double DamageDealt { get; set; }
     public double DamageIntoBlock { get; set; }
     public double Overkill { get; set; }
+    /// Overkill of single-target attacks aimed while another enemy was alive (v0.17.42); the rest is unavoidable.
+    public double OverkillAvoidable { get; set; }
     public double TotalRawDamage => DamageDealt + DamageIntoBlock + Overkill;
     public double Kills { get; set; }
     public double BiggestHit { get; set; }
@@ -99,9 +101,12 @@ public sealed class PlayerStats
     /// Block card plays whose block was wasted (gâché, rule F3), counted once per play (saved with the run).
     public double WastedPlayCount { get; set; }
     /// "Gâché" misplays: wasted block card plays + useful free cards left in hand (v0.17.26; growing cards: Choix).
-    public double MissedWasted => WastedPlayCount + MissedByKind.GetValueOrDefault("freeCard") + MissedByKind.GetValueOrDefault("starsWasted");
+    /// v0.17.42: an attack wasted on an enemy a smaller attack or a follow-up (Trou noir) would have killed ("overkill").
+    public double MissedWasted => WastedPlayCount + new[] { "freeCard", "starsWasted", "overkill", "overkillFollowUp" }.Sum(k => MissedByKind.GetValueOrDefault(k));
+    /// Misplays outside fights (v0.17.42): Max HP gained after a heal that was capped by the old Max HP.
+    public double MissedOutside => MissedByKind.GetValueOrDefault("maxHpAfterHeal");
     /// Every missed opportunity counted once (trophies).
-    public double MissedTotal => MissedLethals + MissedWasted + MissedChoices + MissedByKind.GetValueOrDefault("relic") + MissedByKind.GetValueOrDefault("paelsTears") +
+    public double MissedTotal => MissedLethals + MissedWasted + MissedChoices + MissedOutside + MissedByKind.GetValueOrDefault("relic") + MissedByKind.GetValueOrDefault("paelsTears") +
                                  MissedByKind.GetValueOrDefault("potion") + (MissedByKind.GetValueOrDefault("blockKept") > 0 ? 1 : 0) +
                                  (MissedByKind.GetValueOrDefault("allyBlockKept") > 0 ? 1 : 0);
     /// HP lost (own and allies') while a playable block card stayed in hand.

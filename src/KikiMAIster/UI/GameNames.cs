@@ -139,6 +139,7 @@ public static class GameNames
                 PotionModel p => p.Title.GetFormattedText(),
                 OrbModel o => o.Title.GetFormattedText(),
                 EnchantmentModel e => e.Title.GetFormattedText(),
+                EventModel ev => ev.Title.GetFormattedText(),
                 _ => null
             };
             return string.IsNullOrWhiteSpace(title) ? null : title;

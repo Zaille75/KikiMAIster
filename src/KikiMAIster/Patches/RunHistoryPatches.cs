@@ -18,11 +18,28 @@ namespace KikiMAIster.Patches;
 public static class RunHistoryPatches
 {
     private static string _signature = "";
+    /// Floors in the history when a read failed: not tried again (and logged again) until a floor is added (v0.17.42).
+    private static int _failedAt = -1;
 
     /// Reads every player's Max HP changes, HP lost / healed outside fights and campfire choices from the run's map history; emits only when they changed.
     public static void Read(IRunState? run) => Capture.Safe("RunHistory.Read", () =>
     {
         if (run == null) return;
+        var floors = run.MapPointHistory.Sum(a => a.Count());
+        if (floors == _failedAt) return;
+        try
+        {
+            ReadHistory(run);
+        }
+        catch
+        {
+            _failedAt = floors;
+            throw;
+        }
+    });
+
+    private static void ReadHistory(IRunState run)
+    {
         var totals = run.Players.ToDictionary(p => p.NetId, _ => (Gained: 0, Lost: 0, Choices: new Dictionary<string, double>(),
             HpLost: new Dictionary<string, double>(), Healed: new Dictionary<string, double>(), Eco: new double[9]));
         foreach (var act in run.MapPointHistory)
@@ -33,7 +50,8 @@ public static class RunHistoryPatches
                 var fight = point.Rooms.Any(r => r.RoomType is RoomType.Monster or RoomType.Elite or RoomType.Boss);
                 // The Ancients at the start of each act heal to full (shown apart, v0.17.38); Neow first sets HP to 0, so
                 // its "heal" is the whole Max HP: left out.
-                var ancients = point.Rooms.Select(r => r.ModelId is { } id ? ModelDb.GetByIdOrNull<EventModel>(id) : null)
+                // The room's model can be an encounter (a fight room): looked up as any model, never cast (v0.17.42).
+                var ancients = point.Rooms.Select(r => r.ModelId is { } id ? ModelDb.GetByIdOrNull<AbstractModel>(id) : null)
                     .OfType<AncientEventModel>().ToList();
                 var neow = ancients.Any(a => a is Neow);
                 var kind = ancients.Count > 0 ? "ancient"
@@ -73,7 +91,7 @@ public static class RunHistoryPatches
             Capture.Emit(new RunHistoryRead(Capture.ToActor(p), t.Gained, t.Lost, t.Choices, t.HpLost, t.Healed,
                 new RunEconomy(e[0], e[1], e[2] + e[3], e[3], e[4], e[5], e[6], e[7], e[8])));
         }
-    });
+    }
 
     /// A curse card, except the Ascender's Bane every player gets from the ascension level (not a choice).
     private static bool IsCurse(SerializableCard card) =>
@@ -103,7 +121,11 @@ public static class RunHistoryPatches
         string.Join(',', d.OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => $"{kv.Key}={kv.Value}"));
 
     /// A new run: read again even if the figures look the same.
-    public static void Reset() => _signature = "";
+    public static void Reset()
+    {
+        _signature = "";
+        _failedAt = -1;
+    }
 
     /// Several players picked the same relic: the game plays rock-paper-scissors until one is left.
     [HarmonyPatch(typeof(RelicPickingResult), nameof(RelicPickingResult.GenerateRelicFight))]

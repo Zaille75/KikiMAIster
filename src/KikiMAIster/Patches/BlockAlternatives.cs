@@ -35,16 +35,10 @@ public static class BlockAlternatives
     {
         public required Player Player { get; init; }
         public CardModel Card => (CardModel)CardRef;
-        /// Raw damage (HP + block) of each hit this card dealt to an enemy, and the enemy's Slow (cards played before the
-        /// hit this turn, each +10% damage; -1 without Slow).
-        public List<(Creature Target, int Raw, int Slow)> Hits { get; } = new();
         /// Orbs this play triggered (evoke or passive) that Focus boosts, for the wrong-order check of a later Focus
         /// (v0.17.32): Lightning / Glass hits ("order", with their enemy), Frost block ("orderBlock"), Dark charging
         /// ("orderDark": its stored damage). Plasma gives energy, which Focus does not change.
         public List<(Creature? Enemy, string Kind)> OrbTriggers { get; } = new();
-
-        public override (object Target, int Damage)? FirstHit =>
-            Hits.Count == 0 ? null : (Hits[0].Target, Hits.Where(h => h.Target == Hits[0].Target).Sum(h => h.Raw));
     }
 
     private static readonly ConditionalWeakTable<CardPlay, Play> Plays = new();
@@ -88,6 +82,7 @@ public static class BlockAlternatives
         FirstPlays.Clear();
         ExtraTurn.Clear();
         FrontHand.Clear();
+        _justFinished = null;
         TurnPlays.Clear();
         PendingVulnerable.Clear();
     }
@@ -167,14 +162,14 @@ public static class BlockAlternatives
                 var extra = VulnerableFactor(power, power.Owner, player.Creature) - 1;
                 foreach (var e in earlier.Where(p => p.Card.Type == CardType.Attack && !p.HadNonDamageEffect))
                 {
-                    var raw = e.Hits.Where(h => h.Target == power.Owner).Sum(h => h.Raw);
+                    var raw = e.Hits.Where(h => ReferenceEquals(h.Target, power.Owner)).Sum(h => h.Raw);
                     if (raw > 0) OrderLosses.Add(new OrderLoss(e, boost, "order", power.Owner, raw * extra));
                 }
                 break;
             }
             case StrengthPower when power.Owner == player.Creature:
                 foreach (var e in earlier.Where(p => p.Card.Type == CardType.Attack && !p.HadNonDamageEffect))
-                    foreach (var g in e.Hits.GroupBy(h => h.Target))
+                    foreach (var g in e.Hits.GroupBy(h => (Creature)h.Target))
                         OrderLosses.Add(new OrderLoss(e, boost, "order", g.Key, (double)amount * g.Count() *
                             (g.Key.GetPower<VulnerablePower>() is { } v ? VulnerableFactor(v, g.Key, player.Creature) : 1)));
                 break;
@@ -199,12 +194,18 @@ public static class BlockAlternatives
         return f > 1 ? f : 1.5;
     }
 
-    /// A hit of the card play in progress on an enemy (for the wrong-order check).
-    public static void OnHit(CardModel card, Creature target, int raw, Creature? dealer = null)
+    /// A hit of the card play in progress on an enemy (for the wrong-order and overkill checks). Raw: block + HP, the overkill
+    /// apart.
+    public static void OnHit(CardModel card, Creature target, int raw, Creature? dealer = null, int overkill = 0, bool killed = false)
     {
         if (raw <= 0 || !target.IsEnemy || !InProgress.TryPeek(out var play) || play == null || play.Card != card) return;
         var slow = target.GetPower<SlowPower>() is { } power ? (int)power.DynamicVars["SlowAmount"].BaseValue : -1;
-        play.Hits.Add((target, raw, slow));
+        play.Hits.Add(new EnemyHit(target, raw, slow));
+        if (killed && ReferenceEquals(target, play.Target))
+        {
+            play.KilledTarget = true;
+            play.Overkill += overkill;
+        }
         // Hit by the player after a Strength drop it could have been played before (Osty does not use Strength).
         if (dealer != play.Player.Creature) return;
         foreach (var (drop, loss) in StrengthDrops.Where(d => d.Play.Player == play.Player && d.Play.HandAtPlay.Contains(card)))
@@ -219,7 +220,7 @@ public static class BlockAlternatives
     {
         if (raw <= 0) return;
         var earlier = ThisTurn.Where(p => p.Player == player && p.Card.Type == CardType.Attack && !p.HadNonDamageEffect)
-            .Select(p => (Play: p, Damage: p.Hits.Where(h => h.Target == target).Sum(h => h.Raw))).Where(x => x.Damage > 0).ToList();
+            .Select(p => (Play: p, Damage: p.Hits.Where(h => ReferenceEquals(h.Target, target)).Sum(h => h.Raw))).Where(x => x.Damage > 0).ToList();
         if (earlier.Count == 0) return;
         // The enemy's HP + block before those attacks = what the potion met + what the attacks took.
         var before = raw - overkill + earlier.Sum(x => x.Damage);
@@ -291,12 +292,24 @@ public static class BlockAlternatives
 
     public static void OnPlayFinished()
     {
-        if (InProgress.Count > 0) InProgress.Pop();
+        if (InProgress.Count > 0 && InProgress.Pop() is { } play) _justFinished = play;
+    }
+
+    /// The card play that just ended (until the next one starts): what it triggers afterwards (Trou noir after Stars were
+    /// spent, AfterCardPlayed) is its follow-up (v0.17.42).
+    private static Play? _justFinished;
+
+    /// Damage from one of the player's powers on an enemy: a follow-up of the card they just played.
+    public static void OnFollowUpHit(Creature dealer, string source, Creature target, int raw)
+    {
+        if (raw <= 0 || _justFinished is not { } play || play.Player.Creature != dealer) return;
+        play.FollowUps.Add(new FollowUpHit(source, target, raw));
     }
 
     /// Card play starts: remember the useful cards in the player's hand. Auto-played cards were not a choice.
     public static void OnPlayStarted(CardPlay cardPlay)
     {
+        _justFinished = null;
         if (IsGrowing(cardPlay.Card)) GrowingPlayed.Add(cardPlay.Card);
         if (!TurnPlays.TryGetValue(Capture.PlayerOf(cardPlay), out var counts)) TurnPlays[Capture.PlayerOf(cardPlay)] = counts = new();
         counts[cardPlay.Card.Type] = counts.GetValueOrDefault(cardPlay.Card.Type) + 1;
@@ -317,8 +330,14 @@ public static class BlockAlternatives
         if (!FrontHand.ContainsKey(Capture.PlayerOf(cardPlay)))
             FrontHand[Capture.PlayerOf(cardPlay)] = FindLethal(Capture.PlayerOf(cardPlay), hand.Append(cardPlay.Card).Distinct().ToList(),
                 (Capture.PlayerOf(cardPlay).PlayerCombatState?.Energy ?? 0) + cardPlay.Resources.EnergySpent);
+        var aim = Aim(cardPlay, hand);
         var play = new Play
         {
+            Target = aim.Target,
+            TargetLeftBefore = aim.Left,
+            DamageOn = aim.DamageOn,
+            HandDamageOnTarget = aim.HandDamage,
+            AlliesHandAtPlay = AlliesHand(Capture.PlayerOf(cardPlay)),
             Id = ++_nextId,
             Player = Capture.PlayerOf(cardPlay),
             Owner = Capture.ToActor(Capture.PlayerOf(cardPlay)),
@@ -347,6 +366,41 @@ public static class BlockAlternatives
         FirstPlays[cardPlay.Card] = play;
         ThisTurn.Add(play);
         InProgress.Push(play);
+    }
+
+    /// A single-target attack: its target, the target's HP + block, the card's estimated damage on each enemy and that of
+    /// every other single-target attack in hand on the target (overkill checks, v0.17.42).
+    private static (Creature? Target, int Left, Dictionary<object, int> DamageOn, Dictionary<object, int> HandDamage) Aim(CardPlay cardPlay,
+        IEnumerable<CardModel> hand)
+    {
+        var damageOn = new Dictionary<object, int>(ReferenceEqualityComparer.Instance);
+        var handDamage = new Dictionary<object, int>(ReferenceEqualityComparer.Instance);
+        var card = cardPlay.Card;
+        if (card.Type != CardType.Attack || card.TargetType != TargetType.AnyEnemy || cardPlay.Target is not { IsEnemy: true } target ||
+            card.CombatState is not { } combat)
+            return (null, 0, damageOn, handDamage);
+        try
+        {
+            foreach (var e in RealEnemies(combat).Where(e => HitCount(card, e) != null)) damageOn[e] = EstimateDamage(card, e);
+            foreach (var c in hand.Where(c => c != card && c.Type == CardType.Attack && c.TargetType == TargetType.AnyEnemy && HitCount(c, target) != null))
+                handDamage[c] = EstimateDamage(c, target);
+        }
+        catch (Exception e)
+        {
+            ModLog.Error("overkill estimates", e);
+        }
+        return (target, target.CurrentHp + target.Block, damageOn, handDamage);
+    }
+
+    /// The cards in the other players' hands (co-op order against Slow).
+    private static HashSet<object> AlliesHand(Player player)
+    {
+        var cards = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        foreach (var p in player.Creature.CombatState?.Players ?? Array.Empty<Player>())
+            if (p != player)
+                foreach (var c in p.PlayerCombatState?.Hand.Cards ?? Array.Empty<CardModel>())
+                    cards.Add(c);
+        return cards;
     }
 
     /// The play id to attach to block gained from this card play (0 if not tracked).
