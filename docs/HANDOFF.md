@@ -1,4 +1,4 @@
-# Handoff — state of the project (2026-10-29, v0.17.45)
+# Handoff — state of the project (2026-10-30, v0.18.0)
 
 > **Next session starts with Zaille75's next co-op test (beta branch, v0.17.38 or later).** He will send it with
 > `Envoyer-a-Claude.bat` → `logs/inbox/<date_time>/` (both logs + F9 `feedback/` folders). **Review and summarize every
@@ -22,8 +22,15 @@ wrong-order misses, Waterfall Giant invulnerable phase, fights kept across Save 
   `Envoyer-a-Claude.bat` (from `dist/tools/`, git-ignored: it holds the server address): each send is a folder
   `logs/inbox/<date_time>/` with his `feedback/` folder of reports + both logs. **Always review and summarize first, and
   wait for his go before changing code.** Each report folder has `message.txt`, `screenshot.png` (read it with the Read tool),
-  `state.txt`, `run.txt`, `log-tail.txt`. After reading, move them to `logs/feedback-<date>/`. The public 1.0 build must
-  use `-p:PublicRelease=true` (no F9 window).
+  `state.txt`, `run.txt`, `log-tail.txt`, `errors.txt` (v0.18.0), plus a zip of the folder. After reading, move them
+  to `logs/feedback-<date>/`. Since v0.18.0 reports are anonymised (players are "Joueur N", ids "id-joueur-N").
+- **Public reports (v0.18.0, 1.0 players):** the public build (`-p:PublicRelease=true`) keeps F9. "Créer le rapport"
+  makes the zip, opens its folder and the GitHub issue form (`.github/ISSUE_TEMPLATE/report.yml`); the player drops the
+  zip on the issue. Read them with `gh issue list --label report` once `gh` is installed. Same rule: summarize, wait for
+  Zaille75's go.
+- **Privacy before anything public on GitHub (Zaille75, 2026-10-30):** check that no personal info is in the files or
+  history: friends' nicknames, Steam ids, Windows user names, server address, local paths. Real values live only in
+  `docs/HANDOFF.local.md` (git-ignored). Tests use neutral names ("Kiki", "Max").
   - Read it by grepping: `EVENT <Type>`, `===== COMBAT SUMMARY`, `block play N:` lines, and errors.
   - Then archive it as `logs/<date>_v<version>_<short-topic>.log`. `logs/` is git-ignored because it contains friends' Steam IDs.
 - **Every change:**
@@ -34,7 +41,7 @@ wrong-order misses, Waterfall Giant invulnerable phase, fights kept across Save 
      `docs/HANDOFF.local.md` (git-ignored, this machine only):
      ```powershell
      $m = "<game folder>\mods\KikiMAIster"
-     scp "<user>@<server>:projets/KikiMAIster/dist/beta/KikiMAIster/*" "$m"
+     scp "<user>@<server>:<repo>/dist/beta/KikiMAIster/*" "$m"
      ```
 - The mod writes `KikiMAIster.log` next to its DLL, in the game's `mods\KikiMAIster` folder on Windows. Zaille75 copies it from there.
 - **Git:** private GitHub repo `git@github.com:Zaille75/KikiMAIster.git` (`origin`, SSH key `~/.ssh/id_ed25519`).
@@ -144,8 +151,16 @@ Order: test → default branch → release prep → publish → maintenance. The
 Optional roadmap items (only if asked): JSON export, end-of-run Totals / Per act tabs, MVP line, opacity / scale /
 hotkey settings, chart history across Save & Quit.
 
+## v0.18.0 — reports for every player (2026-10-30, not tested in game)
+F9 in every build, a "Signaler un problème (F9)" button in the settings, FR/EN window, anonymised files
+(`Core/Anonymizer`, tests), zip, `errors.txt`, error hint at the bottom of the panel, GitHub issue form; the DLL keeps no
+local path (`PathMap`, no SourceLink). To check in game: F9 then "Enregistrer" (dev build) writes the folder + zip, and
+the files show "Joueur 1/2" instead of names in co-op; the ⚠ line shows after an error and goes away after a report.
+**Open before going public:** the git history still holds friends' nicknames in older commits (see the end of this
+conversation's report); decide whether to rewrite it or publish a fresh history.
+
 ## v0.17.45 — co-op runs of 2026-10-29 (not tested in game)
-Inbox `logs/inbox/2026-10-29_22-44-39/` (Kiki, main, v0.17.44: two co-op runs with Max, 31 fights) + Max's reports in
+Inbox `logs/inbox/2026-10-29_22-44-39/` (player 1, main, v0.17.44: two co-op runs with Max, 31 fights) + Max's reports in
 `logs/inbox/feedback-2/`. Full card-by-card check of the log: every stat recomputed from the events matched the mod (run 1 at
 21:29, run 2 at the end), block values matched the cards, all damage differences came from game effects. Fixed: player names
 failing at run start (Player#1 / Steam ids), Cliquetis counted with Osty dead, Sursis named as a card for the energy left,
@@ -227,8 +242,8 @@ check especially:
   if `dist/` is ever wiped.
 
 ## Open topics for the next conversation
-- **"Ce groupe" differs between players (2026-10-29, kept open by Zaille75):** each PC reads its own game run history (Kiki
-  524 runs, Max 149), so the group stats differ. Fixing it would need sending the history between players.
+- **"Ce groupe" differs between players (2026-10-29, kept open by Zaille75):** each PC reads its own game run history (one player
+  524 runs, the other 149), so the group stats differ. Fixing it would need sending the history between players.
 - **Event outcomes not tracked yet (audit v0.17.35, decision pending with Zaille75):** cards gained / removed, upgrades,
   transforms, enchantments, relics gained / lost / traded, potions gained / thrown away, which event option was chosen,
   who decided in the 8 shared co-op events (JungleMazeAdventure, DenseVegetation, MorphicGrove, PunchOff,
@@ -239,12 +254,12 @@ check especially:
   run totals were restored from the file saved after fight 8, so the crashed attempt never reached the Partie stats.
   14 and 24 fixed in v0.17.3 from the game's own logs (`logs/game/`, copied from
   `C:\Users\<user>\AppData\Roaming\SlayTheSpire2\logs`; they contain the mod's lines too and keep older sessions).
-  The "crash" was no crash: the game waited for Kiki to end turn 6 (Mante Chapardeuse), then was quit normally.
+  The "crash" was no crash: the game waited for the other player to end turn 6 (Mante Chapardeuse), then was quit normally.
   Since v0.17.1 the mod also keeps `KikiMAIster.previous.log`.
 - **First co-op run with v0.16.8 (2026-10-28): 27 feedback points.** v0.17.0 did the ones that did not need the log
   (1–9, 11, 12, 16–21, 25, 26: see 02-ui v0.17.0). **Waiting for the log** ("log transferred") for: 10 (Âme sœur cards
   created in the other player's deck not in Coop), 13 (crash mid-fight: did the Run stats keep the first attempt?),
-  14 (fight 1 T2: Nox got 2 PV sauvés, expected 0–1), 15 (Déflagration tombale counted as a misplay), 22 (unused
+  14 (fight 1 T2: a player got 2 PV sauvés, expected 0–1), 15 (Déflagration tombale counted as a misplay), 22 (unused
   energy counted when the block was not needed), 23 (Esquisse not in "Cartes données"), 24 (missed lethal fight 4 T4),
   27 (Max's many "À l'attaque !" in Affaiblissements; then clear that record: `RecordBook.Clear("trophy.debuffs")`).
 - New trophy names (Culturiste, Peau sur les os) are proposals.

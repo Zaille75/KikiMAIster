@@ -5,6 +5,8 @@ Summary by version line. The detailed notes of every version are in [docs/specs/
 
 ## Unreleased (towards 1.0)
 - README (English / French), MIT license, icon.
+- **0.18.0:** F9 (or the settings button) makes an anonymised report zip and opens the GitHub issue form; the panel
+  shows a ⚠ line when the mod noted an internal error.
 
 ## 0.17 — co-op feedback, pets, compositions, campfires
 - **0.17.45:** relics get their share of damage and block (Reliques), Soufre's enemy Strength charged to its owner,

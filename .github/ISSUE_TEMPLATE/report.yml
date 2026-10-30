@@ -1,0 +1,35 @@
+name: Report / Signaler
+description: A bug, a wrong stat or an idea (made with F9 in game) · Un bug, une stat fausse ou une idée (F9 en jeu)
+labels: ["report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Drop the zip made by F9 in the description box below** (it is in `mods/KikiMAIster/feedback/`; player names and Steam ids are already removed).
+        **Glisse le zip créé par F9 dans la case de description ci-dessous** (il est dans `mods/KikiMAIster/feedback/` ; les noms des joueurs et les ids Steam sont déjà retirés).
+  - type: input
+    id: kind
+    attributes:
+      label: Type
+      placeholder: Bug / Wrong stat / Idea
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Mod version · Version du mod
+      placeholder: "0.18.0"
+    validations:
+      required: true
+  - type: input
+    id: branch
+    attributes:
+      label: Game branch · Branche du jeu
+      placeholder: main / beta
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened · Ce qui s'est passé
+      description: What you expected, the fight, the turn, the card… and the zip · Ce que tu attendais, le combat, le tour, la carte… et le zip
+    validations:
+      required: true

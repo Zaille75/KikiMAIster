@@ -79,6 +79,7 @@ public static class CompositionWindow
         try
         {
             var name = MegaCrit.Sts2.Core.Platform.PlatformUtil.GetPlayerNameRaw(net.Platform, id);
+            FeedbackWindow.Privacy.Register(id, name);
             return string.IsNullOrWhiteSpace(name) ? id.ToString(CultureInfo.InvariantCulture) : name;
         }
         catch (Exception)

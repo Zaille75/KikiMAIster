@@ -19,6 +19,9 @@ public sealed class Chifumi
     public (int Rounds, ulong Winner, string Date) Longest { get; private set; }
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
+    /// Every player name kept (reports anonymise them, v0.18.0).
+    public IReadOnlyDictionary<ulong, string> Names => _names;
+
     public string NameOf(ulong id) => _names.GetValueOrDefault(id, id.ToString(Inv));
 
     /// Adds a fight; false when this fight was already counted.

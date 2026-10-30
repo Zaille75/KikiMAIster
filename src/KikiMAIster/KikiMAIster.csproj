@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>KikiMAIster</AssemblyName>
-    <Version>0.17.45</Version>
+    <Version>0.18.0</Version>
     <RootNamespace>KikiMAIster</RootNamespace>
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <!-- Game branch to build against: beta (default) or default -->
@@ -13,8 +13,13 @@
     <GameLibDir>$(MSBuildThisFileDirectory)../../lib/$(GameBranch)/</GameLibDir>
     <!-- GAME_BETA / GAME_DEFAULT: the few places where the two game branches differ -->
     <DefineConstants>$(DefineConstants);GAME_$(GameBranch.ToUpperInvariant())</DefineConstants>
-    <!-- Development tools (F9 feedback window): left out of public builds with -p:PublicRelease=true -->
+    <!-- Development builds: F9 only saves the report (no browser); public builds (-p:PublicRelease=true) open the issue form -->
     <DefineConstants Condition="'$(PublicRelease)' != 'true'">$(DefineConstants);DEV_TOOLS</DefineConstants>
+    <!-- Line numbers in error reports, without the build machine's folders (v0.18.0) -->
+    <DebugType>embedded</DebugType>
+    <PathMap>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../../'))=/KikiMAIster/</PathMap>
+    <EnableSourceLink>false</EnableSourceLink>
+    <EnableSourceControlManagerQueries>false</EnableSourceControlManagerQueries>
   </PropertyGroup>
 
   <ItemGroup>

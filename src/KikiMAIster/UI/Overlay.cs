@@ -40,6 +40,7 @@ public static class Overlay
     private static bool _anyPetHp;
     private static Button? _settingsButton;
     private static Button? _summaryButton;
+    private static Button? _errorHint;
     private static Label? _title;
     private static bool _dragging;
     private static bool _wasInLobby;
@@ -141,6 +142,13 @@ public static class Overlay
         _body = new VBoxContainer();
         _body.AddThemeConstantOverride("separation", 1);
         outer.AddChild(_body);
+        // Internal errors not reported yet (v0.18.0): a last line that opens F9.
+        _errorHint = MakeButton("");
+        _errorHint.Alignment = HorizontalAlignment.Left;
+        _errorHint.AddThemeColorOverride("font_color", new Color(1f, 0.6f, 0.3f));
+        _errorHint.Visible = false;
+        _errorHint.Pressed += () => Capture.Safe("Overlay.ErrorHint", FeedbackWindow.Toggle);
+        outer.AddChild(_errorHint);
         _panel.AddChild(outer);
         _layer.AddChild(_panel);
         _panel.Visible = Cfg.Visible && (InRun || CompositionWindow.InLobby);
@@ -155,9 +163,7 @@ public static class Overlay
         SettingsMenu.Attach(_layer);
         RunSummary.Attach(_layer);
         CompositionWindow.Attach(_layer);
-#if DEV_TOOLS
-        Dev.FeedbackWindow.Attach(_layer);
-#endif
+        FeedbackWindow.Attach(_layer);
         root.AddChild(_layer);
         Refresh();
         ModLog.Info($"overlay attached (inside tree: {_layer.IsInsideTree()}, visible: {_panel.Visible})");
@@ -370,6 +376,12 @@ public static class Overlay
             _summaryButton.Text = Loc.T("summary.button");
             _summaryButton.TooltipText = Loc.T("summary.tip");
             _summaryButton.Visible = CombatSummary.HasData;
+        }
+        if (_errorHint != null)
+        {
+            var errors = ModLog.UnreportedErrors;
+            _errorHint.Visible = errors > 0;
+            if (errors > 0) _errorHint.Text = string.Format(Loc.T(errors == 1 ? "errors.hint1" : "errors.hint"), errors);
         }
 
         if (!InRun)

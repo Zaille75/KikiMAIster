@@ -61,10 +61,8 @@ public static class UiPatches
             if (inputEvent is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F7 }) Overlay.Toggle();
             // F8: group compositions, anywhere (the lobby included).
             if (inputEvent is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F8 }) CompositionWindow.Toggle();
-#if DEV_TOOLS
-            // F9 (development builds only): report a bug or an idea with a screenshot and the game state.
-            if (inputEvent is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F9 }) KikiMAIster.Dev.FeedbackWindow.Toggle();
-#endif
+            // F9: report a bug or an idea with a screenshot and the game state (every build since v0.18.0).
+            if (inputEvent is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F9 }) FeedbackWindow.Toggle();
         });
     }
 }

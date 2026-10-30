@@ -1,23 +1,34 @@
-#if DEV_TOOLS
 using System.Globalization;
+using System.IO.Compression;
 using System.Text;
 using Godot;
 using KikiMAIster.Core;
-using KikiMAIster.UI;
 using MegaCrit.Sts2.Core.Entities.Creatures;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.MonsterMoves.Intents;
 
-namespace KikiMAIster.Dev;
+namespace KikiMAIster.UI;
 
-/// Development only (not in public builds): F9 opens a small window to write a bug report or an idea in game. Each report
-/// is a folder in "feedback/" next to the DLL: the message, a screenshot taken when F9 was pressed, the game state (hands,
-/// piles, enemies, intents, powers, relics, potions), the run's stats and the end of the mod's log.
+/// F9 or the settings window's button (v0.18.0: every build) opens a small window to write a bug report or an idea in
+/// game. Each report is a folder in "feedback/" next to the DLL, plus a zip of it: the message, a screenshot taken when F9
+/// was pressed, the game state (hands, piles, enemies, intents, powers, relics, potions), the run's stats, the end of the
+/// mod's log and the internal errors noted this session. Every text is anonymised first (spec 03-technical, "Reports").
+/// Public builds then open the folder and the GitHub issue form; development builds only save.
 public static class FeedbackWindow
 {
+    private const string IssueForm = "https://github.com/Zaille75/KikiMAIster/issues/new?template=report.yml";
+    private const int MaxMessageInLink = 1500;
+
+    /// Players' names and Steam ids, account and computer names: removed from every report's text.
+    internal static readonly Anonymizer Privacy = new();
+
     private static PanelContainer? _panel;
+    private static Label? _title;
+    private static Label? _kindLabel;
     private static TextEdit? _text;
+    private static Label? _errors;
     private static Label? _status;
+    private static Button? _save;
     private static CheckBox? _withScreenshot;
     private static string _category = "bug";
     private static readonly Dictionary<string, Button> CategoryButtons = new();
@@ -34,8 +45,17 @@ public static class FeedbackWindow
         }
     }
 
+    private static string Version => typeof(FeedbackWindow).Assembly.GetName().Version?.ToString(3) ?? "?";
+
+#if GAME_DEFAULT
+    private const string Branch = "main";
+#else
+    private const string Branch = "beta";
+#endif
+
     public static void Attach(CanvasLayer layer)
     {
+        Capture.Safe("Feedback.Machine", () => Privacy.RegisterMachine(System.Environment.UserName, System.Environment.MachineName));
         _panel = new PanelContainer { Visible = false, MouseDefaultCursorShape = Control.CursorShape.Move };
         _panel.AddThemeStyleboxOverride("panel", Overlay.WindowStyle(0.96f));
         _panel.GuiInput += e => Capture.Safe("Feedback.Drag", () =>
@@ -50,19 +70,20 @@ public static class FeedbackWindow
         box.AddThemeConstantOverride("separation", 4);
 
         var header = new HBoxContainer();
-        var title = Overlay.MakeLabel("KikiMAIster · Signaler (F9)", Overlay.Accent);
-        title.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        header.AddChild(title);
+        _title = Overlay.MakeLabel("", Overlay.Accent);
+        _title.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        header.AddChild(_title);
         var close = Overlay.MakeButton("✕");
         close.Pressed += () => Capture.Safe("Feedback.Close", Hide);
         header.AddChild(close);
         box.AddChild(header);
 
         var kinds = new HBoxContainer();
-        kinds.AddChild(Overlay.MakeLabel("Type :", Overlay.Text));
-        foreach (var (key, label) in new[] { ("bug", "Bug"), ("stat", "Stat fausse"), ("idee", "Idée") })
+        _kindLabel = Overlay.MakeLabel("", Overlay.Text);
+        kinds.AddChild(_kindLabel);
+        foreach (var key in new[] { "bug", "stat", "idee" })
         {
-            var b = Overlay.MakeButton(label);
+            var b = Overlay.MakeButton("");
             b.Pressed += () => Capture.Safe("Feedback.Kind", () =>
             {
                 _category = key;
@@ -73,27 +94,28 @@ public static class FeedbackWindow
         }
         box.AddChild(kinds);
 
-        _text = new TextEdit
-        {
-            CustomMinimumSize = new Vector2(460, 150), WrapMode = TextEdit.LineWrappingMode.Boundary,
-            PlaceholderText = "Ce qui s'est passé, ce que tu attendais (le combat, le tour, la carte…)"
-        };
+        _text = new TextEdit { CustomMinimumSize = new Vector2(460, 150), WrapMode = TextEdit.LineWrappingMode.Boundary };
         _text.AddThemeFontSizeOverride("font_size", Overlay.FontSize);
         box.AddChild(_text);
 
-        _withScreenshot = new CheckBox { Text = "Joindre la capture d'écran (prise à l'appui sur F9)", ButtonPressed = true, FocusMode = Control.FocusModeEnum.None };
+        _withScreenshot = new CheckBox { ButtonPressed = true, FocusMode = Control.FocusModeEnum.None };
         _withScreenshot.AddThemeFontSizeOverride("font_size", Overlay.FontSize);
         Overlay.StyleCheckBox(_withScreenshot);
         box.AddChild(_withScreenshot);
 
+        _errors = Overlay.MakeLabel("", Overlay.Muted);
+        box.AddChild(_errors);
+
         var actions = new HBoxContainer();
         _status = Overlay.MakeLabel("", Overlay.Muted);
         _status.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        _status.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        _status.CustomMinimumSize = new Vector2(300, 0);
         actions.AddChild(_status);
-        var save = Overlay.MakeButton("Enregistrer");
-        save.AddThemeColorOverride("font_color", Overlay.Accent);
-        save.Pressed += () => Capture.Safe("Feedback.Save", Save);
-        actions.AddChild(save);
+        _save = Overlay.MakeButton("");
+        _save.AddThemeColorOverride("font_color", Overlay.Accent);
+        _save.Pressed += () => Capture.Safe("Feedback.Save", Save);
+        actions.AddChild(_save);
         box.AddChild(actions);
 
         _panel.AddChild(box);
@@ -110,10 +132,13 @@ public static class FeedbackWindow
             Hide();
             return;
         }
+        // Opened from the settings window: hide it first, so the screenshot shows the game.
+        SettingsMenu.Hide();
         Capture.Safe("Feedback.Screenshot", () => _screenshot = _panel.GetViewport().GetTexture().GetImage());
         _state = "";
         Capture.Safe("Feedback.State", () => _state = GameState());
         _status!.Text = "";
+        Refresh();
         _panel.Visible = true;
         _panel.MoveToFront();
         var screen = _panel.GetViewportRect().Size;
@@ -127,27 +152,45 @@ public static class FeedbackWindow
         _text?.ReleaseFocus();
     }
 
+    /// Texts in the current language, and the chosen type highlighted.
     private static void Refresh()
     {
-        foreach (var (key, b) in CategoryButtons) b.AddThemeColorOverride("font_color", key == _category ? Overlay.Accent : Overlay.Muted);
+        if (_title == null) return;
+        _title.Text = Loc.T("report.title");
+        _kindLabel!.Text = Loc.T("report.kind");
+        foreach (var (key, b) in CategoryButtons)
+        {
+            b.Text = Loc.T($"report.kind.{key}");
+            b.AddThemeColorOverride("font_color", key == _category ? Overlay.Accent : Overlay.Muted);
+        }
+        _text!.PlaceholderText = Loc.T("report.placeholder");
+        _withScreenshot!.Text = Loc.T("report.screenshot");
+        var errors = ModLog.NotedErrorCount;
+        _errors!.Text = errors > 0 ? string.Format(Loc.T("report.errors"), errors) : "";
+        _errors.Visible = errors > 0;
+#if DEV_TOOLS
+        _save!.Text = Loc.T("report.save");
+#else
+        _save!.Text = Loc.T("report.create");
+#endif
     }
 
     private static void Save()
     {
         if (Folder == null || _text == null) return;
         var now = DateTime.Now;
-        var dir = Path.Combine(Folder, $"{now:yyyy-MM-dd_HH-mm-ss}_{_category}");
+        var name = $"{now:yyyy-MM-dd_HH-mm-ss}_{_category}";
+        var dir = Path.Combine(Folder, name);
         Directory.CreateDirectory(dir);
-        var version = typeof(FeedbackWindow).Assembly.GetName().Version?.ToString(3) ?? "?";
-#if GAME_DEFAULT
-        const string branch = "main";
-#else
-        const string branch = "beta";
-#endif
-        File.WriteAllText(Path.Combine(dir, "message.txt"),
-            $"Type: {_category}\nDate: {now:yyyy-MM-dd HH:mm:ss}\nMod: v{version} ({branch})\n\n{_text.Text}\n");
-        File.WriteAllText(Path.Combine(dir, "state.txt"), _state);
-        Capture.Safe("Feedback.Run", () => File.WriteAllText(Path.Combine(dir, "run.txt"), RunSnapshot.Write("feedback", 0, Capture.Engine)));
+        var message = _text.Text;
+        // Players of earlier sessions kept in the chifumi records can appear in the log too.
+        Capture.Safe("Feedback.KnownNames", () =>
+        {
+            foreach (var (id, known) in ChifumiStore.Book.Names) Privacy.Register(id, known);
+        });
+        Write(dir, "message.txt", $"Type: {_category}\nDate: {now:yyyy-MM-dd HH:mm:ss}\nMod: v{Version} ({Branch})\n\n{message}\n");
+        Write(dir, "state.txt", _state);
+        Capture.Safe("Feedback.Run", () => Write(dir, "run.txt", RunSnapshot.Write("feedback", 0, Capture.Engine)));
         Capture.Safe("Feedback.Log", () =>
         {
             var log = Path.Combine(Path.GetDirectoryName(typeof(FeedbackWindow).Assembly.Location)!, "KikiMAIster.log");
@@ -155,14 +198,44 @@ public static class FeedbackWindow
             using var stream = new FileStream(log, FileMode.Open, System.IO.FileAccess.Read, FileShare.ReadWrite);
             using var reader = new StreamReader(stream);
             var lines = reader.ReadToEnd().Split('\n');
-            File.WriteAllLines(Path.Combine(dir, "log-tail.txt"), lines.TakeLast(600));
+            Write(dir, "log-tail.txt", string.Join('\n', lines.TakeLast(600)));
         });
+        Write(dir, "errors.txt", ModLog.ErrorsText());
         if (_withScreenshot!.ButtonPressed && _screenshot != null)
             Capture.Safe("Feedback.Png", () => _screenshot.SavePng(Path.Combine(dir, "screenshot.png")));
-        ModLog.Info($"feedback saved: {dir}");
+        var zip = Path.Combine(Folder, $"KikiMAIster-report-{name}.zip");
+        Capture.Safe("Feedback.Zip", () =>
+        {
+            if (File.Exists(zip)) File.Delete(zip);
+            ZipFile.CreateFromDirectory(dir, zip);
+        });
+        ModLog.Info($"feedback saved: {name}");
+        ModLog.ErrorsReported();
         _text.Text = "";
-        _status!.Text = $"Enregistré ({Directory.GetDirectories(Folder).Length} au total)";
+#if DEV_TOOLS
+        _status!.Text = string.Format(Loc.T("report.saved"), Directory.GetDirectories(Folder).Length);
         Hide();
+#else
+        _status!.Text = Loc.T("report.next");
+        Capture.Safe("Feedback.Folder", () => OS.ShellShowInFileManager(File.Exists(zip) ? zip : dir));
+        Capture.Safe("Feedback.Issue", () => OS.ShellOpen(IssueLink(message)));
+#endif
+    }
+
+    /// Anonymised before it touches the disk.
+    private static void Write(string dir, string file, string text) =>
+        File.WriteAllText(Path.Combine(dir, file), Privacy.Scrub(text));
+
+    /// The GitHub issue form, filled with the type, version, branch and the (anonymised, shortened) message.
+    private static string IssueLink(string message)
+    {
+        message = Privacy.Scrub(message.Trim());
+        if (message.Length > MaxMessageInLink) message = message[..MaxMessageInLink] + "…";
+        var kind = Loc.T($"report.kind.{_category}");
+        var firstLine = message.Split('\n')[0];
+        var title = $"[{kind}] {(firstLine.Length > 60 ? firstLine[..60] + "…" : firstLine)}";
+        string Q(string s) => Uri.EscapeDataString(s);
+        return $"{IssueForm}&title={Q(title)}&kind={Q(kind)}&version={Q(Version)}&branch={Q(Branch)}&description={Q(message)}";
     }
 
     /// What is on screen, in text: the run, every player (HP, block, energy, stars, powers, hand, piles, relics,
@@ -222,4 +295,3 @@ public static class FeedbackWindow
     private static string Powers(Creature c) =>
         c.Powers.Count == 0 ? "-" : string.Join(", ", c.Powers.Select(p => $"{GameNames.Of(Capture.IdOf(p))} {p.Amount.ToString(CultureInfo.InvariantCulture)}"));
 }
-#endif

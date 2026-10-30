@@ -166,6 +166,13 @@ public static class SettingsMenu
             row.AddChild(grid);
             _content.AddChild(row);
         }
+
+        // Reports (v0.18.0): the same window as F9, for players who do not know the key.
+        var report = Overlay.MakeButton(Loc.T("report.open"));
+        report.Alignment = HorizontalAlignment.Left;
+        report.AddThemeColorOverride("font_color", Overlay.Accent);
+        report.Pressed += () => Capture.Safe("SettingsMenu.Report", FeedbackWindow.Toggle);
+        _content.AddChild(report);
     }
 
     private static void Set(string hiddenKey, bool visible)

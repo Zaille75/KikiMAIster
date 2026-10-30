@@ -43,6 +43,8 @@ window, show the combat summary automatically.
 ## Keys
 - **F7**: show / hide the panel
 - **F8**: group compositions
+- **F9**: report a bug, a wrong stat or an idea (also in the settings). The mod makes a zip with a screenshot, the game
+  state and its log, with player names and Steam ids removed, then opens a GitHub issue page: drop the zip on it.
 
 ## Install
 *Steam Workshop: coming with version 1.0.*
@@ -115,6 +117,9 @@ propre fenêtre, afficher le résumé à la fin de chaque combat.
 ### Touches
 - **F7** : afficher / masquer le panneau
 - **F8** : compositions de groupe
+- **F9** : signaler un bug, une stat fausse ou une idée (aussi dans les paramètres). Le mod crée un zip avec une capture
+  d'écran, l'état de la partie et son journal, sans les noms des joueurs ni les ids Steam, puis ouvre une page GitHub :
+  glisse le zip dessus.
 
 ### Installation
 *Steam Workshop : avec la version 1.0.*

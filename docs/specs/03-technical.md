@@ -70,6 +70,26 @@ overkill, kills, powers, heals, misses during it); `⚗` potion and target; `■
 block, incoming attack, cards kept). Every EVENT line names creatures the same way (`Actor.Namer`); the raw card events
 (drawn, played, finished) are no longer written.
 
+## Reports (v0.18.0)
+F9 / the settings button write a report the player sends by hand (no network call from the mod, no secret in the DLL).
+- **Files:** `message.txt` (type, date, mod version, game branch, text), `state.txt` (game state at F9), `run.txt` (the
+  run's stats), `log-tail.txt` (last 600 lines of `KikiMAIster.log`), `errors.txt` (each internal error noted this
+  session: place, count, first full text; at most 30), `screenshot.png` (optional), all zipped into
+  `feedback/KikiMAIster-report-<date>_<type>.zip`.
+- **Anonymisation (`Core/Anonymizer`, unit-tested), on every text file before writing:** every player name and Steam id
+  seen this session (run players, lobby players) or kept in the chifumi records becomes "Joueur 1", "Joueur 2"… in the
+  order seen (ids: "id-joueur-N"); any other 17-digit Steam id becomes `[steam-id]`; Windows profile paths `C:\Users\<name>\`
+  become `C:\Users\[user]\`; the Windows account and computer names become `[user]` / `[pc]`. Names shorter than
+  3 characters are left alone, so they cannot replace parts of ordinary words. The screenshot cannot be anonymised: the window warns about it and
+  the player can leave it out.
+- **Public builds** open the folder (`OS.ShellShowInFileManager`) and the issue form
+  `https://github.com/Zaille75/KikiMAIster/issues/new?template=report.yml&…` (fields `kind`, `version`, `branch`,
+  `description`; message cut to 1,500 characters in the link). The form is `.github/ISSUE_TEMPLATE/report.yml`.
+- **Error capture:** `ModLog.Error` also records the error in `ModLog.Errors` (by place: count, first text, thread-safe,
+  at most 30 places). `ModLog.UnreportedErrors` drives the panel hint; creating a report sets it back to 0.
+- The DLL embeds its debug info (line numbers in errors.txt) with the source paths mapped to `/KikiMAIster/`
+  (`PathMap`): no folder of the build machine is left in it.
+
 ## Safety rules
 - Every patch is wrapped in try/catch and logs errors; the mod must **never** crash the game.
 - The mod never modifies game state.

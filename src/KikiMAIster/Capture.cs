@@ -126,6 +126,8 @@ public static class Capture
             try
             {
                 var name = PlatformUtil.GetPlayerNameRaw(RunManager.Instance.NetService.Platform, p.NetId);
+                // Known to the report anonymiser (v0.18.0), so it never leaves the PC in a report.
+                UI.FeedbackWindow.Privacy.Register(p.NetId, name);
                 if (!string.IsNullOrWhiteSpace(name)) return name;
             }
             catch (Exception)
