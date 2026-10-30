@@ -24,10 +24,12 @@ public static class RunHistoryPatches
     private static int _failedAt = -1;
 
     /// Reads every player's Max HP changes, HP lost / healed outside fights and campfire choices from the run's map history; emits only when they changed.
-    public static void Read(IRunState? run) => Capture.Safe("RunHistory.Read", () =>
+    /// Ended: the run is over, so its last floor is complete too (event outcomes).
+    public static void Read(IRunState? run, bool ended = false) => Capture.Safe("RunHistory.Read", () =>
     {
         if (run == null) return;
         SeePlayers(run);
+        Capture.Safe("RunHistory.Events", () => LogEventOutcomes(run, ended));
         var floors = run.MapPointHistory.Sum(a => a.Count());
         if (floors == _failedAt) return;
         try
@@ -137,6 +139,83 @@ public static class RunHistoryPatches
         }
     });
 
+    /// Floors whose event outcome is already in the log (this run, this game session).
+    private static readonly HashSet<int> LoggedEvents = new();
+
+    /// What each player got from each event and Ancient (v0.18.1, log only, no stat): option chosen, cards gained /
+    /// removed / upgraded / transformed / enchanted, relics, potions, gold, HP. Logged once a floor is complete (a later
+    /// floor exists, or the run ended); after Save & Quit the run's past events are logged again from the history.
+    private static void LogEventOutcomes(IRunState run, bool ended)
+    {
+        var points = run.MapPointHistory.SelectMany(a => a).ToList();
+        for (var i = 0; i < points.Count; i++)
+        {
+            if (i == points.Count - 1 && !ended) break;
+            var point = points[i];
+            var rooms = point.Rooms.Where(r => r.RoomType == RoomType.Event).ToList();
+            if (rooms.Count == 0 || !LoggedEvents.Add(i)) continue;
+            var ids = string.Join(" + ", rooms.Select(r => r.ModelId?.Entry ?? "?"));
+            var fight = point.Rooms.Any(r => r.RoomType is RoomType.Monster or RoomType.Elite or RoomType.Boss) ? " (then a fight)" : "";
+            foreach (var e in point.PlayerStats)
+            {
+                var name = run.Players.FirstOrDefault(p => p.NetId == e.PlayerId) is { } pl ? Capture.PlayerName(pl, run.Players.Count) : e.PlayerId.ToString(CultureInfo.InvariantCulture);
+                var parts = new List<string>();
+                var chosen = e.EventChoices.Select(c => Key(c.Title)).Concat(e.AncientChoices.Where(c => c.WasChosen).Select(c => Key(c.Title))).ToList();
+                parts.Add($"chose [{string.Join(", ", chosen)}]");
+                List(parts, "cards +", e.CardsGained.Select(Card));
+                List(parts, "cards -", e.CardsRemoved.Select(Card));
+                List(parts, "upgraded", e.UpgradedCards.Select(c => c.Entry));
+                List(parts, "downgraded", e.DowngradedCards.Select(c => c.Entry));
+                List(parts, "transformed", e.CardsTransformed.Select(t => $"{Card(t.OriginalCard)} → {Card(t.FinalCard)}"));
+                List(parts, "enchanted", e.CardsEnchanted.Select(c => $"{Card(c.Card)} ({c.Enchantment.Entry})"));
+                List(parts, "card offer", e.CardChoices.Select(c => Card(c.Card) + (c.wasPicked ? "*" : "")));
+                List(parts, "relics +", e.RelicChoices.Where(c => c.wasPicked).Select(c => c.choice.Entry));
+                List(parts, "relics -", e.RelicsRemoved.Select(r => r.Entry));
+                List(parts, "potions +", e.PotionChoices.Where(c => c.wasPicked).Select(c => c.choice.Entry));
+                List(parts, "potions thrown", e.PotionDiscarded.Select(p => p.Entry));
+                if (e.GoldGained != 0 || e.GoldSpent != 0 || e.GoldLost != 0 || e.GoldStolen != 0)
+                    parts.Add($"gold +{e.GoldGained} -{e.GoldSpent + e.GoldLost + e.GoldStolen}");
+                if (e.DamageTaken != 0 || e.HpHealed != 0) parts.Add($"HP -{e.DamageTaken} +{e.HpHealed}");
+                if (e.MaxHpGained != 0 || e.MaxHpLost != 0) parts.Add($"Max HP +{e.MaxHpGained} -{e.MaxHpLost}");
+                ModLog.Info($"event outcome, floor {i + 1} {ids}{fight}, {name}: {string.Join("; ", parts)}");
+            }
+        }
+    }
+
+    private static void List(List<string> parts, string label, IEnumerable<string> items)
+    {
+        var list = items.ToList();
+        if (list.Count > 0) parts.Add($"{label} {string.Join(", ", list)}");
+    }
+
+    private static string Card(SerializableCard c) =>
+        (c.Id?.Entry ?? "?") + (c.CurrentUpgradeLevel > 0 ? "+" : "") + (c.Enchantment?.Id is { } en ? $" ({en.Entry})" : "");
+
+    /// An option's key ("ABYSSAL_BATHS.pages.INITIAL.options.LINGER"), shortened to what follows "options." when present.
+    private static string Key(MegaCrit.Sts2.Core.Localization.LocString? title)
+    {
+        var key = title?.LocEntryKey ?? "?";
+        var at = key.IndexOf(".options.", StringComparison.Ordinal);
+        return at >= 0 ? key[(at + 9)..].Replace(".title", "") : key;
+    }
+
+    /// Shared co-op events (v0.18.1, log only): the game picks one of the players' votes at random; logs every vote and
+    /// the option kept, so whoever decided is known. Runs before the votes are cleared.
+    [HarmonyPatch(typeof(EventSynchronizer), "ChooseOptionForSharedEvent")]
+    public static class SharedEventChosen
+    {
+        public static void Prefix(EventSynchronizer __instance, uint optionIndex) => Capture.Safe("SharedEventChosen", () =>
+        {
+            var ev = __instance.GetLocalEvent();
+            var players = ev.Owner?.RunState?.Players ?? new List<Player>();
+            string Option(uint index) => index < ev.CurrentOptions.Count ? ev.CurrentOptions[(int)index].TextKey : $"#{index}";
+            var votes = players.Select(p => (p, Vote: __instance.GetPlayerVote(p))).ToList();
+            var deciders = votes.Where(v => v.Vote == optionIndex).Select(v => Capture.PlayerName(v.p, players.Count)).ToList();
+            ModLog.Info($"shared event {ev.Id.Entry}: {Option(optionIndex)} chosen (voted by {string.Join(", ", deciders)}); votes: " +
+                        string.Join(", ", votes.Select(v => $"{Capture.PlayerName(v.p, players.Count)}={(v.Vote is { } o ? Option(o) : "-")}")));
+        });
+    }
+
     private static void Add(Dictionary<string, double> d, string key, double v) => d[key] = d.GetValueOrDefault(key) + v;
 
     /// This game's player (0 when unknown).
@@ -174,6 +253,7 @@ public static class RunHistoryPatches
         _signature = "";
         _playersSig = "";
         _failedAt = -1;
+        LoggedEvents.Clear();
     }
 
     /// Map votes (v0.17.45, Godot): when every player has chosen the next floor, the last one made the others wait the time

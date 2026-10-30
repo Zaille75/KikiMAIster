@@ -1,4 +1,4 @@
-# Handoff — state of the project (2026-10-30, v0.18.0)
+# Handoff — state of the project (2026-10-30, v0.18.1)
 
 > **Next session starts with Zaille75's next co-op test (beta branch, v0.17.38 or later).** He will send it with
 > `Envoyer-a-Claude.bat` → `logs/inbox/<date_time>/` (both logs + F9 `feedback/` folders). **Review and summarize every
@@ -141,15 +141,23 @@ Order: test → default branch → release prep → publish → maintenance. The
    the files or the history). Version 1.0.0 is set when publishing.
 4. **Publishing (with 1.0):** **Steam Workshop first** (Zaille75: it is how the game wants public mods; the game
    loads subscribed Workshop items itself, app 2868840), then a GitHub release (and Nexus Mods if wanted). No
-   official StS2 uploader found yet (StS1 shipped a `mod-uploader.jar` in the game folder): ask Zaille75 to look for
-   an uploader in the game folder, else use SteamCMD `workshop_build_item`. Former note: which sites (GitHub release, Nexus Mods, Steam Workshop if StS2 accepts mods there). Claude checks
-   each site's requirements first; Zaille75 creates the accounts / uploads where a login is needed.
+   Workshop uploader in the game folder (Zaille75 checked, 2026-10-30): upload through Steam (SteamCMD
+   `workshop_build_item`). Claude checks each site's requirements first; Zaille75 creates the accounts / uploads where
+   a login is needed. The public build keeps F9 (v0.18.0, reports for every player).
 5. **Maintenance after each game patch:** Zaille75 copies the new DLLs into `lib/beta/` (and `lib/default/`), Claude
    rebuilds (PatchCheck flags broken hooks and, since v0.17.40, renamed private members listed in `ReflectionTargets.cs`),
    fixes them, re-syncs `BlockAlternatives.HitCount`, bumps the version.
 
 Optional roadmap items (only if asked): JSON export, end-of-run Totals / Per act tabs, MVP line, opacity / scale /
 hotkey settings, chart history across Save & Quit.
+
+## v0.18.1 — event outcomes in the log (2026-10-30, not tested in game)
+Zaille75: "track but don't introduce new stats". `RunHistoryPatches.LogEventOutcomes`: one `event outcome, floor N …`
+line per player for each event / Ancient floor once complete (option, cards, relics, potions, gold, HP, Max HP), from
+the map history; `shared event …` line (patch on `EventSynchronizer.ChooseOptionForSharedEvent`) with every vote and the
+option kept. Check in the next logs that both lines appear and the option keys are readable. Also decided on
+2026-10-30: "Ce groupe" stays per PC; trophy names Culturiste / Peau sur les os kept. The "524 runs" seen in the log
+is every run on that PC (any partner, solo), not the runs with the other player: no bug.
 
 ## v0.18.0 — reports for every player (2026-10-30, not tested in game)
 F9 in every build, a "Signaler un problème (F9)" button in the settings, FR/EN window, anonymised files
@@ -242,13 +250,8 @@ check especially:
   if `dist/` is ever wiped.
 
 ## Open topics for the next conversation
-- **"Ce groupe" differs between players (2026-10-29, kept open by Zaille75):** each PC reads its own game run history (one player
-  524 runs, the other 149), so the group stats differ. Fixing it would need sending the history between players.
-- **Event outcomes not tracked yet (audit v0.17.35, decision pending with Zaille75):** cards gained / removed, upgrades,
-  transforms, enchantments, relics gained / lost / traded, potions gained / thrown away, which event option was chosen,
-  who decided in the 8 shared co-op events (JungleMazeAdventure, DenseVegetation, MorphicGrove, PunchOff,
-  TheLanternKey, BattlewornDummy, FakeMerchant, WarHistorianRepy). All in the game's map history. Gold and curses done
-  in v0.17.36; HP lost / healed in v0.17.34–36.
+- **"Ce groupe" differs between players (decided 2026-10-30: kept as is):** each PC reads its own game run history
+  (one PC has ~520 runs in all, solo and any partner; the other 149), so the group stats differ.
 - **v0.17.1:** the log (`logs/2026-10-27_v0.16.8_coop_regent_necrobinder_after_crash.log`) only covers the session
   after the crash (fights 9–15: it was overwritten at the restart). Fixed from it: 10, 15, 22, 23, 27. Answered 13:
   run totals were restored from the file saved after fight 8, so the crashed attempt never reached the Partie stats.
@@ -262,7 +265,7 @@ check especially:
   14 (fight 1 T2: a player got 2 PV sauvés, expected 0–1), 15 (Déflagration tombale counted as a misplay), 22 (unused
   energy counted when the block was not needed), 23 (Esquisse not in "Cartes données"), 24 (missed lethal fight 4 T4),
   27 (Max's many "À l'attaque !" in Affaiblissements; then clear that record: `RecordBook.Clear("trophy.debuffs")`).
-- New trophy names (Culturiste, Peau sur les os) are proposals.
+- Trophy names Culturiste, Peau sur les os: kept (Zaille75, 2026-10-30).
 - Main branch solo Regent run (v0.17.22, `logs/2026-10-28_v0.17.22_main_solo_regent_15fights.log`): no errors, all
   damage sources known, history reads fine. Records per ascension level since v0.17.24.
 - Solo Necrobinder run (v0.17.8, `logs/2026-10-28_v0.17.8_solo_necrobinder_15fights.log`, death fight 15 Ovicoptère):

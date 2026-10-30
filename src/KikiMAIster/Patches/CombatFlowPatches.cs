@@ -255,7 +255,7 @@ public static class CombatFlowPatches
     {
         public static void Prefix(bool isVictory) => Capture.Safe("RunManager.OnEnded", () =>
         {
-            RunHistoryPatches.Read(CurrentRun);
+            RunHistoryPatches.Read(CurrentRun, ended: true);
             Capture.Emit(new RunEnded(isVictory));
             KikiMAIster.UI.RunSummary.OnRunEnded(isVictory);
         });
