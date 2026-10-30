@@ -168,15 +168,20 @@ public static class RunSummary
     private static string NameOf(StatsEngine engine, ulong id) =>
         engine.Players.GetValueOrDefault(id)?.Name ?? id.ToString(CultureInfo.InvariantCulture);
 
-    /// A grid of trophies with its column headers.
-    private static GridContainer NewGrid()
+    /// A grid of trophies with its column headers. Solo (v0.18.2): no winner nor personal best (always the one player),
+    /// and the character record is headed with the character played ("Record Régent").
+    private static GridContainer NewGrid(string? soloCharacter)
     {
-        var grid = new GridContainer { Columns = 6, MouseFilter = Control.MouseFilterEnum.Pass };
+        var solo = soloCharacter != null;
+        var heads = solo ? new[] { "run.trophy", "run.value", "run.record", "run.character" }
+            : new[] { "run.trophy", "run.winner", "run.value", "run.record", "run.personal", "run.character" };
+        var grid = new GridContainer { Columns = heads.Length, MouseFilter = Control.MouseFilterEnum.Pass };
         grid.AddThemeConstantOverride("h_separation", 14);
         grid.AddThemeConstantOverride("v_separation", 1);
-        foreach (var h in new[] { "run.trophy", "run.winner", "run.value", "run.record", "run.personal", "run.character" })
+        foreach (var h in heads)
         {
-            var l = Overlay.MakeLabel(Loc.T(h), Overlay.Muted);
+            var text = solo && h == "run.character" && soloCharacter != "" ? string.Format(Loc.T("run.characterSolo"), GameNames.Of($"Character:{soloCharacter}")) : Loc.T(h);
+            var l = Overlay.MakeLabel(text, Overlay.Muted);
             if (Loc.Has($"{h}.tip")) HoverTip.Set(l, Loc.T($"{h}.tip"));
             grid.AddChild(l);
         }
@@ -190,6 +195,7 @@ public static class RunSummary
         var level = Patches.CombatFlowPatches.Ascension;
         var book = RecordStore.Book;
         var coop = run.Count > 1;
+        var solo = !coop;
         var winners = Trophies.Winners(c, run, victory: !ended || _victory);
         var name = Overlay.MakeLabel(Loc.T(c.Key), c.Fun ? Overlay.Muted : Overlay.Text);
         HoverTip.Set(name, Loc.T($"{c.Key}.tip"));
@@ -197,8 +203,8 @@ public static class RunSummary
         (ulong Id, double Value)? winner = winners.Count > 0 ? winners[0] : null;
         if (winner is not { } w)
         {
-            grid.AddChild(Overlay.MakeLabel("-", Overlay.Muted));
-            grid.AddChild(Overlay.MakeLabel("", Overlay.Muted));
+            if (!solo) grid.AddChild(Overlay.MakeLabel("-", Overlay.Muted));
+            grid.AddChild(Overlay.MakeLabel(solo ? "-" : "", Overlay.Muted));
         }
         else
         {
@@ -206,7 +212,7 @@ public static class RunSummary
             names.AddThemeConstantOverride("separation", 0);
             for (var i = 0; i < winners.Count; i++)
                 names.AddChild(Overlay.MakeLabel((i > 0 ? ", " : "") + NameOf(engine, winners[i].Id), Overlay.PlayerColor(winners[i].Id)));
-            grid.AddChild(names);
+            if (!solo) grid.AddChild(names);
             if (c.Participation) grid.AddChild(Overlay.MakeLabel("", Overlay.Muted));
             else
             {
@@ -221,7 +227,7 @@ public static class RunSummary
         }
         if (c.Participation)
         {
-            for (var i = 0; i < 3; i++) grid.AddChild(Overlay.MakeLabel("", Overlay.Muted));
+            for (var i = 0; i < (solo ? 2 : 3); i++) grid.AddChild(Overlay.MakeLabel("", Overlay.Muted));
             return;
         }
         // Records at this run's ascension level (v0.17.24); hovering shows the record of every level together.
@@ -234,13 +240,15 @@ public static class RunSummary
         grid.AddChild(recordCell);
         var personal = winner is { } pw ? book.Personal(c.Key, pw.Id, coop, level) : null;
         var newPersonal = winner is { } nw && update?.NewPersonal.Contains((c.Key, nw.Id)) == true;
-        grid.AddChild(Overlay.MakeLabel(personal == null ? "-" : $"{(newPersonal ? "★ " : "")}{Overlay.N(personal.Value)}",
-            newPersonal ? Overlay.Accent : Overlay.Muted));
+        if (!solo)
+            grid.AddChild(Overlay.MakeLabel(personal == null ? "-" : $"{(newPersonal ? "★ " : "")}{Overlay.N(personal.Value)}",
+                newPersonal ? Overlay.Accent : Overlay.Muted));
         // The best of the winner's character (in solo: the character played); the tooltip lists every character.
         var character = winner is { } cw ? engine.Players.GetValueOrDefault(cw.Id)?.Character ?? "" : "";
         var ofCharacter = character == "" ? null : book.OfCharacter(c.Key, character, coop, level);
         var newCharacter = update?.NewCharacter.Contains((c.Key, character)) == true;
-        var cell = Overlay.MakeLabel(ofCharacter == null ? "-" : $"{(newCharacter ? "★ " : "")}{Overlay.N(ofCharacter.Value)} ({ofCharacter.Name}, {ofCharacter.Date})",
+        // Solo: the header names the character, so the cell keeps only the date.
+        var cell = Overlay.MakeLabel(ofCharacter == null ? "-" : $"{(newCharacter ? "★ " : "")}{Overlay.N(ofCharacter.Value)} ({(solo ? "" : ofCharacter.Name + ", ")}{ofCharacter.Date})",
             newCharacter ? Overlay.Accent : Overlay.Muted);
         var all = book.Characters(c.Key, coop, level).ToList();
         if (all.Count > 0)
@@ -286,13 +294,14 @@ public static class RunSummary
         var level = Patches.CombatFlowPatches.Ascension;
         var coop = run.Count > 1;
         bool Shown(Trophies.Category c) => !(c.CoopOnly && run.Count < 2) && !(ended && c.NeedsVictory && !_victory);
-        var grid = NewGrid();
+        string? soloCharacter = coop ? null : run.Keys.Select(id => engine.Players.GetValueOrDefault(id)?.Character).FirstOrDefault() ?? "";
+        var grid = NewGrid(soloCharacter);
         foreach (var c in Trophies.All.Where(c => !c.Fun && Shown(c))) AddTrophy(grid, c, run, engine, update, ended);
         _content.AddChild(grid);
         if (ModConfig.Current.FunTrophiesShown)
         {
             _content.AddChild(Overlay.MakeLabel(Loc.T("run.funTitle"), Overlay.Accent));
-            var funGrid = NewGrid();
+            var funGrid = NewGrid(soloCharacter);
             foreach (var c in Trophies.All.Where(c => c.Fun && Shown(c))) AddTrophy(funGrid, c, run, engine, update, ended);
             _content.AddChild(funGrid);
         }

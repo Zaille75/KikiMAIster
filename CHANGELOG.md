@@ -5,6 +5,8 @@ Summary by version line. The detailed notes of every version are in [docs/specs/
 
 ## Unreleased (towards 1.0)
 - README (English / French), MIT license, icon.
+- **0.18.2:** solo: simpler trophies window (no winner / personal best columns, character named once); no co-op
+  settings.
 - **0.18.1:** event outcomes (option chosen, cards, relics, potions, gold, HP) and shared co-op event votes written in
   the log; no new stat.
 - **0.18.0:** F9 (or the settings button) makes an anonymised report zip and opens the GitHub issue form; the panel

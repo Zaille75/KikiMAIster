@@ -18,7 +18,7 @@ public static class Overlay
     private sealed record Cell(string Column, string Text, string Tooltip = "");
 
     /// Columns about allies, hidden in solo.
-    private static readonly HashSet<string> AllyColumns = new() { "col.fromAllies" };
+    internal static readonly HashSet<string> AllyColumns = new() { "col.fromAllies" };
     /// The "Erreurs" column: Gâché + Choix.
     private const string MisplaysKey = "col.misplays";
 
@@ -88,6 +88,9 @@ public static class Overlay
         new("gold", GoldRow, () => Visible("gold", new[] { "col.goldGained", "col.goldSpent", "col.goldLost", "col.goldNow", "col.cursesGained", "col.cursesRemoved" }), s => s.GoldGained, RunOnly: true),
         new("other", OtherRow, () => Visible("other", OtherColumns), s => s.CardsPlayed),
     };
+
+    /// Sections that only show in co-op (v0.18.2: left out of the settings in solo).
+    internal static readonly HashSet<string> CoopSections = new() { "coop", "chifumi" };
 
     /// What the settings menu can hide: every section, and its fixed columns (damage kinds and debuff effect included).
     internal static readonly (string Section, string[] Columns)[] Hideable =

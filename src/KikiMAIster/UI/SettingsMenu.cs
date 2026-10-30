@@ -132,8 +132,12 @@ public static class SettingsMenu
         }));
 
         _content.AddChild(Overlay.MakeLabel(Loc.T("settings.shown"), Overlay.Accent));
-        foreach (var (section, columns) in Overlay.Hideable)
+        // Solo (v0.18.2): the co-op sections and ally columns never show, so they are not offered.
+        var solo = Patches.CombatFlowPatches.PlayerCount == 1;
+        foreach (var (section, allColumns) in Overlay.Hideable)
         {
+            if (solo && Overlay.CoopSections.Contains(section)) continue;
+            var columns = solo ? allColumns.Where(c => !Overlay.AllyColumns.Contains(c)).ToArray() : allColumns;
             var sectionKey = $"section:{section}";
             var visible = !Cfg.Hidden.Contains(sectionKey);
             // The section's checkbox, then "own window" (v0.17.0: a detached section can be placed anywhere).

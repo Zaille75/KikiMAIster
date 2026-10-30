@@ -280,6 +280,7 @@ public static class Loc
         ["run.record.tip"] = ("Record at this run's ascension level (hover a value: every level)", "Record au niveau d'ascension de la partie (survoler une valeur : tous niveaux)"),
         ["run.personal"] = ("Personal best", "Record perso"),
         ["run.character"] = ("Character record", "Record personnage"),
+        ["run.characterSolo"] = ("{0} record", "Record {0}"),
         ["run.character.tip"] = ("Best of the winner's character, any player (hover a value: every character)", "Meilleur score du personnage du gagnant, tous joueurs confondus (survoler une valeur : tous les personnages)"),
         ["run.soloRecords"] = ("Solo records", "Records solo"),
         ["run.allLevels"] = ("Every ascension level", "Tous niveaux d'ascension"),
