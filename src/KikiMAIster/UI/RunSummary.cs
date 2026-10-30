@@ -233,10 +233,14 @@ public static class RunSummary
         // Records at this run's ascension level (v0.17.24); hovering shows the record of every level together.
         var best = book.Best(c.Key, coop, level);
         var newRecord = update?.NewRecords.Contains(c.Key) == true;
-        var recordCell = Overlay.MakeLabel(best == null ? "-" : $"{(newRecord ? "★ " : "")}{Overlay.N(best.Value)} ({best.Name}, {best.Date})",
+        // Solo (v0.18.3): no name on the line (the holder, a character, is in the tooltip).
+        var recordCell = Overlay.MakeLabel(best == null ? "-" : $"{(newRecord ? "★ " : "")}{Overlay.N(best.Value)} ({(solo ? "" : best.Name + ", ")}{best.Date})",
             newRecord ? Overlay.Accent : Overlay.Muted);
+        var tips = new List<string>();
+        if (solo && best != null) tips.Add(best.Name);
         if (book.Best(c.Key, coop) is { } anyLevel)
-            HoverTip.Set(recordCell, $"{Loc.T("run.allLevels")}: {Overlay.N(anyLevel.Value)} ({anyLevel.Name}, {anyLevel.Date})");
+            tips.Add($"{Loc.T("run.allLevels")}: {Overlay.N(anyLevel.Value)} ({anyLevel.Name}, {anyLevel.Date})");
+        if (tips.Count > 0) HoverTip.Set(recordCell, string.Join('\n', tips));
         grid.AddChild(recordCell);
         var personal = winner is { } pw ? book.Personal(c.Key, pw.Id, coop, level) : null;
         var newPersonal = winner is { } nw && update?.NewPersonal.Contains((c.Key, nw.Id)) == true;
