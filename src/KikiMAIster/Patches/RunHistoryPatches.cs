@@ -160,14 +160,14 @@ public static class RunHistoryPatches
             {
                 var name = run.Players.FirstOrDefault(p => p.NetId == e.PlayerId) is { } pl ? Capture.PlayerName(pl, run.Players.Count) : e.PlayerId.ToString(CultureInfo.InvariantCulture);
                 var parts = new List<string>();
-                var chosen = e.EventChoices.Select(c => Key(c.Title)).Concat(e.AncientChoices.Where(c => c.WasChosen).Select(c => Key(c.Title))).ToList();
+                var chosen = e.EventChoices.Select(c => Key(c.Title)).Concat(e.AncientChoices.Where(c => c.WasChosen).Select(c => Key(c.Title))).Distinct().ToList();
                 parts.Add($"chose [{string.Join(", ", chosen)}]");
-                List(parts, "cards +", e.CardsGained.Select(Card));
-                List(parts, "cards -", e.CardsRemoved.Select(Card));
+                List(parts, "cards +", e.CardsGained.Select(c => Card(c)));
+                List(parts, "cards -", e.CardsRemoved.Select(c => Card(c)));
                 List(parts, "upgraded", e.UpgradedCards.Select(c => c.Entry));
                 List(parts, "downgraded", e.DowngradedCards.Select(c => c.Entry));
                 List(parts, "transformed", e.CardsTransformed.Select(t => $"{Card(t.OriginalCard)} → {Card(t.FinalCard)}"));
-                List(parts, "enchanted", e.CardsEnchanted.Select(c => $"{Card(c.Card)} ({c.Enchantment.Entry})"));
+                List(parts, "enchanted", e.CardsEnchanted.Select(c => $"{Card(c.Card, enchantment: false)} ({c.Enchantment.Entry})"));
                 List(parts, "card offer", e.CardChoices.Select(c => Card(c.Card) + (c.wasPicked ? "*" : "")));
                 List(parts, "relics +", e.RelicChoices.Where(c => c.wasPicked).Select(c => c.choice.Entry));
                 List(parts, "relics -", e.RelicsRemoved.Select(r => r.Entry));
@@ -188,15 +188,17 @@ public static class RunHistoryPatches
         if (list.Count > 0) parts.Add($"{label} {string.Join(", ", list)}");
     }
 
-    private static string Card(SerializableCard c) =>
-        (c.Id?.Entry ?? "?") + (c.CurrentUpgradeLevel > 0 ? "+" : "") + (c.Enchantment?.Id is { } en ? $" ({en.Entry})" : "");
+    private static string Card(SerializableCard c, bool enchantment = true) =>
+        (c.Id?.Entry ?? "?") + (c.CurrentUpgradeLevel > 0 ? "+" : "") + (enchantment && c.Enchantment?.Id is { } en ? $" ({en.Entry})" : "");
 
     /// An option's key ("ABYSSAL_BATHS.pages.INITIAL.options.LINGER"), shortened to what follows "options." when present.
     private static string Key(MegaCrit.Sts2.Core.Localization.LocString? title)
     {
         var key = title?.LocEntryKey ?? "?";
         var at = key.IndexOf(".options.", StringComparison.Ordinal);
-        return at >= 0 ? key[(at + 9)..].Replace(".title", "") : key;
+        if (at >= 0) key = key[(at + 9)..];
+        // An Ancient's choice is a relic's title key ("NEOWS_TALISMAN.title", v0.18.4).
+        return key.EndsWith(".title", StringComparison.Ordinal) ? key[..^6] : key;
     }
 
     /// Shared co-op events (v0.18.1, log only): the game picks one of the players' votes at random; logs every vote and
@@ -208,6 +210,8 @@ public static class RunHistoryPatches
         {
             var ev = __instance.GetLocalEvent();
             var players = ev.Owner?.RunState?.Players ?? new List<Player>();
+            // Solo (v0.18.4): a shared event has one vote, nothing to tell.
+            if (players.Count < 2) return;
             string Option(uint index) => index < ev.CurrentOptions.Count ? ev.CurrentOptions[(int)index].TextKey : $"#{index}";
             var votes = players.Select(p => (p, Vote: __instance.GetPlayerVote(p))).ToList();
             var deciders = votes.Where(v => v.Vote == optionIndex).Select(v => Capture.PlayerName(v.p, players.Count)).ToList();

@@ -5,6 +5,9 @@ Summary by version line. The detailed notes of every version are in [docs/specs/
 
 ## Unreleased (towards 1.0)
 - README (English / French), MIT license, icon.
+- **0.18.4:** "Cartes" and "Potions et énergie" sections; cards that cost HP (Percée…) kept on purpose; "Énergie pour
+  rien" no longer counts two block cards when only one was too much; no false weak attack with Piétinement; clearer
+  event lines.
 - **0.18.3:** solo: no character name on the trophy lines.
 - **0.18.2:** solo: simpler trophies window (no winner / personal best columns, character named once); no co-op
   settings.

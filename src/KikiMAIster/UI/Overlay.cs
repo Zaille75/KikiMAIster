@@ -62,9 +62,12 @@ public static class Overlay
 
     private static readonly string[] ChifumiColumns = { "col.chifumi", "col.rock", "col.paper", "col.scissors", "col.chifumiLongest" };
 
-    /// Cards, potions and energy; card rewards (v0.17.45, run tab: offered, taken, offers skipped).
+    /// Cards; card rewards (v0.17.45, run tab: offered, taken, offers skipped). v0.18.4: potions and energy in their own section.
     private static readonly string[] OtherColumns =
-        { "col.drawn", "col.played", "col.exhausted", "col.discarded", "col.potions", "col.energySurplus", "col.energyUseless", "col.cardsOffered", "col.cardsTaken", "col.offersSkipped" };
+        { "col.drawn", "col.played", "col.exhausted", "col.discarded", "col.cardsOffered", "col.cardsTaken", "col.offersSkipped" };
+
+    /// Potions and energy (v0.18.4, split from the cards section).
+    internal static readonly string[] EnergyColumns = { "col.potions", "col.energySurplus", "col.energyUseless" };
 
     private static readonly string[] TakenColumns = { "col.hpLost", "col.fromSelf", "col.fromAllies", "col.hpOutside", "col.healOutside", "col.maxHp" };
 
@@ -87,6 +90,7 @@ public static class Overlay
         new("rest", RestRow, () => _restColumns.Count > 0 ? _restColumns : new[] { "col.noRest" }, s => s.RestSiteChoices.Values.Sum(), RunOnly: true),
         new("gold", GoldRow, () => Visible("gold", new[] { "col.goldGained", "col.goldSpent", "col.goldLost", "col.goldNow", "col.cursesGained", "col.cursesRemoved" }), s => s.GoldGained, RunOnly: true),
         new("other", OtherRow, () => Visible("other", OtherColumns), s => s.CardsPlayed),
+        new("energy", EnergyRow, () => Visible("energy", EnergyColumns), s => s.PotionsUsed - s.EnergySurplus - s.EnergyUseless),
     };
 
     /// Sections that only show in co-op (v0.18.2: left out of the settings in solo).
@@ -104,6 +108,7 @@ public static class Overlay
         ("rest", Array.Empty<string>()),
         ("gold", new[] { "col.goldGained", "col.goldSpent", "col.goldLost", "col.goldNow", "col.cursesGained", "col.cursesRemoved" }),
         ("other", OtherColumns),
+        ("energy", EnergyColumns),
     };
 
     private static ModConfig Cfg => ModConfig.Current;
@@ -1046,12 +1051,17 @@ public static class Overlay
         {
             new Cell("col.drawn", N(s.CardsDrawn), tip), new Cell("col.played", N(s.CardsPlayed), tip),
             new Cell("col.exhausted", N(s.CardsExhausted), tip), new Cell("col.discarded", N(s.CardsDiscarded), tip),
-            new Cell("col.potions", N(s.PotionsUsed), tip), new Cell("col.energySurplus", N(s.EnergySurplus), tip),
-            new Cell("col.energyUseless", N(s.EnergyUseless), tip),
             new Cell("col.cardsOffered", N(s.CardsOffered), picks), new Cell("col.cardsTaken", N(s.CardsTaken), picks),
             new Cell("col.offersSkipped", N(s.CardOffersSkipped), picks)
         };
     }
+
+    /// Potions used, energy left with nothing useful to play, energy spent on cards that did nothing (v0.18.4).
+    private static IReadOnlyList<Cell> EnergyRow(ulong id, PlayerStats s) => new[]
+    {
+        new Cell("col.potions", N(s.PotionsUsed)), new Cell("col.energySurplus", N(s.EnergySurplus)),
+        new Cell("col.energyUseless", N(s.EnergyUseless))
+    };
 
     /// This run's chifumi: fights won / fought, what the player threw, the longest fight (rounds).
     private static IReadOnlyList<Cell> ChifumiRow(ulong id, PlayerStats s) => new[]

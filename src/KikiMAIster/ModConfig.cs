@@ -89,7 +89,10 @@ public sealed class ModConfig
                     case "summaryY": c.SummaryY = float.Parse(v, CultureInfo.InvariantCulture); break;
                     case "settingsX": c.SettingsX = Float(v, -1); break;
                     case "settingsY": c.SettingsY = Float(v, -1); break;
-                    case "hidden": c.Hidden = v.Split(',', StringSplitOptions.RemoveEmptyEntries).ToHashSet(); break;
+                    // v0.18.4: potions and energy left the cards section ("other") for their own ("energy").
+                    case "hidden": c.Hidden = v.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                        .Select(h => h is "col:other:col.potions" or "col:other:col.energySurplus" or "col:other:col.energyUseless"
+                            ? h.Replace("col:other:", "col:energy:") : h).ToHashSet(); break;
                     case "chartPerRound": c.ChartPerRound = v == "true"; break;
                     case "hideZeroColumns": c.HideZeroColumns = v == "true"; break;
                     case "showGroupLine": c.ShowGroupLine = v == "true"; break;

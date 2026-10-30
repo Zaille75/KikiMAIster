@@ -709,7 +709,7 @@ public static class BlockAlternatives
             var damage = EstimateDamage(played, target);
             if (damage <= 0 || damage >= target.CurrentHp + target.Block) return null;
             var factor = doubled ? 2 : 1;
-            var best = hand.Where(c => c != played && c.Type == CardType.Attack && !c.EnergyCost.CostsX && Cost(c) <= budget &&
+            var best = hand.Where(c => c != played && c.Type == CardType.Attack && !c.EnergyCost.CostsX && CostWithout(c, played) <= budget &&
                                        c.TargetType is TargetType.AnyEnemy or TargetType.AllEnemies && PlayableExceptEnergy(c) &&
                                        HitCount(c, target) != null)
                 .Select(c => (Card: c, Damage: EstimateDamage(c, target) * factor))
@@ -839,11 +839,18 @@ public static class BlockAlternatives
     /// A card the player may keep on purpose, so not playing it is never a misplay (spec §E0, v0.17.0): it is retained
     /// (Retain, or the whole hand is kept: Main retenue…), it costs Stars (they are not refilled each turn), or it Exhausts
     /// (gone once played: v0.17.34, Zaille75 — Surins and Entrave des ténèbres included; missed lethal still uses it), or it
-    /// exhausts or transforms other cards of the hand (v0.17.44, Zaille75: HORS DE MA VUE ! kept not to lose a card).
+    /// exhausts or transforms other cards of the hand (v0.17.44, Zaille75: HORS DE MA VUE ! kept not to lose a card), or it
+    /// costs HP to play (v0.18.4, Zaille75: Percée kept at 3 HP is a choice).
     private static bool KeptOnPurpose(CardModel card, ICombatState combat) =>
         card.ShouldRetainThisTurn || card.CurrentStarCost > 0 || card.HasStarCostX || card.Keywords.Contains(CardKeyword.Exhaust) ||
         ConsumesHand.Contains(card.Id.Entry) || EnergyOnly.Contains(card.Id.Entry) || SacrificesPet.Contains(card.Id.Entry) ||
-        !Hook.ShouldFlush(combat, card.Owner);
+        CostsHp.Contains(card.Id.Entry) || !Hook.ShouldFlush(combat, card.Owner);
+
+    /// Cards that make their player lose HP when played (audit of every card, v0.18.4; Saignée is also in EnergyOnly).
+    private static readonly HashSet<string> CostsHp = new()
+    {
+        "BLOOD_WALL", "BLOODLETTING", "BRAND", "BREAKTHROUGH", "DEMONIC_SHIELD", "HEMOKINESIS", "OFFERING"
+    };
 
     /// Cards that only give energy (audit of every card, v0.17.45: Sursis…): they cannot use the energy left.
     private static readonly HashSet<string> EnergyOnly = new()
@@ -883,6 +890,12 @@ public static class BlockAlternatives
     }
 
     private static int Cost(CardModel card) => Math.Max(0, card.EnergyCost.GetWithModifiers(CostModifiers.All));
+
+    /// A card's cost had the played card not been played (v0.18.4): Piétinement already costs 1 less when an attack starts
+    /// (the game lowers it before the play), so it could not have replaced that attack at this price. The other cards
+    /// whose cost drops with plays (Localisation, Cri de la banshee) only change after the play.
+    private static int CostWithout(CardModel card, CardModel played) =>
+        Cost(card) + (card is Stomp && played.Type == CardType.Attack && played.Owner == card.Owner ? 1 : 0);
 
     /// Playable instead of a card already played: a limit on the cards played this turn (Paresse, Résonnant) does not count,
     /// the played card took its place (v0.17.38).

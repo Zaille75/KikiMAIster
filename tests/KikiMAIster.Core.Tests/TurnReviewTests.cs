@@ -70,6 +70,20 @@ public class TurnReviewTests
     }
 
     [Fact]
+    public void TwoBlockCards_EachNotNeededAlone_OnlyTheLastIsForNothing()
+    {
+        // Log of 2026-10-30 (Flore de la Friche): Armement 5 (other effect) + Défense+ 8 + Défense 5 = 18 against 10.
+        var armaments = Card("ARMAMENTS", CardKind.Skill, block: 5);
+        var defendPlus = Card("DEFEND+", CardKind.Skill, block: 8);
+        var defend = Card("DEFEND", CardKind.Skill, block: 5);
+        var a = Play(armaments, blockGiven: 5);
+        a.HadOtherEffect = true;
+        var player = new TurnPlayer { Actor = A, Block = 18, Incoming = 10 };
+        var r = Resolve(player, a, Play(defendPlus, blockGiven: 8), Play(defend, blockGiven: 5));
+        Assert.Equal(1, r.Events.OfType<HelpGiven>().Single(h => h.Kind == "energyUseless").Amount);
+    }
+
+    [Fact]
     public void EnergyLeft_WithAPlayableAttack_IsMissed_ButNotWithOnlyNeedlessBlock()
     {
         var strike = Card("STRIKE");

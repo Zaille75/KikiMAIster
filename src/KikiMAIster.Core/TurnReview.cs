@@ -339,10 +339,22 @@ public static class TurnReview
     /// only effect was a useless debuff (F8).
     /// v0.17.45: also an attack whose every hit met a cap already reached (Carapace endurcie at its limit, Géant de la Cascade
     /// about to explode) and that did nothing else.
-    public static List<TurnPlay> UselessPlays(TurnState s, TurnPlayer p) =>
-        s.Plays.Where(x => x.Owner == p.Actor && x.EnergySpent > 0 && !x.HadOtherEffect &&
-            ((x.GaveBlock && !x.Ethereal && p.Block - x.BlockAmount >= p.Incoming) || (x.UselessDebuff && !x.GaveBlock) ||
-             (x.Kind == CardKind.Attack && x.ShellCapped > 0 && x.FirstHit == null && !x.HadNonDamageEffect))).ToList();
+    /// v0.18.4: the block cards are judged from the last played back, each one without the block of those already found
+    /// useless (Armement 5 + Défense+ 8 + Défense 5 against 10: only the last Défense was not needed, not both Défenses).
+    public static List<TurnPlay> UselessPlays(TurnState s, TurnPlayer p)
+    {
+        var mine = s.Plays.Where(x => x.Owner == p.Actor && x.EnergySpent > 0 && !x.HadOtherEffect).ToList();
+        var uselessBlock = new HashSet<TurnPlay>();
+        var removed = 0.0;
+        foreach (var x in Enumerable.Reverse(mine).Where(x => x.GaveBlock && !x.Ethereal))
+            if (p.Block - removed - x.BlockAmount >= p.Incoming)
+            {
+                uselessBlock.Add(x);
+                removed += x.BlockAmount;
+            }
+        return mine.Where(x => uselessBlock.Contains(x) || (x.UselessDebuff && !x.GaveBlock) ||
+            (x.Kind == CardKind.Attack && x.ShellCapped > 0 && x.FirstHit == null && !x.HadNonDamageEffect)).ToList();
+    }
 
     /// Per player: unused energy, growing card affordable, block card kept, Orichalcum beaten by a small block, relic
     /// triggers missed by one card.

@@ -1,4 +1,4 @@
-# Handoff — state of the project (2026-10-30, v0.18.1)
+# Handoff — state of the project (2026-10-30, v0.18.4)
 
 > **Next session starts with Zaille75's next co-op test (beta branch, v0.17.38 or later).** He will send it with
 > `Envoyer-a-Claude.bat` → `logs/inbox/<date_time>/` (both logs + F9 `feedback/` folders). **Review and summarize every
@@ -150,6 +150,17 @@ Order: test → default branch → release prep → publish → maintenance. The
 
 Optional roadmap items (only if asked): JSON export, end-of-run Totals / Per act tabs, MVP line, opacity / scale /
 hotkey settings, chart history across Save & Quit.
+
+## v0.18.2 → v0.18.4 — solo run feedback (2026-10-30, not tested in game)
+Inbox `logs/inbox/2026-10-30_15-04-14/` (beta v0.18.1, 3 solo runs: Régent, 2× Soldat de fer, 26 fights; archived as
+`logs/2026-10-30_v0.18.1_beta_solo_regent_ironclad_3runs.log`, reports in `logs/feedback-2026-10-30/`). Card-by-card
+check: every summary figure recomputed from the events matched (Excédent includes caps, one kill per enemy: by design).
+Fixed: "Énergie pour rien" counted two block cards when only one was too much (now judged from the last back,
+`TurnReview.UselessPlays`, test); false weak attack with Piétinement (`BlockAlternatives.CostWithout`); event-log lines
+(Ancient choice twice with ".title", enchantment twice, shared-event line in solo). Zaille75: cards that cost HP
+(Percée…) kept on purpose (`CostsHp`); section split Cartes / Potions et énergie (hidden columns migrated in
+`ModConfig`); solo trophies window without winner / personal best / character names. Check in the next logs: no
+`WeakAttack … STOMP` after attacks, `energyUseless` amounts, `event outcome` lines clean.
 
 ## v0.18.1 — event outcomes in the log (2026-10-30, not tested in game)
 Zaille75: "track but don't introduce new stats". `RunHistoryPatches.LogEventOutcomes`: one `event outcome, floor N …`
