@@ -5,9 +5,12 @@ Summary by version line. The detailed notes of every version are in [docs/specs/
 
 ## Unreleased (towards 1.0)
 - README (English / French), MIT license, icon.
+- **0.18.7:** Fatalité x/y (useless / applied) in its own Affaiblissements column; review of the last logs: cards Souillés
+  (Prisme infesté) no longer count as energy lost or block kept; full hand no longer counts the Surins a played-again
+  Passe-passe created.
 - **0.18.6:** every tooltip explains only its own column (PV Soins column, debuffs received in Affaiblissements);
   wrong order counted once per card and turn, not for cards its power fed (Image rémanente, Lames fantomatiques); new
-  errors: Ruée, Pas de pioche, full hand, potion with no possible effect; Malédiction inutile and Doom-only cards'
+  errors: Ruée, Pas de pioche, full hand, potion with no possible effect; Fatalité x/y (useless / applied) and Doom-only cards'
   energy; Domaine counted in Énergie gagnée; energy left with only kept cards, or a useless card with nothing else to
   play, counts as surplus; Ce n'est qu'une égratinure needs the turn to end at 1 HP; Record absolu "value holder (date)".
 - **0.18.5:** fix: the mod no longer stays hidden after "Sauvegarder et quitter" then "Continuer"; new PV section,

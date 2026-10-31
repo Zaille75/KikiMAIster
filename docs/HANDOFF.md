@@ -1,4 +1,4 @@
-# Handoff — state of the project (2026-10-31, v0.18.6)
+# Handoff — state of the project (2026-10-31, v0.18.7)
 
 > **Next session starts with Zaille75's next co-op test (beta branch, v0.17.38 or later).** He will send it with
 > `Envoyer-a-Claude.bat` → `logs/inbox/<date_time>/` (both logs + F9 `feedback/` folders). **Review and summarize every
@@ -151,13 +151,27 @@ Order: test → default branch → release prep → publish → maintenance. The
 Optional roadmap items (only if asked): JSON export, end-of-run Totals / Per act tabs, MVP line, opacity / scale /
 hotkey settings, chart history across Save & Quit.
 
+## v0.18.7 — Fatalité wording + full log review (2026-10-31, not tested in game)
+Zaille75: Doom is **Fatalité** in French (not Malédiction); the useless / applied x/y now replaces times / stacks in the
+existing Fatalité column of Affaiblissements (`tip.doomXY`). Card-by-card review of
+`logs/2026-10-31_v0.18.5_beta_solo_ironclad_necrobinder_silent.log` + `.previous.log` (Soldat de fer, Tisse-Mort,
+Silencieuse ×2, ~45 fights; no internal error): **bugs fixed** — Prisme infesté's Étincelle vitale makes Skills Souillé
+(`Tainted` affliction, +X damage per hit when played): such cards are now `Punished` while an enemy attacks (they gave
+false "Énergie perdue" 2/1/3 and a false block kept); the full-hand rule counted Surins created by a played-again
+Passe-passe (now also requires the card in `HandAtPlay`). Already handled by v0.18.6 on this log: surplus with kept
+cards (Sculpteur dévoué, Tunnelier), useless block with no choice → surplus, Image rémanente / Lames fantomatiques
+excused, Domaine energy, Goutte de folie useless, Rampeluche Passe-passe → 1 handFull. **Ideas left to Zaille75**
+(not implemented): attack mostly stopped by a damage cap while a cheaper one did the same (Exosquelette: Frappe
+perfectionnée+ capped 36; Cobaye: Frappe for 1 damage); Ruée picks a random attack, so keeping the expensive one for it
+can be better; drawing (Acrobaties) before Passe-passe filled the hand (Sarcoptes, 5 Surins lost).
+
 ## v0.18.6 — solo runs of 2026-10-31 (2026-10-31, not tested in game)
 Inbox `logs/inbox/2026-10-31_12-07-39/` (beta, the v0.18.5 code but labelled "v0.18.4": dist was packaged before the
 version bump — **always build after bumping the version**; solo Soldat de fer, Tisse-Mort, Silencieuse ×2; 12 F9 reports,
 archived as `logs/2026-10-31_v0.18.5_beta_solo_ironclad_necrobinder_silent.log` + `.previous.log`, reports in
 `logs/feedback-2026-10-31/`). Answered without change: Frappe préparatoire after Frappe jumelée (it killed the last
 enemy before its Strength came). Zaille75's batch (01-metrics / 02-ui v0.18.6):
-- Tooltips: every column its own (new PV column **Soins**; Affaiblissements **Reçus** and **Malédiction inutile x/y**).
+- Tooltips: every column its own (new PV column **Soins**; Affaiblissements **Reçus** and **Fatalité x/y** in its existing column).
 - Wrong order: `TurnReview.ResolveOrder` emits one `orderTurn` miss per earlier play (args: card, damage, block, later
   cards); `OrderLoss.Late` + `TurnPlay.PowersGiven/PowersTriggered` (`BlockAlternatives.OnPowerTriggered`, from power
   block gains and `DebuffEffectPatches.AddModifiers`) excuse later plays the earlier card's power fed.

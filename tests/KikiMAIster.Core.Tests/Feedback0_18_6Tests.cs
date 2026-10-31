@@ -152,11 +152,13 @@ public class TurnReview0_18_6Tests
     public void FullHand_CardPlayedAfter_CouldHaveMadeRoom()
     {
         var defendRef = new object();
-        var sleeve = Play("UP_MY_SLEEVE", CardKind.Skill, energy: 2);
+        var sleeve = Play("UP_MY_SLEEVE", CardKind.Skill, energy: 2, hand: new[] { defendRef });
         sleeve.LostToFullHand = 2;
         sleeve.HandWhenFull.Add(defendRef);
         var defend = Play("DEFEND", CardKind.Skill, card: defendRef);
+        // A Surin it created (played again: Passe-passe x2) was in hand when the second copy overflowed, but not before.
         var shiv = Play("SHIV", energy: 0);
+        sleeve.HandWhenFull.Add(shiv.CardRef);
         var miss = Missed(Resolve(new TurnPlayer { Actor = A }, new[] { sleeve, shiv, defend }), "handFull").Single();
         Assert.Equal(new[] { "Card:UP_MY_SLEEVE", "1", "Card:DEFEND" }, miss.Args);
         Assert.Equal(1, miss.Amount);
@@ -168,6 +170,17 @@ public class TurnReview0_18_6Tests
         var r = Resolve(new TurnPlayer { Actor = A, Energy = 1, Hand = { Card("BLADE_DANCE", kept: true) } }, Array.Empty<TurnPlay>());
         Assert.Empty(Missed(r, "energy"));
         Assert.Equal(1, r.Events.OfType<HelpGiven>().Single(h => h.Kind == "energySurplus").Amount);
+    }
+
+    [Fact]
+    public void SouilleCards_LeftInHand_AreNotEnergyLostNorBlockKept()
+    {
+        // Prisme infesté (v0.18.7): every Skill is Souillé, playing it adds damage to each hit taken this turn.
+        var defend = new TurnCard { Ref = new object(), Key = "Card:DEFEND_SILENT", Kind = CardKind.Skill, Cost = 1, GainsBlock = true, Block = 5, Punished = true };
+        var r = Resolve(new TurnPlayer { Actor = A, Energy = 3, Block = 3, Incoming = 12, Hand = { defend } }, Array.Empty<TurnPlay>());
+        Assert.Empty(Missed(r, "energy"));
+        Assert.Empty(r.Events.OfType<BlockCardKept>());
+        Assert.Equal(3, r.Events.OfType<HelpGiven>().Single(h => h.Kind == "energySurplus").Amount);
     }
 
     [Fact]

@@ -1088,8 +1088,12 @@ public static class BlockAlternatives
     /// An attack the enemies punish like Thorns (v0.17.20): Personal Hive (Apicultueur) adds a Dazed to the deck per hit.
     /// Single target: punished only if every enemy it could hit punishes and it would kill none of them; all enemies:
     /// punished if any of them punishes (unless it kills every punishing one). Not playing it is then a choice.
+    /// v0.18.6: also a card Souillé (Prisme infesté's Étincelle vitale) while an enemy attacks: playing it makes every hit
+    /// this turn deal more damage, so keeping it is a choice.
     private static bool PunishedAttack(CardModel card)
     {
+        if (card.CombatState is not { } combat) return false;
+        if (card.Affliction is Tainted) return combat.HittableEnemies.Any(Attacks);
         if (card.Type != CardType.Attack || card.CombatState is not { } cs) return false;
         var enemies = cs.HittableEnemies.Where(e => e.HpDisplay == HpDisplay.Normal).ToList();
         if (enemies.Count == 0) return false;

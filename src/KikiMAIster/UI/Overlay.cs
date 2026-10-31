@@ -477,7 +477,6 @@ public static class Overlay
         _damageColumns = DamageColumns(stats);
         _debuffColumns = stats.Values.SelectMany(x => x.DebuffsApplied)
             .GroupBy(kv => DebuffColumn(kv.Key)).OrderByDescending(g => g.Sum(kv => kv.Value.Stacks)).Select(g => g.Key)
-            .Concat(stats.Values.Any(x => x.DoomApplied > 0) ? new[] { "col.doomUseless" } : Array.Empty<string>())
             .Concat(stats.Values.Any(x => x.DebuffsReceived.Count > 0) ? new[] { "col.debuffsReceived" } : Array.Empty<string>()).ToList();
         _restColumns = stats.Values.SelectMany(x => x.RestSiteChoices).GroupBy(kv => kv.Key)
             .OrderByDescending(g => g.Sum(kv => kv.Value)).ThenBy(g => g.Key, StringComparer.Ordinal).Select(g => $"Rest:{g.Key}").ToList();
@@ -980,11 +979,14 @@ public static class Overlay
         var tip = Loc.T("tip.debuffXY") + "\n" + (s.DebuffsApplied.Count == 0 ? Loc.T("tip.none") : Powers(s.DebuffsApplied));
         if (s.DotDamage > 0) tip += $"\n{Loc.T("tip.dot")}: {N(s.DotDamage)}";
         // Each column: its own debuff, by origin (v0.18.5).
+        // v0.18.6 (Zaille75): Fatalité shows useless / applied stacks instead.
         return s.DebuffsApplied.GroupBy(kv => DebuffColumn(kv.Key))
-            .Select(g => new Cell(g.Key, $"{g.Sum(kv => kv.Value.Count)}/{N(g.Sum(kv => kv.Value.Stacks))}",
-                Loc.T("tip.debuffXY") + "\n" + Powers(g.ToDictionary(kv => kv.Key, kv => kv.Value))))
-            // v0.18.6: Doom that killed nothing, and the debuffs the player received (out of PV perdus' details).
-            .Append(new Cell("col.doomUseless", $"{N(s.DoomUseless)}/{N(s.DoomApplied)}", Loc.T("tip.col.doomUseless")))
+            .Select(g => g.Key == "DOOM_POWER"
+                ? new Cell(g.Key, $"{N(s.DoomUseless)}/{N(s.DoomApplied)}",
+                    Loc.T("tip.doomXY") + "\n" + Powers(g.ToDictionary(kv => kv.Key, kv => kv.Value)))
+                : new Cell(g.Key, $"{g.Sum(kv => kv.Value.Count)}/{N(g.Sum(kv => kv.Value.Stacks))}",
+                    Loc.T("tip.debuffXY") + "\n" + Powers(g.ToDictionary(kv => kv.Key, kv => kv.Value))))
+            // v0.18.6: the debuffs the player received (out of PV perdus' details).
             .Append(new Cell("col.debuffsReceived", N(s.DebuffsReceived.Values.Sum(t => t.Count)),
                 s.DebuffsReceived.Count == 0 ? "" : Powers(s.DebuffsReceived)))
             .Append(new Cell("col.noDebuff", "-", tip)).ToArray();

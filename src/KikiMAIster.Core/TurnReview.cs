@@ -49,7 +49,7 @@ public sealed class TurnCard
     public bool HitsEnemies { get; init; }
     /// Thorns damage the player would take by playing it.
     public double Thorns { get; init; }
-    /// The enemies punish it like Thorns (Personal Hive).
+    /// The enemies punish it like Thorns (Personal Hive), or it is Souillé while an enemy attacks (v0.18.6).
     public bool Punished { get; init; }
     public bool DealsDamage { get; init; } = true;
     /// Estimated damage on each enemy; an enemy is missing when the card's number of hits is unknown.
@@ -430,7 +430,7 @@ public static class TurnReview
         // v0.18.6 (Zaille75): a useless card played while nothing useful was left to play lost nothing more than energy left
         // unused would have: it counts as surplus energy, not as energy spent for nothing.
         var useless = UselessPlays(s, p);
-        bool NoChoice(TurnPlay x) => !x.UsefulCardsInHand.Any(c => p.InHand(c.Card) is { } h && !h.StatusOrCurse && h.PlayableExceptEnergy &&
+        bool NoChoice(TurnPlay x) => !x.UsefulCardsInHand.Any(c => p.InHand(c.Card) is { } h && !h.StatusOrCurse && h.PlayableExceptEnergy && !h.Punished &&
                                                                     !h.KeptOnPurpose && (h.CostsX || h.Cost <= x.EnergySpent + p.Energy));
         energySurplus += useless.Where(NoChoice).Sum(x => x.EnergySpent);
         if (energySurplus > 0) r.Events.Add(new HelpGiven(actor, "energySurplus", energySurplus));
@@ -446,7 +446,7 @@ public static class TurnReview
 
         // Block card kept: not one for a single ally (only the ally check below), not La grande manœuvre (its own rule),
         // never an Exhaust card (v0.17.34).
-        var kept = hand.Where(c => c.GainsBlock && p.Affordable(c) && !c.Exhausts && !c.Gambit && !c.SacrificesPet && c.BlockFor != BlockTarget.OneAlly &&
+        var kept = hand.Where(c => c.GainsBlock && p.Affordable(c) && !c.Exhausts && !c.Gambit && !c.SacrificesPet && !c.Punished && c.BlockFor != BlockTarget.OneAlly &&
                                    c.Block > 0)
             .OrderByDescending(c => c.Block).FirstOrDefault();
         if (kept != null) r.Events.Add(new BlockCardKept(actor, kept.Key, kept.Block));
@@ -456,7 +456,7 @@ public static class TurnReview
         // A block card for allies kept while an ally is alive.
         if (p.AlliesAlive)
         {
-            var forAllies = hand.Where(c => c.GainsBlock && c.BlockFor != BlockTarget.Self && p.Affordable(c) && !c.Exhausts && c.Block > 0)
+            var forAllies = hand.Where(c => c.GainsBlock && c.BlockFor != BlockTarget.Self && p.Affordable(c) && !c.Exhausts && !c.Punished && c.Block > 0)
                 .OrderByDescending(c => c.Block).FirstOrDefault();
             if (forAllies != null)
                 r.Events.Add(new AllyBlockCardKept(actor, forAllies.Key, forAllies.Block, forAllies.BlockFor == BlockTarget.AllAllies));
@@ -545,7 +545,7 @@ public static class TurnReview
         {
             budget += attack.EnergySpent;
             // Any card left in hand that the energy pays (a block card only if the block was short; HP-costing cards included).
-            var instead = p.Hand.FirstOrDefault(c => !used.Contains(c.Ref) && !c.StatusOrCurse && c.PlayableExceptEnergy && !c.CostsX &&
+            var instead = p.Hand.FirstOrDefault(c => !used.Contains(c.Ref) && !c.StatusOrCurse && c.PlayableExceptEnergy && !c.CostsX && !c.Punished &&
                                                     c.Cost <= budget && c.Kind != CardKind.Attack && (!c.GainsBlock || p.Block < p.Incoming));
             if (instead == null) continue;
             used.Add(instead.Ref);
@@ -573,7 +573,8 @@ public static class TurnReview
             var room = maker.EnergyBefore - maker.EnergySpent;
             var before = new List<TurnPlay>();
             foreach (var later in s.Plays.SkipWhile(x => x != maker).Skip(1)
-                         .Where(x => x.Owner == p.Actor && maker.HandWhenFull.Contains(x.CardRef)))
+                         // Already in hand before the creating card (not the cards it created, Surins of a played-again Passe-passe).
+                         .Where(x => x.Owner == p.Actor && maker.HandWhenFull.Contains(x.CardRef) && maker.HandAtPlay.Any(h => ReferenceEquals(h, x.CardRef))))
             {
                 if (before.Count >= maker.LostToFullHand) break;
                 if (later.EnergySpent > room) continue;
