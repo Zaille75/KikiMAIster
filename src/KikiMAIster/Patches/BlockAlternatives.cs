@@ -106,12 +106,56 @@ public static class BlockAlternatives
         PetSacrificed.Clear();
         StampedeShort.Clear();
         StampedeAll.Clear();
+        BlockOnHit.Clear();
     }
 
-    /// A damage cap stopped part of a hit of the player's card play in progress (v0.18.7).
-    public static void OnCapped(Creature dealer)
+    /// A damage cap stopped part of a hit of the player's card play in progress (v0.18.7), on that enemy (v0.18.9).
+    public static void OnCapped(Creature dealer, Creature target)
     {
-        if (InProgress.TryPeek(out var play) && play != null && play.Player.Creature == dealer) play.Capped = true;
+        if (!InProgress.TryPeek(out var play) || play == null || play.Player.Creature != dealer) return;
+        play.Capped = true;
+        play.CappedOn.Add(target);
+    }
+
+    /// Enemies whose power gave them block when a card hit them (En boule, Pleutre, v0.18.9), the play that set it off and the
+    /// block still there to stop a later attack.
+    private static readonly Dictionary<Creature, (Play Trigger, string Power, int Block)> BlockOnHit = new();
+
+    /// An enemy's power gave it block after a player's card hit it (v0.18.9, Zaille75: Progéniteur de poux's En boule).
+    public static void OnEnemyBlockOnHit(Creature enemy, int amount, string power)
+    {
+        var trigger = InProgress.TryPeek(out var p) && p != null ? p : _justFinished;
+        if (trigger == null || trigger.Card.Type != CardType.Attack || amount <= 0) return;
+        BlockOnHit[enemy] = (trigger, power, amount);
+    }
+
+    /// A later attack lost damage into that block: a bigger attack that was in a hand when the smaller one set it off (the
+    /// player's own or an ally's) should have hit first; the small one would then have lost its own damage instead.
+    /// Counted for the player of the small hit, in Choix ("blockOnHit"): the small card, the big one, the damage lost, the power.
+    private static void CheckBlockOnHit(Play play, Creature target, int raw, int blocked)
+    {
+        if (blocked <= 0 || !BlockOnHit.TryGetValue(target, out var pending) || pending.Trigger == play) return;
+        var (trigger, power, block) = pending;
+        BlockOnHit.Remove(target);
+        var inHand = trigger.Player == play.Player ? trigger.HandAtPlay.Contains(play.Card) : trigger.AlliesHandAtPlay.Contains(play.Card);
+        var small = trigger.Hits.Where(h => ReferenceEquals(h.Target, target)).Sum(h => h.Raw);
+        if (!inHand || small <= 0 || small >= raw) return;
+        var lost = Math.Min(blocked, block) - Math.Min(small, block);
+        if (lost < 1) return;
+        ModLog.Info($"block on hit: {Key(trigger.Card)} set off {power} before {Key(play.Card)}, {lost} damage lost");
+        Capture.Emit(new MissedChance(trigger.Owner, "blockOnHit", new[] { trigger.CardKey,
+            TurnReview.Owned(Key(play.Card), play.Owner, trigger.Owner), N(lost), power }));
+    }
+
+    /// The player's pet gained HP from the card play in progress (Garde du corps…, v0.18.9, Zaille75): Déchaînement played
+    /// before it this turn, while that card was already in hand, dealt that much less (its damage is the pet's HP).
+    public static void OnPetHpRaised(Player owner, int amount)
+    {
+        if (amount <= 0 || !InProgress.TryPeek(out var play) || play == null || play.Player != owner) return;
+        foreach (var e in ThisTurn.TakeWhile(p => p != play).Where(p => p.Player == owner && p.Card is Unleash && !p.OtherThanDebuff &&
+                                                                    p.HandAtPlay.Contains(play.Card)))
+            foreach (var g in e.PetHits.GroupBy(h => h))
+                OrderLosses.Add(new OrderLoss(e, Key(play.Card), "order", g.Key, (double)amount * g.Count() * Vulnerable(g.Key, owner)));
     }
 
     /// A card drawn during the player's own card play (not the turn's draw, v0.18.7).
@@ -300,7 +344,7 @@ public static class BlockAlternatives
                 foreach (var e in attacks.Concat(AlliesBefore(play, player)))
                 {
                     var raw = e.Hits.Where(h => ReferenceEquals(h.Target, power.Owner)).Sum(h => h.Raw);
-                    if (raw > 0) OrderLosses.Add(new OrderLoss(e, boost, "order", power.Owner, raw * extra));
+                    if (raw > 0) OrderLosses.Add(new OrderLoss(e, TurnReview.Owned(boost, Capture.ToActor(player), e.Owner), "order", power.Owner, raw * extra));
                 }
                 break;
             }
@@ -352,6 +396,12 @@ public static class BlockAlternatives
                 foreach (var e in blocks)
                     OrderLosses.Add(new OrderLoss(e, boost, "orderBlock", null, e.BlockAmount * (Math.Pow(2, (double)amount) - 1)));
                 break;
+            // Forme du serpent (v0.18.9, Zaille75): damage to a random enemy for each card played after it; each card played before
+            // it this turn, while it was in hand, lost that much (the enemies left cap it).
+            case SerpentFormPower when power.Owner == player.Creature && play != null:
+                foreach (var e in earlier)
+                    OrderLosses.Add(new OrderLoss(e, boost, "orderRandom", null, (double)amount));
+                break;
             // Conquérant: Lame souveraine deals double damage to that enemy.
             case ConquerorPower when power.Owner.IsEnemy && !stacked:
                 foreach (var e in attacks.Where(p => p.Card is SovereignBlade))
@@ -366,7 +416,8 @@ public static class BlockAlternatives
                 foreach (var e in AlliesBefore(play, player))
                 {
                     var raw = e.Hits.Where(h => ReferenceEquals(h.Target, power.Owner)).Sum(h => h.Raw);
-                    if (raw > 0) OrderLosses.Add(new OrderLoss(e, boost, "order", power.Owner, raw * ((double)amount - 1)));
+                    if (raw > 0) OrderLosses.Add(new OrderLoss(e, TurnReview.Owned(boost, Capture.ToActor(player), e.Owner), "order", power.Owner,
+                        raw * ((double)amount - 1)));
                 }
                 break;
         }
@@ -409,9 +460,10 @@ public static class BlockAlternatives
 
     /// A hit of the card play in progress on an enemy (for the wrong-order and overkill checks). Raw: block + HP, the overkill
     /// apart.
-    public static void OnHit(CardModel card, Creature target, int raw, Creature? dealer = null, int overkill = 0, bool killed = false)
+    public static void OnHit(CardModel card, Creature target, int raw, Creature? dealer = null, int overkill = 0, bool killed = false, int blocked = 0)
     {
         if (raw <= 0 || !target.IsEnemy || !InProgress.TryPeek(out var play) || play == null || play.Card != card) return;
+        CheckBlockOnHit(play, target, raw, blocked);
         var slow = target.GetPower<SlowPower>() is { } power ? (int)power.DynamicVars["SlowAmount"].BaseValue : -1;
         play.Hits.Add(new EnemyHit(target, raw, slow));
         if (killed && ReferenceEquals(target, play.Target))
@@ -519,6 +571,29 @@ public static class BlockAlternatives
         play.OtherThanDebuff = true;
     }
 
+    /// A card discarded from the hand by the play in progress (Survivant, Préparatifs…). v0.18.9 (Zaille75): an effect only when
+    /// something reacts to it: the card is Sly (Ruse: played when discarded) or a relic or power acts on discards (Tingsha,
+    /// Bandages résistants). An Ethereal curse or status discarded is noted: it would have been exhausted at the end of the turn.
+    public static void OnCardDiscarded(CardModel card)
+    {
+        if (!InProgress.TryPeek(out var play) || play == null || play.Card == card) return;
+        if (card.Keywords.Contains(CardKeyword.Sly) || ReactsToDiscard(play.Player))
+        {
+            OnCardEffect(card);
+            return;
+        }
+        if (card.Type is CardType.Status or CardType.Curse && card.Keywords.Contains(CardKeyword.Ethereal)) play.DiscardedEthereal = Key(card);
+    }
+
+    /// The player has a relic or power whose AfterCardDiscarded does something.
+    private static bool ReactsToDiscard(Player player) =>
+        player.Relics.Cast<AbstractModel>().Concat(player.Creature.Powers).Any(m =>
+            m.GetType().GetMethod(nameof(AbstractModel.AfterCardDiscarded))?.DeclaringType is { } t && t != typeof(AbstractModel));
+
+    /// A card the play in progress is discarding right now (its pile change is not an effect on its own).
+    public static bool Discarding(CardModel card, PileType oldPile) =>
+        oldPile == PileType.Hand && card.Pile?.Type == PileType.Discard && InProgress.TryPeek(out var play) && play != null && play.Card != card;
+
     public static void OnPlayFinished()
     {
         if (InProgress.Count > 0 && InProgress.Pop() is { } play) _justFinished = play;
@@ -551,6 +626,7 @@ public static class BlockAlternatives
         // Played again by Déflagration & co.: the same choice, paid once (v0.17.38).
         if (cardPlay.PlayIndex > 0 && FirstPlays.TryGetValue(cardPlay.Card, out var first))
         {
+            first.PlayedAgain = true;
             Plays.AddOrUpdate(cardPlay, first);
             InProgress.Push(first);
             return;
@@ -691,6 +767,8 @@ public static class BlockAlternatives
         var s = new TurnState
         {
             NothingToKill = real.Count == 0,
+            // v0.18.9: the last enemy, when its death ends the fight (lethal missed at the end of the turn).
+            LastEnemy = real.Count == 1 && !ComesBack(real[0]) && combat.Enemies.Count(e => e.IsAlive) == 1 ? real[0] : null,
             EnemyAsleep = real.Any(e => e.HasPower<AsleepPower>()),
             OpenEnemy = real.Any(e => !(e.GetPower<HardenedShellPower>() is { } p && p.DisplayAmount <= 0)),
             // The cap met: Carapace endurcie, or the enemy shown with infinite HP (Géant de la Cascade about to explode).
@@ -734,6 +812,7 @@ public static class BlockAlternatives
             AlliesAlive = combat.Players.Any(p => p != player && p.Creature.IsAlive),
             PetAlive = !player.IsOstyMissing,
             PetSacrificedThisTurn = PetSacrificed.Contains(player),
+            LethalMissed = LethalCounted.Contains(player),
             StampedeShort = StampedeShort.GetValueOrDefault(player),
             StampedeKey = $"Power:{ModelDb.GetId<StampedePower>().Entry}",
             StampedePlayed = (StampedeAll.GetValueOrDefault(player) ?? new()).Select(c => CardView(c, combat, creature)).ToList(),
@@ -798,7 +877,7 @@ public static class BlockAlternatives
         };
         if (trigger == null) return null;
         var every = relic.DynamicVars.TryGetValue("Cards", out var v) ? v.IntValue : 3;
-        return new TurnRelic($"Relic:{Capture.IdOf(relic)}", trigger.Value, every);
+        return new TurnRelic($"Relic:{Capture.IdOf(relic)}", trigger.Value, every, GivesBlock: relic is OrnamentalFan);
     }
 
     /// A hit of the card play in progress that met a Carapace endurcie at its limit (0 damage).
@@ -810,6 +889,7 @@ public static class BlockAlternatives
     /// Missed lethal: the front hand could kill every enemy, yet one of them is alive at the end of the turn.
     private static void ResolveLethal(ICombatState combat)
     {
+        LethalCounted.Clear();
         var enemies = RealEnemies(combat);
         if (enemies.Count == 0) return;
         foreach (var (player, front) in FrontHand)
@@ -818,10 +898,14 @@ public static class BlockAlternatives
             if (front is { } lethal && lethal.Targets.Any(t => t.IsAlive && t.HpDisplay == HpDisplay.Normal))
             {
                 ModLog.Info($"missed lethal: {player.NetId} [{string.Join(", ", lethal.Attacks.Select(a => a.Id))}]");
+                LethalCounted.Add(player);
                 Capture.Emit(new MissedLethal(Capture.ToActor(player), lethal.Attacks.Select(a => a.Id).ToList(),
                     enemies.Sum(e => e.CurrentHp + e.Block)));
             }
     }
+
+    /// Players whose missed lethal of the first hand was counted this turn (the end-of-turn lethal is then not counted again).
+    private static readonly HashSet<Player> LethalCounted = new();
 
     /// Enemies that can really be hurt: an enemy shown with infinite HP (Waterfall Giant about to explode) is not one
     /// left to kill (spec §E0, invulnerable phase).
@@ -1073,7 +1157,20 @@ public static class BlockAlternatives
     private static bool KeptOnPurpose(CardModel card, ICombatState combat) =>
         card.ShouldRetainThisTurn || card.CurrentStarCost > 0 || card.HasStarCostX || card.Keywords.Contains(CardKeyword.Exhaust) ||
         ConsumesHand.Contains(card.Id.Entry) || EnergyOnly.Contains(card.Id.Entry) || SacrificesPet.Contains(card.Id.Entry) ||
-        CostsHp.Contains(card.Id.Entry) || EvokesOrbs.Contains(card.Id.Entry) || !Hook.ShouldFlush(combat, card.Owner);
+        CostsHp.Contains(card.Id.Entry) || EvokesOrbs.Contains(card.Id.Entry) || !Hook.ShouldFlush(combat, card.Owner) ||
+        DoesNothingNow(card) || DiscardsForNothing(card);
+
+    /// Impatience draws only without an attack in hand (v0.18.9, Zaille75): with one, it does nothing.
+    private static bool DoesNothingNow(CardModel card) =>
+        card is Impatience && (card.Owner.PlayerCombatState?.Hand.Cards.Any(c => c != card && c.Type == CardType.Attack) ?? false);
+
+    /// Free cards that make the player discard from the hand (v0.18.9, Zaille75: Préparatifs kept not to lose a useful card): kept
+    /// on purpose, unless a Sly card (Ruse) in hand would gain from it.
+    private static readonly HashSet<string> DiscardsHand = new() { "PREPARED", "SURVIVOR", "ACROBATICS", "DAGGER_THROW", "HIDDEN_DAGGERS", "CALCULATED_GAMBLE" };
+
+    private static bool DiscardsForNothing(CardModel card) =>
+        DiscardsHand.Contains(card.Id.Entry) && Cost(card) == 0 && !card.EnergyCost.CostsX &&
+        !(card.Owner.PlayerCombatState?.Hand.Cards.Any(c => c != card && c.Keywords.Contains(CardKeyword.Sly)) ?? false);
 
     /// Cards that only evoke the player's orbs (v0.18.5, Zaille75): keeping an orb is a choice.
     private static readonly HashSet<string> EvokesOrbs = new() { "DUALCAST", "MULTI_CAST", "QUADCAST" };

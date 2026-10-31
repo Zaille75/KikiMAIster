@@ -3,7 +3,9 @@ using HarmonyLib;
 using KikiMAIster.UI;
 using MegaCrit.Sts2.Core.Nodes;
 using MegaCrit.Sts2.Core.Nodes.Screens.CharacterSelect;
+using MegaCrit.Sts2.Core.Modding;
 using MegaCrit.Sts2.Core.Nodes.Screens.Map;
+using MegaCrit.Sts2.Core.Nodes.Screens.ModdingScreen;
 using MegaCrit.Sts2.Core.Nodes.Screens.PauseMenu;
 
 namespace KikiMAIster.Patches;
@@ -50,6 +52,41 @@ public static class UiPatches
         public static void Postfix(NPauseMenu __instance) => Capture.Safe("PauseMenu.Closed", () => Overlay.SetGameMenuOpen(__instance, false));
     }
 
+    /// The key chosen for an action (a Godot key name: "F9", "K"…).
+    private static bool Is(InputEventKey key, string name) =>
+        Enum.TryParse<Key>(name, ignoreCase: true, out var wanted) && wanted != Key.None && key.Keycode == wanted;
+
+    /// The game's Mods screen (main menu): a button under KikiMAIster's description opens its settings (v0.18.9, Zaille75:
+    /// the hotkeys can be changed there).
+    [HarmonyPatch(typeof(NModInfoContainer), nameof(NModInfoContainer.Fill))]
+    public static class ModInfoFilled
+    {
+        private const string ButtonName = "KikiMAIsterSettings";
+
+        public static void Postfix(NModInfoContainer __instance, Mod mod) => Capture.Safe("NModInfoContainer.Fill", () =>
+        {
+            var button = __instance.GetNodeOrNull<Button>(ButtonName);
+            var ours = mod.manifest?.id == "KikiMAIster";
+            if (button == null)
+            {
+                if (!ours) return;
+                button = Overlay.MakeButton(Loc.T("settings.openFromMods"));
+                button.Name = ButtonName;
+                button.AddThemeColorOverride("font_color", Overlay.Accent);
+                button.Pressed += () => Capture.Safe("Mods.Settings", () =>
+                {
+                    Overlay.EnsureAttached("mods screen");
+                    SettingsMenu.OpenFromMods();
+                });
+                __instance.AddChild(button);
+                button.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.BottomLeft);
+                button.Position = new Vector2(0, __instance.Size.Y + 8);
+            }
+            button.Text = Loc.T("settings.openFromMods");
+            button.Visible = ours;
+        });
+    }
+
     [HarmonyPatch(typeof(NGame), nameof(NGame._Input))]
     public static class Hotkey
     {
@@ -58,11 +95,15 @@ public static class UiPatches
             // Any input (even a mouse move) proves the game is running on the main thread: attach if needed.
             Overlay.EnsureAttached("input");
             if (inputEvent is InputEventMouseButton { Pressed: true } click) Overlay.RaiseAt(click.Position);
-            if (inputEvent is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F7 }) Overlay.Toggle();
-            // F8: group compositions, anywhere (the lobby included).
-            if (inputEvent is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F8 }) CompositionWindow.Toggle();
-            // F9: report a bug or an idea with a screenshot and the game state (every build since v0.18.0).
-            if (inputEvent is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F9 }) FeedbackWindow.Toggle();
+            if (inputEvent is not InputEventKey { Pressed: true, Echo: false } key) return;
+            // A hotkey being chosen in the settings (v0.18.9, Zaille75): this key is the new one.
+            if (SettingsMenu.TryCaptureKey(key.Keycode)) return;
+            var cfg = ModConfig.Current;
+            if (Is(key, cfg.KeyPanel)) Overlay.Toggle();
+            // Group compositions, anywhere (the lobby included).
+            if (Is(key, cfg.KeyCompositions)) CompositionWindow.Toggle();
+            // Report a bug or an idea with a screenshot and the game state (every build since v0.18.0).
+            if (Is(key, cfg.KeyReport)) FeedbackWindow.Toggle();
         });
     }
 }

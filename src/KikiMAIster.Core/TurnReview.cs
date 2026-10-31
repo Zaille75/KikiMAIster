@@ -140,6 +140,13 @@ public class TurnPlay
     /// A damage cap stopped part of its damage (Dur à cuire, Carapace endurcie…), and the cards it drew (v0.18.7).
     public bool Capped { get; set; }
     public int CardsDrawn { get; set; }
+    /// The enemies a cap stopped part of its damage on (v0.18.9, Zaille75: Dur à cuire, Glissant…): a boost played after it
+    /// would have been stopped too, so it lost nothing there.
+    public HashSet<object> CappedOn { get; } = new(ReferenceEqualityComparer.Instance);
+    /// Played again this turn (Écho, Déflagration…): its copies added their damage and block (v0.18.9).
+    public bool PlayedAgain { get; set; }
+    /// An Ethereal status or curse it made the player discard (v0.18.9): left in hand it would have been exhausted.
+    public string? DiscardedEthereal { get; set; }
     public HashSet<object> HandWhenFull { get; } = new(ReferenceEqualityComparer.Instance);
 
     /// The first enemy it hit, with all the raw damage it dealt to that enemy; null when it hit no enemy.
@@ -152,7 +159,8 @@ public class TurnPlay
 /// Late: the later play that lost it, when known (a Strength / Dexterity drop, v0.18.6).
 public sealed record OrderLoss(TurnPlay Early, string Boost, string Kind, object? Enemy, double Extra, TurnPlay? Late = null);
 
-public sealed record TurnRelic(string Key, RelicTrigger Trigger, int Every);
+/// GivesBlock: its trigger only gives block (Éventail décoratif, v0.18.9): missed only when that block was needed.
+public sealed record TurnRelic(string Key, RelicTrigger Trigger, int Every, bool GivesBlock = false);
 
 /// A player at the end of the turn.
 public sealed class TurnPlayer
@@ -186,6 +194,8 @@ public sealed class TurnPlayer
     public string StampedeKey { get; init; } = "";
     /// Ruée had enough plays for every attack in hand (v0.18.7): those attacks, which it played for free.
     public List<TurnCard> StampedePlayed { get; init; } = new();
+    /// A missed lethal of the turn's first hand was already counted for this player (v0.18.9).
+    public bool LethalMissed { get; init; }
 
     public TurnCard? InHand(object card) => Hand.FirstOrDefault(c => ReferenceEquals(c.Ref, card));
     public bool Affordable(TurnCard c) => !c.StatusOrCurse && c.PlayableExceptEnergy && (c.CostsX || c.Cost <= Energy);
@@ -207,6 +217,8 @@ public sealed class TurnState
     public string ShellKey { get; init; } = "";
     /// HP + block of each enemy alive.
     public Dictionary<object, int> EnemiesLeft { get; init; } = new(ReferenceEqualityComparer.Instance);
+    /// The only enemy left, when its death ends the fight (v0.18.9: lethal missed at the end of the turn).
+    public object? LastEnemy { get; init; }
 
     public TurnPlayer? Player(Actor a) => Players.FirstOrDefault(p => p.Actor == a);
 }
@@ -226,6 +238,14 @@ public static class TurnReview
 {
     private static string N(int v) => v.ToString(CultureInfo.InvariantCulture);
 
+    /// A card of another player in a miss's text (v0.18.9, Zaille75: "Chute d'étoile (Kiki)"): "Card:X|<player id>".
+    public static string Owned(string key, Actor owner, Actor viewer) =>
+        owner == viewer || owner.PlayerId == 0 ? key : $"{key}|{owner.PlayerId.ToString(CultureInfo.InvariantCulture)}";
+
+    /// Powers dealing their damage to a random enemy (v0.18.9, Zaille75): with several enemies alive, where it lands is luck.
+    public static readonly HashSet<string> RandomTargets = new()
+        { "Power:SERPENT_FORM_POWER", "Power:JUGGERNAUT_POWER", "Power:HAUNT_POWER", "Power:CACOPHONY_POWER" };
+
     public static TurnResult Resolve(TurnState s)
     {
         var r = new TurnResult();
@@ -233,6 +253,7 @@ public static class TurnReview
         ResolveOrder(s, r);
         WeakPlays(s, r);
         Overkills(s, r);
+        LethalLeft(s, r);
         foreach (var p in s.Players.Where(p => p.Alive)) EndOfTurnChecks(s, p, r);
         foreach (var p in s.Players.Where(p => p.Alive))
         {
@@ -263,7 +284,9 @@ public static class TurnReview
     {
         var deficit = new Dictionary<Actor, int>();
         var lost = new List<(TurnPlay Early, string Boost, bool Block, int Amount)>();
-        foreach (var g in s.OrderLosses.Where(o => o.Late == null || !o.Late.PowersTriggered.Overlaps(o.Early.PowersGiven))
+        // v0.18.9 (Zaille75): nothing is lost on an enemy whose cap already stopped part of the earlier play's damage there.
+        foreach (var g in s.OrderLosses.Where(o => (o.Late == null || !o.Late.PowersTriggered.Overlaps(o.Early.PowersGiven)) &&
+                                                   !(o.Enemy != null && o.Early.CappedOn.Contains(o.Enemy)))
                      .GroupBy(o => (o.Early, o.Boost, o.Kind)))
         {
             var (early, boost, kind) = g.Key;
@@ -271,6 +294,9 @@ public static class TurnReview
             // Dark orb charged: the damage it stores is lost whatever the enemies left.
             if (kind == "orderDark")
                 amount = g.Sum(o => o.Extra);
+            // Damage on a random enemy (Forme du serpent, v0.18.9): lost up to what the enemies had left.
+            else if (kind == "orderRandom")
+                amount = Math.Min(g.Sum(o => o.Extra), s.EnemiesLeft.Values.Sum());
             else if (kind is "order" or "orderSlow")
                 amount = g.Where(o => o.Enemy != null).GroupBy(o => o.Enemy!, ReferenceEqualityComparer.Instance)
                     .Sum(e => s.EnemiesLeft.TryGetValue(e.Key, out var left) ? Math.Min(e.Sum(o => o.Extra), left) : 0);
@@ -286,12 +312,15 @@ public static class TurnReview
             r.Log.Add($"wrong order: {early.CardKey} before {boost}, {kind} {rounded}");
             lost.Add((early, boost, kind == "orderBlock", rounded));
         }
-        foreach (var g in lost.GroupBy(x => x.Early))
+        // v0.18.9 (Zaille75): one miss per player and turn. Args: the earlier cards ("Card:A+Card:B"), damage lost, block lost,
+        // then the later cards or potions.
+        foreach (var g in lost.GroupBy(x => x.Early.Owner))
         {
             var damage = g.Where(x => !x.Block).Sum(x => x.Amount);
             var block = g.Where(x => x.Block).Sum(x => x.Amount);
+            var early = string.Join('+', g.Select(x => x.Early.CardKey).Distinct());
             var boosts = g.Select(x => x.Boost).Distinct();
-            r.Events.Add(new MissedChance(g.Key.Owner, "orderTurn", new[] { g.Key.CardKey, N(damage), N(block) }.Concat(boosts).ToArray()));
+            r.Events.Add(new MissedChance(g.Key, "orderTurn", new[] { early, N(damage), N(block) }.Concat(boosts).ToArray()));
         }
     }
 
@@ -336,7 +365,9 @@ public static class TurnReview
         {
             var others = big.DamageOn.Where(kv => !ReferenceEquals(kv.Key, big.Target) && Left(kv.Key) > 0).ToList();
             if (others.Count == 0) continue;
-            var followUp = big.FollowUps.Where(f => !ReferenceEquals(f.Target, big.Target)).GroupBy(f => f.Source)
+            // v0.18.9 (Zaille75): a power hitting a random enemy (Forme du serpent) is luck while several enemies are alive.
+            var followUp = big.FollowUps.Where(f => !ReferenceEquals(f.Target, big.Target) && !(RandomTargets.Contains(f.Source) && big.EnemiesAlive > 1))
+                .GroupBy(f => f.Source)
                 .Select(g => (Source: g.Key, Damage: g.Min(f => f.Raw))).Where(x => x.Damage >= big.TargetLeftBefore)
                 .OrderByDescending(x => x.Damage).FirstOrDefault();
             if (followUp.Source != null)
@@ -360,6 +391,47 @@ public static class TurnReview
         }
     }
 
+    /// Lethal missed at the end of the turn (v0.18.9, Zaille75: the last Putrilimace left at 1 HP while Frappes stayed in hand):
+    /// the last enemy, whose death ends the fight, is alive, and the attacks left in the players' hands, paid with the energy
+    /// left plus the energy spent on cards that did nothing but block (or nothing), would have killed it. Co-op: the players'
+    /// hands together. Counted as a missed lethal for every player whose attacks were part of it (not twice in a turn).
+    private static void LethalLeft(TurnState s, TurnResult r)
+    {
+        if (s.LastEnemy is not { } enemy || !s.EnemiesLeft.TryGetValue(enemy, out var left) || left <= 0) return;
+        var parts = new List<(TurnPlayer Player, List<TurnCard> Cards)>();
+        var total = 0;
+        foreach (var p in s.Players.Where(p => p.Alive))
+        {
+            var freed = s.Plays.Where(x => x.Owner == p.Actor && x.Kind != CardKind.Attack && x.EnergySpent > 0 && !x.HadOtherEffect)
+                .Sum(x => x.EnergySpent);
+            var budget = p.Energy + freed;
+            var attacks = p.Hand.Where(c => c.Kind == CardKind.Attack && c.PlayableExceptEnergy && !c.CostsX && !c.LacksStars && !c.Punished &&
+                                            (!c.NeedsPet || p.PetAlive) && c.DamageOn.TryGetValue(enemy, out var d) && d > 0).Take(10).ToList();
+            var (bestDamage, bestMask) = (0, 0);
+            for (var mask = 1; mask < 1 << attacks.Count; mask++)
+            {
+                var (cost, damage) = (0, 0);
+                for (var i = 0; i < attacks.Count; i++)
+                    if ((mask & (1 << i)) != 0)
+                    {
+                        cost += attacks[i].Cost;
+                        damage += attacks[i].DamageOn[enemy];
+                    }
+                if (cost <= budget && damage > bestDamage) (bestDamage, bestMask) = (damage, mask);
+            }
+            if (bestDamage <= 0) continue;
+            total += bestDamage;
+            parts.Add((p, attacks.Where((_, i) => (bestMask & (1 << i)) != 0).ToList()));
+        }
+        if (total < left) return;
+        foreach (var (p, _) in parts.Where(x => !x.Player.LethalMissed))
+        {
+            var cards = parts.SelectMany(x => x.Cards.Select(c => Owned(c.Key, x.Player.Actor, p.Actor))).ToList();
+            r.Log.Add($"lethal left: {p.Actor} [{string.Join(", ", cards)}] on {left}");
+            r.Events.Add(new MissedLethal(p.Actor, cards, left));
+        }
+    }
+
     /// Weak attack (the stronger one still in hand), Pen Nib on a weak attack, smaller block card (the bigger one still in
     /// hand and the block short of the attack).
     private static void WeakPlays(TurnState s, TurnResult r)
@@ -367,7 +439,9 @@ public static class TurnReview
         foreach (var play in s.Plays)
         {
             if (s.Player(play.Owner) is not { } p) continue;
-            if (play.Stronger is { } better && !play.HadNonDamageEffect && p.InHand(better.Card) is { KeptOnPurpose: false })
+            // v0.18.9 (Zaille75): not an attack that also gave block (Vague de fer) or was played again (Écho).
+            if (play.Stronger is { } better && !play.HadNonDamageEffect && !play.GaveBlock && !play.PlayedAgain &&
+                p.InHand(better.Card) is { KeptOnPurpose: false })
                 r.Events.Add(new WeakAttack(play.Owner, play.CardKey, better.Played, better.Key, better.Value));
             // Pen Nib doubled a weak attack: counted even if the stronger one was played later (it was not doubled).
             if (play.PenNibBetter is { } nib && !play.HadNonDamageEffect)
@@ -443,6 +517,10 @@ public static class TurnReview
         if (spentForNothing > 0) r.Events.Add(new HelpGiven(actor, "energyUseless", spentForNothing));
         if (energy == 0 && p.PaelsTears is { } tears && useless.FirstOrDefault() is { } first)
             r.Events.Add(new MissedChance(actor, "paelsTears", new[] { tears, first.CardKey }));
+        // A useless card that made the player discard an Ethereal curse or status (v0.18.9, Zaille75): left in hand it would
+        // have been exhausted; discarded, it comes back. Fine when the card's block was needed.
+        foreach (var x in useless.Where(x => x.DiscardedEthereal != null))
+            r.Events.Add(new MissedChance(actor, "discardEthereal", new[] { x.CardKey, x.DiscardedEthereal! }));
 
         // A growing card could have been played with the energy left, or instead of a useless card (v0.17.7).
         var spareEnergy = energy + useless.Select(x => x.EnergySpent).DefaultIfEmpty(0).Max();
@@ -487,7 +565,7 @@ public static class TurnReview
             return true;
         }
         if (s.NothingToKill) return;
-        foreach (var relic in p.Relics)
+        foreach (var relic in p.Relics.Where(x => !x.GivesBlock || p.Block < p.Incoming))
             if (MissedRelicTrigger(relic, p.Plays, hand, energy, WorthPlaying))
                 r.Events.Add(new MissedChance(actor, "relic", new[] { relic.Key }));
     }

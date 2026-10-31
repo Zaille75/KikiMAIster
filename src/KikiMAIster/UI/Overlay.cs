@@ -76,7 +76,7 @@ public static class Overlay
 
     private static readonly Section[] Sections =
     {
-        new("damage", DamageRow, () => Visible("damage", new[] { "col.total" }.Concat(_damageColumns).Concat(DebuffEffectColumns)),
+        new("damage", DamageRow, () => Visible("damage", new[] { "col.total", "col.damageHp", "col.damageBlocked" }.Concat(_damageColumns).Concat(DebuffEffectColumns)),
             s => s.DamageDealt),
         new("hp", HpRow, () => Visible("hp", Fixed(TakenColumns)), s => -s.HpLost),
         new("protection", ProtectionRow, () => Visible("protection", new[] { "col.prevented" }
@@ -104,7 +104,7 @@ public static class Overlay
     /// What the settings menu can hide: every section, and its fixed columns (damage kinds and debuff effect included).
     internal static readonly (string Section, string[] Columns)[] Hideable =
     {
-        ("damage", new[] { "cat.cards", "cat.dot", "cat.powers", "cat.pet", "cat.orbs", "cat.relics", "cat.potions", "cat.other", "col.overkill", "col.extraDamage" }),
+        ("damage", new[] { "col.damageHp", "col.damageBlocked", "cat.cards", "cat.dot", "cat.powers", "cat.pet", "cat.orbs", "cat.relics", "cat.potions", "cat.other", "col.overkill", "col.extraDamage" }),
         ("hp", TakenColumns),
         ("protection", ProtectionColumns),
         ("debuffs", Array.Empty<string>()),
@@ -241,7 +241,8 @@ public static class Overlay
         // The settings window and the fight summary (its chart) belong to the panel: F7 / ✕ hide them too (v0.17.13, v0.17.45).
         if (!show)
         {
-            SettingsMenu.Hide();
+            // Opened from the game's Mods screen (v0.18.9): it stays until closed.
+            if (!SettingsMenu.FromMods) SettingsMenu.Hide();
             CombatSummary.Hide();
         }
         // The game's menu (Échap) hides every mod window while it is open (v0.17.45).
@@ -250,7 +251,7 @@ public static class Overlay
         {
             CombatSummary.Hide();
             RunSummary.Hide();
-            if (!inLobby) SettingsMenu.Hide();
+            if (!inLobby && !SettingsMenu.FromMods) SettingsMenu.Hide();
         }
     }
 
@@ -808,8 +809,10 @@ public static class Overlay
 
     private static IReadOnlyList<Cell> DamageRow(ulong id, PlayerStats s)
     {
-        var total = _shown.Values.Sum(x => x.DamageDealt);
-        var share = total > 0 ? s.DamageDealt / total : 0;
+        // v0.18.9 (Zaille75): the total counts the damage into the enemies' block too; PV and Bloqués split it.
+        var total = _shown.Values.Sum(x => x.DamageDealt + x.DamageIntoBlock);
+        var mine = s.DamageDealt + s.DamageIntoBlock;
+        var share = total > 0 ? mine / total : 0;
         // Biggest hit / best card are trophies, not shown here (v0.17.17).
         var extra = s.DamageEnabledSelf + s.DamageEnabledAllies;
         // Each column's own details (v0.18.5): the total has every source, a kind of damage its own sources.
@@ -821,8 +824,12 @@ public static class Overlay
         string KindTip(string column) => Lines(s.DamageBySource.Where(kv => DamageColumn(kv.Key) == column).ToDictionary(kv => kv.Key, kv => kv.Value))
                                          + (column == "cat.cards" ? Block(enchantments) : "");
         var byColumn = s.DamageBySource.GroupBy(kv => DamageColumn(kv.Key)).ToDictionary(g => g.Key, g => g.Sum(kv => kv.Value));
-        var totalText = _solo ? N(s.DamageDealt) : $"{N(s.DamageDealt)} ({share:P0})";
-        return new[] { new Cell("col.total", totalText, totalTip) }
+        var totalText = _solo ? N(mine) : $"{N(mine)} ({share:P0})";
+        return new[]
+            {
+                new Cell("col.total", totalText, totalTip), new Cell("col.damageHp", N(s.DamageDealt), Lines(s.DamageBySource)),
+                new Cell("col.damageBlocked", N(s.DamageIntoBlock), "")
+            }
             .Concat(_damageColumns.Select(c => new Cell(c, N(byColumn.GetValueOrDefault(c)), KindTip(c))))
             // Overkill / of which unavoidable (v0.17.42), like Inutile for block.
             .Append(new Cell("col.overkill", $"{N(s.Overkill)}/{N(Math.Max(0, s.Overkill - s.OverkillAvoidable))}",
@@ -1005,7 +1012,7 @@ public static class Overlay
     {
         // v0.18.5: each column lists its own misses (most recent first).
         var lethal = s.MissedLethalTurns.AsEnumerable().Reverse().Take(3)
-            .Select(m => string.Format(Loc.T("why.lethal"), At(m.Combat, m.Round), string.Join(" + ", m.Cards.Select(GameNames.Of)), m.EnemiesHp)).ToList();
+            .Select(m => string.Format(Loc.T("why.lethal"), At(m.Combat, m.Round), string.Join(" + ", m.Cards.Select(Arg)), m.EnemiesHp)).ToList();
         var wasted = s.WastedPlays.OrderByDescending(w => w.PlayId).Take(3)
             .Select(w => string.Format(Loc.T("why.wasted"), At(w.Combat, w.Round), w.Choice.IncomingDamage, w.Choice.BlockAtTurnEnd,
                 GameNames.Of(w.Choice.BlockCard), N(w.Amount), GameNames.Of(w.Choice.Alternative))).ToList();
@@ -1020,17 +1027,17 @@ public static class Overlay
                 : new[] { MisplaysKey, PlayerStats.WastedKinds.Contains(m.Kind) ? "col.wastedBlock" : "col.choices" };
             var text = $"{At(m.Combat, m.Round)} · " + (m.Kind == "energy" && m.Args.Count > 1
                 // Unused energy: "2 energy left unused (Strike, Bash could be played)".
-                ? string.Format(Loc.T("why.energyCards"), m.Args[0], string.Join(", ", m.Args.Skip(1).Select(GameNames.Of)))
+                ? string.Format(Loc.T("why.energyCards"), m.Args[0], string.Join(", ", m.Args.Skip(1).Select(Arg)))
                 // Wrong order (v0.18.6): "Lames fantomatiques avant Précipitation, Surin : 1 dégâts et 1 armure perdus".
                 : m.Kind == "orderTurn" && m.Args.Count > 3
-                ? string.Format(Loc.T("why.orderTurn"), GameNames.Of(m.Args[0]), string.Join(", ", m.Args.Skip(3).Select(GameNames.Of)), OrderLost(m.Args[1], m.Args[2]))
+                ? string.Format(Loc.T("why.orderTurn"), Arg(m.Args[0]), string.Join(", ", m.Args.Skip(3).Select(Arg)), OrderLost(m.Args[1], m.Args[2]))
                 // Full hand: "Passe-passe main pleine : 2 carte(s) perdue(s), Défense pouvait être jouée avant".
                 : m.Kind == "handFull" && m.Args.Count > 2
-                ? string.Format(Loc.T("why.handFull"), GameNames.Of(m.Args[0]), m.Args[1], string.Join(", ", m.Args.Skip(2).Select(GameNames.Of)))
+                ? string.Format(Loc.T("why.handFull"), Arg(m.Args[0]), m.Args[1], string.Join(", ", m.Args.Skip(2).Select(Arg)))
                 // Miniature Tent: "Tente miniature : parti sans Repos, Forge".
                 : m.Kind == "tent" && m.Args.Count > 1
                 ? string.Format(Loc.T("why.tent"), GameNames.Of(m.Args[0]), string.Join(", ", m.Args.Skip(1).Select(GameNames.Of)))
-                : string.Format(Loc.T($"why.{m.Kind}"), m.Args.Select(a => (object)(a.Contains(':') || a == "Unknown" ? GameNames.Of(a) : a)).ToArray()));
+                : string.Format(Loc.T($"why.{m.Kind}"), m.Args.Select(a => (object)Arg(a)).ToArray()));
             foreach (var c in columns)
             {
                 if (!byColumn.TryGetValue(c, out var list)) byColumn[c] = list = new List<string>();
@@ -1053,6 +1060,16 @@ public static class Overlay
             new Cell("col.potionsLeft", N(K("potion")), Tip("col.potionsLeft")),
             new Cell("col.missedOutside", N(s.MissedOutside), Tip("col.missedOutside"))
         };
+    }
+
+    /// A miss's argument shown: a card, power… in the game's language, with its player when it is another one's ("Card:X|<id>",
+    /// v0.18.9, Zaille75), several cards joined by "+" listed; numbers as they are.
+    private static string Arg(string a)
+    {
+        if (a.Contains('+') && a.Contains(':')) return string.Join(", ", a.Split('+').Select(Arg));
+        var bar = a.IndexOf('|');
+        if (bar > 0) return $"{GameNames.Of(a[..bar])} ({AllyName(a[(bar + 1)..])})";
+        return a.Contains(':') || a == "Unknown" ? GameNames.Of(a) : a;
     }
 
     /// Damage and block lost by a wrong order: "3 dégâts perdus", "2 armure perdue" or "3 dégâts et 2 armure perdus".

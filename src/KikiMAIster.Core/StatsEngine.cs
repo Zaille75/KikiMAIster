@@ -17,10 +17,13 @@ public sealed class StatsEngine
     private readonly Dictionary<int, bool> _hadAlternative = new();
     /// Block cards kept in hand at the end of the player turn, and the HP lost to enemies since.
     private readonly Dictionary<ulong, (string Card, int Block, double Lost)> _blockKept = new();
-    /// La grande manœuvre kept this round, and the HP lost since; then, when HP were lost, the round after it: the miss
-    /// only counts if no HP were lost then (v0.17.23).
+    /// La grande manœuvre kept this round, and the HP lost since: v0.18.9 (Zaille75), a miss only when the player died with it
+    /// in hand (its drawback is real otherwise).
     private readonly Dictionary<ulong, (string Card, int Block, double Lost)> _riskyKept = new();
-    private readonly Dictionary<ulong, (string Card, int Block, double Saved, double LostAfter)> _riskyWait = new();
+    private readonly HashSet<ulong> _riskyDied = new();
+    /// Enemies that hit a player or pet since the end of the player turn (v0.18.9): one killed by a player's reaction before
+    /// its attack ended (Titos's Maîtrise nécrotique) made the block card kept a fair choice.
+    private readonly HashSet<int> _enemyAttackers = new();
     /// Block cards for allies kept in hand at the end of the turn, and the HP each ally lost to enemies since.
     private readonly Dictionary<ulong, (string Card, int Block, bool All, Dictionary<ulong, double> Lost)> _allyBlockKept = new();
     /// Each player's pet HP by who gave them (Legion of Bone gives pets to allies): owner → giver → HP.
@@ -160,6 +163,12 @@ public sealed class StatsEngine
                     s.Overkill += c.Amount;
                     s.DamageCapped += c.Amount;
                 });
+                break;
+            case PowersCleared pc:
+                foreach (var key in _fifo.Keys.Where(k => k.CreatureId == pc.Creature.CreatureId && pc.PowerIds.Contains(k.PowerId)).ToList())
+                    _fifo.Remove(key);
+                foreach (var key in _dots.Keys.Where(k => k.CreatureId == pc.Creature.CreatureId && pc.PowerIds.Any(id => k.PowerId.StartsWith(id, StringComparison.Ordinal))).ToList())
+                    _dots.Remove(key);
                 break;
             case PlayersSeen seen:
                 foreach (var p in seen.Players.Where(p => p.Name != "")) _players[p.PlayerId] = p;
@@ -464,7 +473,8 @@ public sealed class StatsEngine
         _blockKept.Clear();
         _allyBlockKept.Clear();
         _riskyKept.Clear();
-        _riskyWait.Clear();
+        _riskyDied.Clear();
+        _enemyAttackers.Clear();
         _petHp.Clear();
         _playDepth.Clear();
         _playDamage.Clear();
@@ -483,6 +493,11 @@ public sealed class StatsEngine
 
     private void OnDamage(DamageDealt d)
     {
+        if (d.Dealer.IsEnemy && d.Target.IsPlayerSide) _enemyAttackers.Add(d.Dealer.CreatureId);
+        // An enemy that attacked killed by a player's reaction before its attack ended (v0.18.9, Zaille75): the block card that
+        // player kept may have been what let it die (Titos's damage given back).
+        if (d.Target.IsEnemy && d.Killed && d.Dealer.IsPlayerSide && _enemyAttackers.Contains(d.Target.CreatureId))
+            _blockKept.Remove(d.Dealer.PlayerId);
         if (d.Target.IsEnemy) OnDamageToEnemy(d);
         else if (d.Target.IsPlayerSide) OnDamageToPlayerSide(d);
     }
@@ -662,8 +677,11 @@ public sealed class StatsEngine
             Each(owner, s => s.HpLostFromEnemies += d.Hp);
             ResolveHarm(owner, d.Hp);
             if (_blockKept.TryGetValue(owner, out var kept)) _blockKept[owner] = kept with { Lost = kept.Lost + d.Hp };
-            if (_riskyKept.TryGetValue(owner, out var risky)) _riskyKept[owner] = risky with { Lost = risky.Lost + d.Hp };
-            if (_riskyWait.TryGetValue(owner, out var wait)) _riskyWait[owner] = wait with { LostAfter = wait.LostAfter + d.Hp };
+            if (_riskyKept.TryGetValue(owner, out var risky))
+            {
+                _riskyKept[owner] = risky with { Lost = risky.Lost + d.Hp };
+                if (d.Killed) _riskyDied.Add(owner);
+            }
             foreach (var (giver, allyKept) in _allyBlockKept)
                 if (giver != owner) allyKept.Lost[owner] = allyKept.Lost.GetValueOrDefault(owner) + d.Hp;
         }
@@ -764,9 +782,18 @@ public sealed class StatsEngine
             return;
         }
         var powerId = m.Modifier.StartsWith("Power:", StringComparison.Ordinal) ? m.Modifier[6..] : m.Modifier;
+        var given = 0.0;
         foreach (var (origin, share) in GivenShares(m.Dealer.CreatureId, powerId))
+        {
             MoveDamage(m.Dealer.PlayerId, m.HitSource, origin, m.Amount * share);
+            given += share;
+        }
+        // Powers adding damage to some cards (v0.18.9, Zaille75: Précision on the Surins): the rest of their part is power damage.
+        if (CardDamagePowers.Contains(powerId) && given < 1)
+            MoveDamage(m.Dealer.PlayerId, m.HitSource, $"Power:{powerId}", m.Amount * (1 - given));
     }
+
+    private static readonly HashSet<string> CardDamagePowers = new() { "ACCURACY_POWER", "PHANTOM_BLADES_POWER" };
 
     /// An enemy's Strength made its hit bigger: the share a player's relic gave it waits for the hit (v0.17.45).
     private void OnEnemyStrengthHit(EnemyStrengthHit h)
@@ -1187,21 +1214,17 @@ public sealed class StatsEngine
     /// A block card kept in hand while HP was then lost to enemies: the HP it could have saved (spec §E0).
     private void ResolveBlockKept(bool combatEnded = false)
     {
-        // La grande manœuvre: the round after the HP loss went by without HP lost → playing it would have been safe.
-        foreach (var (id, (card, block, saved, lostAfter)) in _riskyWait)
-            if (lostAfter <= 0) AddMissed(id, "blockKept", new[] { card, block.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                saved.ToString("0", System.Globalization.CultureInfo.InvariantCulture) }, saved);
-        _riskyWait.Clear();
+        _enemyAttackers.Clear();
+        // La grande manœuvre (v0.18.9, Zaille75): only when the player died with it in hand.
         foreach (var (id, (card, block, lost)) in _riskyKept)
         {
             var saved = Math.Min(block, lost);
-            if (saved <= 0) continue;
-            // The fight is over: nothing could get through any more.
-            if (combatEnded) AddMissed(id, "blockKept", new[] { card, block.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                lost.ToString("0", System.Globalization.CultureInfo.InvariantCulture) }, saved);
-            else _riskyWait[id] = (card, block, saved, 0);
+            if (saved > 0 && _riskyDied.Contains(id))
+                AddMissed(id, "blockKept", new[] { card, block.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    lost.ToString("0", System.Globalization.CultureInfo.InvariantCulture) }, saved);
         }
         _riskyKept.Clear();
+        _riskyDied.Clear();
         foreach (var (id, (card, block, lost)) in _blockKept)
         {
             var saved = Math.Min(block, lost);

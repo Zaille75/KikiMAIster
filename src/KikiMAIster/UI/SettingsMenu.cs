@@ -50,9 +50,46 @@ public static class SettingsMenu
         layer.AddChild(timer);
     }
 
+    /// Opened from the game's Mods screen (v0.18.9, Zaille75): shown outside a run until it is closed.
+    public static bool FromMods { get; private set; }
+
+    /// The hotkey being chosen ("panel", "compositions", "report"), waiting for a key press.
+    private static string? _capturing;
+
     public static void Hide()
     {
+        FromMods = false;
+        _capturing = null;
         if (_panel != null && _panel.Visible) _panel.Visible = false;
+    }
+
+    public static void OpenFromMods()
+    {
+        if (_panel == null) return;
+        FromMods = true;
+        if (!_panel.Visible) Toggle();
+        else _panel.MoveToFront();
+    }
+
+    /// A key pressed while a hotkey is being chosen: it becomes that hotkey (Échap cancels). True when the key was taken.
+    public static bool TryCaptureKey(Key key)
+    {
+        if (_capturing == null) return false;
+        var which = _capturing;
+        _capturing = null;
+        if (key != Key.Escape)
+        {
+            var name = key.ToString();
+            switch (which)
+            {
+                case "panel": Cfg.KeyPanel = name; break;
+                case "compositions": Cfg.KeyCompositions = name; break;
+                case "report": Cfg.KeyReport = name; break;
+            }
+            Cfg.Save();
+        }
+        Changed();
+        return true;
     }
 
     public static void Toggle()
@@ -60,7 +97,7 @@ public static class SettingsMenu
         if (_panel == null) return;
         if (_panel.Visible)
         {
-            _panel.Visible = false;
+            Hide();
             return;
         }
         Rebuild();
@@ -94,7 +131,7 @@ public static class SettingsMenu
         title.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         header.AddChild(title);
         var close = Overlay.MakeButton("✕");
-        close.Pressed += () => Capture.Safe("SettingsMenu.Close", () => _panel.Visible = false);
+        close.Pressed += () => Capture.Safe("SettingsMenu.Close", Hide);
         header.AddChild(close);
         _content.AddChild(header);
 
@@ -129,6 +166,24 @@ public static class SettingsMenu
             dates.AddChild(b);
         }
         _content.AddChild(dates);
+
+        // Hotkeys (v0.18.9, Zaille75): click one, then press the new key (Échap cancels).
+        var keys = new HBoxContainer();
+        keys.AddChild(Overlay.MakeLabel(Loc.T("settings.hotkeys"), Overlay.Text));
+        foreach (var (which, label, current) in new[] { ("panel", "settings.keyPanel", Cfg.KeyPanel),
+                     ("compositions", "settings.keyCompositions", Cfg.KeyCompositions), ("report", "settings.keyReport", Cfg.KeyReport) })
+        {
+            var b = Overlay.MakeButton(string.Format(Loc.T("settings.keyFormat"), Loc.T(label),
+                _capturing == which ? Loc.T("settings.pressKey") : current));
+            b.AddThemeColorOverride("font_color", _capturing == which ? Overlay.Accent : Overlay.Muted);
+            b.Pressed += () => Capture.Safe("SettingsMenu.Hotkey", () =>
+            {
+                _capturing = which;
+                Rebuild();
+            });
+            keys.AddChild(b);
+        }
+        _content.AddChild(keys);
 
         _content.AddChild(Check(Loc.T("summary.auto"), Cfg.AutoSummary, on =>
         {

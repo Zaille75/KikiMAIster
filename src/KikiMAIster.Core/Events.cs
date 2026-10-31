@@ -270,5 +270,9 @@ public sealed record HelpGiven(Actor Giver, string Kind, double Amount) : StatEv
 /// A card whose only effect was Doom on enemies (v0.18.6): its energy was spent for nothing if none of them dies of Doom.
 public sealed record DoomPlayed(Actor Player, string Card, double Energy, IReadOnlyList<Actor> Targets) : StatEvent;
 
+/// An enemy lost all its powers at once without them wearing off (v0.18.9, Zaille75: Cobaye changing form, a revival):
+/// the debuffs applied before are gone, so the turns still queued in them credit nobody any more.
+public sealed record PowersCleared(Actor Creature, IReadOnlyList<string> PowerIds) : StatEvent;
+
 /// Energy a player gained during a fight (cards, powers, relics, potions; not the turn's refill), and its source (v0.18.5).
 public sealed record EnergyGained(Actor Player, string Source, double Amount) : StatEvent;

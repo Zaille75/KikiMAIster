@@ -10,7 +10,7 @@ public static class Trophies
     /// CoopOnly: needs allies. Fun: a "shame" trophy (most wasted…), shown after the others.
     /// VictoryOnly: only counted (and shown) for a victory, like every LowerIsBetter category.
     /// Eligible: who can win it (null = everyone).
-    /// Participation (v0.17.45): won by every player who won no other trophy of the run; never a record.
+    /// Participation (v0.17.45): won by every player who won no main trophy of the run (v0.18.9: fun ones left out); never a record.
     public sealed record Category(string Key, Func<PlayerStats, double> Value, bool LowerIsBetter = false, bool CoopOnly = false,
         bool Fun = false, bool VictoryOnly = false, Func<PlayerStats, bool>? Eligible = null, bool Participation = false)
     {
@@ -69,7 +69,8 @@ public static class Trophies
         if (run.Count == 0 || (c.CoopOnly && run.Count < 2)) return new();
         if (c.Participation)
         {
-            var won = All.Where(o => !o.Participation && !(o.CoopOnly && run.Count < 2) && (victory || !o.NeedsVictory))
+            // v0.18.9 (Zaille75): only the main trophies count, not the fun ones.
+            var won = All.Where(o => !o.Participation && !o.Fun && !(o.CoopOnly && run.Count < 2) && (victory || !o.NeedsVictory))
                 .SelectMany(o => Winners(o, run)).Select(w => w.Id).ToHashSet();
             return run.Keys.Where(id => !won.Contains(id)).OrderBy(id => id).Select(id => (id, 1.0)).ToList();
         }

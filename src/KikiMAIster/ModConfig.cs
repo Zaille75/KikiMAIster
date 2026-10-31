@@ -50,6 +50,12 @@ public sealed class ModConfig
     public bool ChifumiRecordsOpen { get; set; } = true;
     /// The "Maître des malus" records were cleared once (v0.17.1: they counted À l'attaque !, which is no debuff).
     public bool DebuffRecordsCleared { get; set; }
+    /// The "Champion des erreurs" records were cleared once (v0.18.9, Zaille75: the misplay rules changed).
+    public bool MissedRecordsCleared { get; set; }
+    /// Hotkeys (v0.18.9, Zaille75): the panel, the group compositions and the report window (Godot key names).
+    public string KeyPanel { get; set; } = "F7";
+    public string KeyCompositions { get; set; } = "F8";
+    public string KeyReport { get; set; } = "F9";
     /// Dates shown by the mod (v0.18.5, Zaille75): "dmy" (DD/MM/YYYY, default), "ymd" (YYYY/MM/DD) or "ydm" (YYYY/DD/MM).
     public string DateFormat { get; set; } = "dmy";
 
@@ -125,6 +131,10 @@ public sealed class ModConfig
                     case "compoLobbyOpen": c.CompoLobbyOpen = v == "true"; break;
                     case "compoFolded": c.CompoFolded = v == "true"; break;
                     case "debuffRecordsCleared": c.DebuffRecordsCleared = v == "true"; break;
+                    case "missedRecordsCleared": c.MissedRecordsCleared = v == "true"; break;
+                    case "keyPanel": c.KeyPanel = v; break;
+                    case "keyCompositions": c.KeyCompositions = v; break;
+                    case "keyReport": c.KeyReport = v; break;
                     case "funTrophiesShown": c.FunTrophiesShown = v == "true"; break;
                     case "chifumiRecordsOpen": c.ChifumiRecordsOpen = v == "true"; break;
                     case "detached": c.Detached = v.Split(',', StringSplitOptions.RemoveEmptyEntries).ToHashSet(); break;
@@ -166,6 +176,8 @@ public sealed class ModConfig
                 $"lobbyPanelVisible={(LobbyPanelVisible ? "true" : "false")}", $"compoLobbyOpen={(CompoLobbyOpen ? "true" : "false")}",
                 $"compoFolded={(CompoFolded ? "true" : "false")}", $"detached={string.Join(',', Detached)}",
                 $"debuffRecordsCleared={(DebuffRecordsCleared ? "true" : "false")}",
+                $"missedRecordsCleared={(MissedRecordsCleared ? "true" : "false")}",
+                $"keyPanel={KeyPanel}", $"keyCompositions={KeyCompositions}", $"keyReport={KeyReport}",
                 $"funTrophiesShown={(FunTrophiesShown ? "true" : "false")}", $"chifumiRecordsOpen={(ChifumiRecordsOpen ? "true" : "false")}",
                 $"dateFormat={DateFormat}"
             }.Concat(DetachedPositions.Select(kv => $"pos.{kv.Key}={kv.Value.X.ToString(ci)};{kv.Value.Y.ToString(ci)}")));

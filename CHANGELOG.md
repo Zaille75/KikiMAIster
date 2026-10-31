@@ -5,6 +5,13 @@ Summary by version line. The detailed notes of every version are in [docs/specs/
 
 ## Unreleased (towards 1.0)
 - README (English / French), MIT license, icon.
+- **0.18.9:** co-op runs feedback: no wrong order into a cap (Glissant, Dur à cuire), one per turn; no weak attack for
+  Vague de fer / played-again cards; Impatience, free discard cards, Éventail décoratif, La grande manœuvre, random
+  follow-ups and reaction kills no longer false errors; discards count only when something reacts; new errors: lethal
+  missed at the end of the turn (hands together), Ethereal curse discarded, Garde du corps after Déchaînement, cards
+  before Forme du serpent, small hit setting off En boule / Pleutre; debuffs reset with an enemy's new form; Précision in
+  Pouvoirs; Totaux with damage into block (PV / Bloqués); "Malus"; card owners in co-op errors; chifumi table; hotkeys
+  in the settings and the game's Mods screen; participation ignores fun trophies; Distrait records reset.
 - **0.18.8:** a useless card played with nothing else to play counts again as energy spent for nothing (a stat, not a
   mistake); new errors: attack into a damage cap a cheaper one matched (if the saving paid something useful), Ruée swap
   (expensive damage-only attack paid while Ruée played a cheaper one for free), draw before creating cards into a full

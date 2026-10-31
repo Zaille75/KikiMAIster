@@ -98,7 +98,7 @@ public static class FeedbackWindow
         _text.AddThemeFontSizeOverride("font_size", Overlay.FontSize);
         box.AddChild(_text);
 
-        _withScreenshot = new CheckBox { ButtonPressed = true, FocusMode = Control.FocusModeEnum.None };
+        _withScreenshot = new CheckBox { ButtonPressed = false, FocusMode = Control.FocusModeEnum.None };
         _withScreenshot.AddThemeFontSizeOverride("font_size", Overlay.FontSize);
         Overlay.StyleCheckBox(_withScreenshot);
         box.AddChild(_withScreenshot);

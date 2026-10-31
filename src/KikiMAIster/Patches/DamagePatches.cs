@@ -241,7 +241,8 @@ public static class DamagePatches
                 r.BlockedDamage + r.UnblockedDamage + r.OverkillDamage, r.OverkillDamage));
         if (card is Unleash or Protector && dealer is { IsPet: true } pet && target.IsEnemy && r.UnblockedDamage > 0)
             Capture.Safe("pet HP attack", () => ReportPetHpAttack(card, pet, r.UnblockedDamage));
-        if (card != null) BlockAlternatives.OnHit(card, target, r.BlockedDamage + r.UnblockedDamage, dealer, r.OverkillDamage, r.WasTargetKilled);
+        if (card != null) BlockAlternatives.OnHit(card, target, r.BlockedDamage + r.UnblockedDamage, dealer, r.OverkillDamage, r.WasTargetKilled,
+            r.BlockedDamage);
         // A player's power hitting an enemy right after a card (Trou noir): follow-up of that card (v0.17.42).
         else if (source.Kind == SourceKind.Power && target.IsEnemy && dealer is { IsPlayer: true })
             BlockAlternatives.OnFollowUpHit(dealer, source.ToString(), target, r.BlockedDamage + r.UnblockedDamage + r.OverkillDamage);
@@ -343,7 +344,7 @@ public static class DamagePatches
                 var dealerActor = Capture.ToActor(dealer);
                 if (!dealerActor.IsPlayerSide) return;
                 Capture.Emit(new DamageCapped(dealerActor, Capture.ToActor(target), (double)(amount - __result)));
-                if (dealer != null) BlockAlternatives.OnCapped(dealer);
+                if (dealer != null) BlockAlternatives.OnCapped(dealer, target);
             });
     }
 

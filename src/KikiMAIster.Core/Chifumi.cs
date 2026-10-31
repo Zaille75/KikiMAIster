@@ -14,6 +14,8 @@ public sealed class Chifumi
     private readonly Dictionary<ulong, string> _names = new();
     private readonly List<string> _fights = new();
     private readonly Dictionary<(ulong Player, string Move), int> _moves = new();
+    /// The longest fight of each pair of players (v0.18.9, Zaille75: the record between them).
+    private readonly Dictionary<(ulong A, ulong B), (int Rounds, ulong Winner, string Date)> _longestPair = new();
 
     /// The longest fight so far (rounds until a winner), its winner and date.
     public (int Rounds, ulong Winner, string Date) Longest { get; private set; }
@@ -33,6 +35,11 @@ public sealed class Chifumi
             foreach (var move in list)
                 _moves[(id, move)] = _moves.GetValueOrDefault((id, move)) + 1;
         if (rounds > Longest.Rounds) Longest = (rounds, winner, date);
+        var all = players.Distinct().OrderBy(p => p).ToList();
+        for (var i = 0; i < all.Count; i++)
+            for (var j = i + 1; j < all.Count; j++)
+                if (rounds > _longestPair.GetValueOrDefault((all[i], all[j])).Rounds)
+                    _longestPair[(all[i], all[j])] = (rounds, winner, date);
         _fights.Add(fightId);
         if (_fights.Count > KeptFights) _fights.RemoveRange(0, _fights.Count - KeptFights);
         foreach (var (id, name) in names ?? new Dictionary<ulong, string>())
@@ -54,6 +61,10 @@ public sealed class Chifumi
         return player < other ? (a, b) : (b, a);
     }
 
+    /// The longest fight between two players (0 rounds when none).
+    public (int Rounds, ulong Winner, string Date) LongestBetween(ulong a, ulong b) =>
+        _longestPair.GetValueOrDefault(a < b ? (a, b) : (b, a));
+
     /// What a player threw over every fight ("Rock" → times).
     public IReadOnlyDictionary<string, int> MovesOf(ulong player) =>
         _moves.Where(kv => kv.Key.Player == player).ToDictionary(kv => kv.Key.Move, kv => kv.Value);
@@ -70,6 +81,8 @@ public sealed class Chifumi
             .Concat(_moves.OrderBy(kv => kv.Key.Player).ThenBy(kv => kv.Key.Move, StringComparer.Ordinal)
                 .Select(kv => $"move.{kv.Key.Player.ToString(Inv)}.{kv.Key.Move}={kv.Value.ToString(Inv)}"))
             .Concat(Longest.Rounds > 0 ? new[] { $"longest={Longest.Rounds.ToString(Inv)};{Longest.Winner.ToString(Inv)};{Clean(Longest.Date)}" } : Array.Empty<string>())
+            .Concat(_longestPair.OrderBy(kv => kv.Key.A).ThenBy(kv => kv.Key.B).Select(kv =>
+                $"longest.{kv.Key.A.ToString(Inv)}.{kv.Key.B.ToString(Inv)}={kv.Value.Rounds.ToString(Inv)};{kv.Value.Winner.ToString(Inv)};{Clean(kv.Value.Date)}"))
             .Concat(_fights.Select(f => $"fight={Clean(f)}"));
         return string.Join('\n', lines) + "\n";
     }
@@ -89,6 +102,10 @@ public sealed class Chifumi
             else if (key == "longest" && value.Split(';') is { Length: 3 } l && int.TryParse(l[0], NumberStyles.None, Inv, out var r) &&
                      ulong.TryParse(l[1], NumberStyles.None, Inv, out var w))
                 c.Longest = (r, w, l[2]);
+            else if (parts[0] == "longest" && parts.Length == 3 && ulong.TryParse(parts[1], NumberStyles.None, Inv, out var la) &&
+                     ulong.TryParse(parts[2], NumberStyles.None, Inv, out var lb) && value.Split(';') is { Length: 3 } lp &&
+                     int.TryParse(lp[0], NumberStyles.None, Inv, out var lr) && ulong.TryParse(lp[1], NumberStyles.None, Inv, out var lw))
+                c._longestPair[la < lb ? (la, lb) : (lb, la)] = (lr, lw, lp[2]);
             else if (parts[0] == "move" && parts.Length == 3 && ulong.TryParse(parts[1], NumberStyles.None, Inv, out var mover) &&
                      int.TryParse(value, NumberStyles.None, Inv, out var times))
                 c._moves[(mover, parts[2])] = times;

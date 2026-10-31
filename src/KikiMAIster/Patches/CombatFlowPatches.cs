@@ -349,12 +349,24 @@ public static class CombatFlowPatches
         });
     }
 
+    /// An enemy loses every power at once (v0.18.9, Zaille75): Cobaye and the other enemies with several forms start each form
+    /// without the debuffs put on them, so the turns still queued in those debuffs credit nobody any more.
+    [HarmonyPatch(typeof(Creature), nameof(Creature.RemoveAllPowersInternalExcept))]
+    public static class PowersCleared
+    {
+        public static void Postfix(Creature __instance, IEnumerable<PowerModel> __result) => Capture.Safe("Creature.RemoveAllPowers", () =>
+        {
+            if (!__instance.IsEnemy || __result is not ICollection<PowerModel> removed || removed.Count == 0) return;
+            Capture.Emit(new Core.PowersCleared(Capture.ToActor(__instance), removed.Select(p => Capture.IdOf(p)).ToList()));
+        });
+    }
+
     [HarmonyPatch(typeof(Hook), nameof(Hook.AfterCardDiscarded))]
     public static class CardDiscarded
     {
         public static void Prefix(CardModel card) => Capture.Safe("AfterCardDiscarded", () =>
         {
-            BlockAlternatives.OnCardEffect(card);
+            BlockAlternatives.OnCardDiscarded(card);
             Capture.Emit(new CardEvent(Capture.ToActor(card.Owner), CardAction.Discarded));
         });
     }
@@ -426,7 +438,8 @@ public static class CombatFlowPatches
     {
         public static void Prefix(CardModel card, PileType oldPile) => Capture.Safe("AfterCardChangedPiles", () =>
         {
-            BlockAlternatives.OnCardEffect(card);
+            // A discard is judged by AfterCardDiscarded (v0.18.9: an effect only when something reacts to it).
+            if (!BlockAlternatives.Discarding(card, oldPile)) BlockAlternatives.OnCardEffect(card);
             // A card brought back to an ally's hand (Tutor…); draws and created cards are counted by their own hooks.
             if (card.Pile?.Type == PileType.Hand && Capture.CurrentActingPlayer is { } giver && card.Owner != giver &&
                 (oldPile is PileType.Discard or PileType.Exhaust || (oldPile == PileType.Draw && Capture.CardPlays.TryPeek(out var play) && play.Card.Id.Entry == "TUTOR"))) // Tutor: beta only

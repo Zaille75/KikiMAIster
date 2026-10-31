@@ -84,7 +84,8 @@ public static class DebuffEffectPatches
             var mods = modifiers;
             if (mods is not ICollection<AbstractModel> collection) return;
             // Strength down needs no modifier: the enemy's Strength may be back to 0 (+2 of its own, −2 from a player).
-            if (collection.Count == 0 && !(dealer.IsEnemy && props.IsPoweredAttack()) && cardSource?.Enchantment == null) return;
+            if (collection.Count == 0 && !(dealer.IsEnemy && props.IsPoweredAttack()) && cardSource?.Enchantment == null &&
+                !target.HasPower<SlipperyPower>()) return;
             var baseDamage = damage;
             Capture.Safe("Hook.ModifyDamage", () =>
             {
@@ -92,6 +93,13 @@ public static class DebuffEffectPatches
                 // A hit capped by Intangible / Dur à cuire on the target (v0.17.38): Vulnerable and Strength did not change it;
                 // on a player or pet, the cap is damage prevented (the part that would have gone through the block).
                 var caps = mods.OfType<PowerModel>().Where(p => p is IntangiblePower or HardToKillPower && p.Owner == target).ToList();
+                // Glissant (v0.18.9, Zaille75): an enemy without block loses 1 HP per hit, whatever the hit; not a damage
+                // modifier, so checked here. Vulnérable and Force change nothing then.
+                var slippery = target.IsEnemy && target.Block <= 0 && target.GetPower<SlipperyPower>() is { Amount: > 0 } && __result > 1 &&
+                               Capture.ToActor(dealer).IsPlayerSide;
+                if (slippery)
+                    Capture.Safe("slippery cap", () => AddEnemyCapped(effects, runState, combatState, target, dealer, baseDamage, props,
+                        cardSource, cardPlay, 1));
                 if (caps.Count > 0 && Capture.ToActor(target).IsPlayerSide)
                     Capture.Safe("damage cap", () => AddCapped(effects, caps, runState, combatState, target, dealer, baseDamage, props, cardSource,
                         cardPlay, __result));
@@ -122,7 +130,7 @@ public static class DebuffEffectPatches
                     switch (m)
                     {
                         // Vulnerable on an enemy: extra damage for the player (or pet) hitting it.
-                        case VulnerablePower v when v.Owner == target && target.IsEnemy && target.HpDisplay == HpDisplay.Normal && caps.Count == 0:
+                        case VulnerablePower v when v.Owner == target && target.IsEnemy && target.HpDisplay == HpDisplay.Normal && caps.Count == 0 && !slippery:
                         {
                             var factor = (double)Mult(v, target, __result, props, dealer, cardSource, cardPlay);
                             if (factor > 1)
@@ -323,7 +331,7 @@ public static class DebuffEffectPatches
             var stopped = (double)(uncapped - capped);
             if (stopped <= 0) return;
             effects.Add(new DamageCapped(Capture.ToActor(dealer), Capture.ToActor(target), stopped));
-            BlockAlternatives.OnCapped(dealer);
+            BlockAlternatives.OnCapped(dealer, target);
         }
 
         private static void AddApplied(List<StatEvent> effects, PowerModel p, Creature applier, Creature target, Creature dealer,

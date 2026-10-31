@@ -67,6 +67,10 @@ public static class BlockAndPowerPatches
             if (call?.Source.Kind == SourceKind.Card && receiver.IsPlayer)
                 Capture.Safe("block enabled", () => EnabledByAllyDexterity(receiver, amount));
             BlockAlternatives.OnBlockGained(call?.PlayId ?? 0, amount);
+            // En boule / Pleutre (v0.18.9): an enemy's block set off by a player's hit.
+            if (receiver.IsEnemy && call?.Source is { Kind: SourceKind.Power } guard &&
+                (guard.Id == ModelDb.GetId<CurlUpPower>().Entry || guard.Id == ModelDb.GetId<SkittishPower>().Entry))
+                BlockAlternatives.OnEnemyBlockOnHit(receiver, amount, guard.ToString());
             if (call?.Source is { Kind: SourceKind.Power } fed) BlockAlternatives.OnPowerTriggered(receiver, fed.ToString());
             if (call?.Source is { Kind: SourceKind.Orb } orb && orb.Id == ModelDb.GetId<FrostOrb>().Entry && receiver.Player is { } owner)
                 BlockAlternatives.OnOrbTriggered(owner, null, "orderBlock");
@@ -354,6 +358,7 @@ public static class BlockAndPowerPatches
                 if (!Capture.IsInsideCall(typeof(OstyCmd)))
                     Capture.Emit(new PetHpGiven(healer.Kind == ActorKind.Player ? healer : Actor.Player(target.PlayerId, 0), healed,
                         Actor.Player(target.PlayerId, 0)));
+                if (creature.PetOwner is { } petOwner) BlockAlternatives.OnPetHpRaised(petOwner, healed);
                 return;
             }
             // What healed (v0.17.39): the potion being drunk, else the relic, card or power calling.
@@ -372,6 +377,7 @@ public static class BlockAndPowerPatches
             // A card that summons for every player (co-op) is credited to whoever played it, not to each pet owner.
             var giver = Capture.CurrentActingPlayer ?? player;
             Capture.Emit(new PetHpGiven(Capture.ToActor(giver), amount, Capture.ToActor(player)));
+            BlockAlternatives.OnPetHpRaised(player, amount);
         });
     }
 }

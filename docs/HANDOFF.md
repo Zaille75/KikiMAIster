@@ -1,4 +1,4 @@
-# Handoff — state of the project (2026-10-31, v0.18.8)
+# Handoff — state of the project (2026-10-31, v0.18.9)
 
 > **Next session starts with Zaille75's next co-op test (beta branch, v0.17.38 or later).** He will send it with
 > `Envoyer-a-Claude.bat` → `logs/inbox/<date_time>/` (both logs + F9 `feedback/` folders). **Review and summarize every
@@ -150,6 +150,24 @@ Order: test → default branch → release prep → publish → maintenance. The
 
 Optional roadmap items (only if asked): JSON export, end-of-run Totals / Per act tabs, MVP line, opacity / scale /
 hotkey settings, chart history across Save & Quit.
+
+## v0.18.9 — co-op runs of 2026-10-31 (2026-10-31, not tested in game)
+Inbox `logs/inbox/2026-10-31_16-07-31/` (co-op Kiki + Zaille, 3 runs) + Zaille's reports in `logs/inbox/feedback-3/`
+(archived in `logs/feedback-2026-10-31/`, logs as `logs/2026-10-31_v0.18.8_beta_coop_3runs*.log`). Rules in 01-metrics
+(rows tagged v0.18.9). Code notes:
+- Caps per enemy: `TurnPlay.CappedOn` (`BlockAlternatives.OnCapped(dealer, target)`); Glissant handled in
+  `DebuffEffectPatches.ModifyDamage` (`slippery`, `AddEnemyCapped` with capped = 1).
+- `orderTurn` args: earlier cards joined by "+", then damage, block, later cards. Another player's card: "Card:X|<id>"
+  (`TurnReview.Owned`), shown by `Overlay.Arg`.
+- New misses: `LethalLeft` (TurnReview → `MissedLethal`; `TurnState.LastEnemy`, `TurnPlayer.LethalMissed`),
+  `discardEthereal` (Gâché, `TurnPlay.DiscardedEthereal` from `BlockAlternatives.OnCardDiscarded`), `blockOnHit` (Choix,
+  emitted live by `CheckBlockOnHit`; En boule / Pleutre block from `HistoryBlock`), `orderRandom` loss kind (Forme du
+  serpent), Déchaînement losses from `OnPetHpRaised`.
+- `PowersCleared` event (patch on `Creature.RemoveAllPowersInternalExcept`) clears the engine's FIFO / dot ledgers.
+- Gambit: `_riskyDied` (death only); reaction kill: `_enemyAttackers`.
+- Hotkeys: `ModConfig.KeyPanel / KeyCompositions / KeyReport`, `SettingsMenu.TryCaptureKey`, `Loc` tokens `{KEY_…}`;
+  Mods screen button: `UiPatches.ModInfoFilled` (patch on `NModInfoContainer.Fill`), `SettingsMenu.FromMods`.
+- PatchCheck: beta 74, default 71. Tests: 178.
 
 ## v0.18.8 — Zaille75's answers to the review ideas (2026-10-31, not tested in game)
 - A useless card with nothing else to play counts again as `energyUseless` (the v0.18.6 "no choice → surplus" rule is

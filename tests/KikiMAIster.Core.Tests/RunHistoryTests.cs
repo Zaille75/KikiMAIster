@@ -159,20 +159,17 @@ public class RunHistoryTests : TestBase
     }
 
     [Fact]
-    public void GambitKept_CountsOnlyIfTheNextRoundLosesNoHp()
+    public void GambitKept_CountsOnlyIfThePlayerDiedWithIt()
     {
+        // v0.18.9 (Zaille75): its drawback is real, so keeping it is a mistake only when the player died with it in hand.
         Engine.Handle(new BlockCardKept(A, "Card:THE_GAMBIT", 50, Risky: true));
         EnemyHits(A, 0, 7);
         Engine.Handle(new RoundStarted(2));
         Assert.Equal(0, Combat(IdA).AvoidableHp);
-        EnemyHits(A, 0, 3); // the next round: with its power, this hit would have killed
-        Engine.Handle(new RoundStarted(3));
-        Assert.Equal(0, Combat(IdA).AvoidableHp);
 
         Engine.Handle(new BlockCardKept(A, "Card:THE_GAMBIT", 50, Risky: true));
-        EnemyHits(A, 0, 6);
-        Engine.Handle(new RoundStarted(4));
-        Engine.Handle(new RoundStarted(5)); // no HP lost: playing it was safe
+        EnemyHits(A, 0, 6, killed: true);
+        Engine.Handle(new RoundStarted(3));
         Assert.Equal(6, Combat(IdA).AvoidableHp);
     }
 }

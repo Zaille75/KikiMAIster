@@ -142,27 +142,58 @@ public static class RunSummary
         _content!.AddChild(header);
         if (!open) return;
         var book = ChifumiStore.Book;
-        var lines = new List<string>();
         var ids = run.Keys.OrderBy(id => id).ToList();
+        if (ids.All(id => run[id].ChifumiPlayed <= 0 && book.MovesOf(id).Count == 0))
+        {
+            _content.AddChild(Overlay.MakeLabel("  " + Loc.T("run.chifumiNone"), Overlay.Text));
+            return;
+        }
+        // v0.18.9 (Zaille75): a table, this run then every run; moves "this run / every run".
+        var grid = new GridContainer { Columns = 6, MouseFilter = Control.MouseFilterEnum.Pass };
+        grid.AddThemeConstantOverride("h_separation", 14);
+        grid.AddThemeConstantOverride("v_separation", 1);
+        foreach (var h in new[] { "run.chifumiPlayer", "run.chifumiThisRun", "run.chifumiAllRuns", "col.rock", "col.paper", "col.scissors" })
+            grid.AddChild(Overlay.MakeLabel(Loc.T(h), Overlay.Muted));
+        foreach (var id in ids)
+        {
+            var s = run[id];
+            grid.AddChild(Overlay.MakeLabel("  " + Name(id), Overlay.PlayerColor(id)));
+            grid.AddChild(Overlay.MakeLabel($"{Overlay.N(s.ChifumiWon)}/{Overlay.N(s.ChifumiPlayed)}", Overlay.Text, HorizontalAlignment.Right));
+            var (won, lost) = ids.Where(o => o != id).Select(o => book.Against(id, o)).Aggregate((0, 0), (a, b) => (a.Item1 + b.Won, a.Item2 + b.Lost));
+            var rate = won + lost == 0 ? "" : $" ({((double)won / (won + lost)).ToString("P0", CultureInfo.InvariantCulture)})";
+            grid.AddChild(Overlay.MakeLabel(won + lost == 0 ? "-" : $"{won} – {lost}{rate}", Overlay.Text, HorizontalAlignment.Right));
+            var all = book.MovesOf(id);
+            foreach (var move in new[] { "Rock", "Paper", "Scissors" })
+                grid.AddChild(Overlay.MakeLabel($"{Overlay.N(s.ChifumiMoves.GetValueOrDefault(move))} / {all.GetValueOrDefault(move)}", Overlay.Text,
+                    HorizontalAlignment.Right));
+        }
+        _content.AddChild(grid);
+
+        // Longest chifumi: this run, the record between each pair of this run's players, the overall record; ★ when this run holds it.
+        var runLongest = ids.Select(id => run[id].ChifumiLongest).DefaultIfEmpty(0).Max();
+        var longest = new GridContainer { Columns = 4, MouseFilter = Control.MouseFilterEnum.Pass };
+        longest.AddThemeConstantOverride("h_separation", 14);
+        longest.AddThemeConstantOverride("v_separation", 1);
+        foreach (var h in new[] { "run.chifumiLongestTitle", "run.chifumiRounds", "run.chifumiWinner", "run.chifumiDate" })
+            longest.AddChild(Overlay.MakeLabel(Loc.T(h), Overlay.Muted));
+        void Row(string label, int rounds, ulong? winner, string date)
+        {
+            var record = runLongest > 0 && rounds == runLongest && label != Loc.T("run.chifumiThisRun");
+            longest.AddChild(Overlay.MakeLabel("  " + label, Overlay.Text));
+            longest.AddChild(Overlay.MakeLabel(rounds <= 0 ? "-" : $"{(record ? "★ " : "")}{rounds}", record ? Overlay.Accent : Overlay.Text,
+                HorizontalAlignment.Right));
+            longest.AddChild(winner is { } w && rounds > 0 ? Overlay.MakeLabel(Name(w), Overlay.PlayerColor(w)) : Overlay.MakeLabel("-", Overlay.Muted));
+            longest.AddChild(Overlay.MakeLabel(rounds > 0 && date != "" ? ModConfig.Current.ShowDate(date) : "-", Overlay.Muted));
+        }
+        Row(Loc.T("run.chifumiThisRun"), (int)runLongest, null, "");
         for (var i = 0; i < ids.Count; i++)
             for (var j = i + 1; j < ids.Count; j++)
             {
-                var (won, lost) = book.Against(ids[i], ids[j]);
-                if (won + lost == 0) continue;
-                var rate = ((double)won / (won + lost)).ToString("P0", CultureInfo.InvariantCulture);
-                lines.Add(string.Format(Loc.T("run.chifumiPair"), Name(ids[i]), Name(ids[j]), won, lost, rate));
+                var pair = book.LongestBetween(ids[i], ids[j]);
+                Row(string.Format(Loc.T("run.chifumiPairRecord"), Name(ids[i]), Name(ids[j])), pair.Rounds, pair.Winner, pair.Date);
             }
-        foreach (var id in ids)
-        {
-            var moves = book.MovesOf(id);
-            if (moves.Count == 0) continue;
-            lines.Add(string.Format(Loc.T("run.chifumiMoves"), Name(id), moves.GetValueOrDefault("Rock"), moves.GetValueOrDefault("Paper"),
-                moves.GetValueOrDefault("Scissors")));
-        }
-        if (book.Longest.Rounds > 0)
-            lines.Add(string.Format(Loc.T("run.chifumiLongest"), book.Longest.Rounds, Name(book.Longest.Winner), ModConfig.Current.ShowDate(book.Longest.Date)));
-        if (lines.Count == 0) lines.Add(Loc.T("run.chifumiNone"));
-        foreach (var line in lines) _content.AddChild(Overlay.MakeLabel("  " + line, Overlay.Text));
+        Row(Loc.T("run.recordAbsolute"), book.Longest.Rounds, book.Longest.Winner, book.Longest.Date);
+        _content.AddChild(longest);
     }
 
     private static string NameOf(StatsEngine engine, ulong id) =>
@@ -389,6 +420,15 @@ public static class RecordStore
             Capture.Safe("RecordStore.Load", () =>
             {
                 if (FilePath != null && File.Exists(FilePath)) _book = RecordBook.Read(File.ReadAllText(FilePath));
+                // Once (v0.18.9, Zaille75): the misplay rules changed, so the "Distrait" records start over.
+                if (!ModConfig.Current.MissedRecordsCleared)
+                {
+                    _book.Clear("trophy.missed");
+                    if (FilePath != null && File.Exists(FilePath)) File.WriteAllText(FilePath, _book.Write());
+                    ModConfig.Current.MissedRecordsCleared = true;
+                    ModConfig.Current.Save();
+                    ModLog.Info("Distrait records cleared (misplay rules changed)");
+                }
                 // Once (v0.17.1): "Maître des malus" counted À l'attaque !, which is no debuff: its records start over.
                 if (ModConfig.Current.DebuffRecordsCleared) return;
                 _book.Clear("trophy.debuffs");
