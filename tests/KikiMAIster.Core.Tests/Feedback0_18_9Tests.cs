@@ -19,6 +19,16 @@ public class Feedback0_18_9Tests : TestBase
     }
 
     [Fact]
+    public void DyingEnemy_PowersClearedBeforeTheKillingPoison_KeepsItsCredit()
+    {
+        // The game removes a dying enemy's powers before the hit that killed it is reported.
+        Power(A, Enemy, "POISON_POWER", 6);
+        Engine.Handle(new PowersCleared(Enemy, new[] { "POISON_POWER" }));
+        Engine.Handle(new DamageDealt(Actor.None, Enemy, 0, 6, 0, true, Source.Dot("POISON_POWER")));
+        Assert.Equal(6, Combat(IdA).DamageDealt);
+    }
+
+    [Fact]
     public void BlockKept_NotCounted_WhenTheAttackerDiedOfTheirReaction()
     {
         // Titos gives its damage back: the enemy died before its second hit, which a block card would have changed.

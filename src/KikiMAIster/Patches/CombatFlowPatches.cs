@@ -95,6 +95,7 @@ public static class CombatFlowPatches
         }
         _currentRun = new WeakReference<IRunState>(runState);
         _runKey = null;
+        _runOver = false;
         Capture.Emit(new RunStarted());
         Capture.Safe("run key", () => _runKey = RunStore.KeyOf(runState));
         if (_runKey != null) RunStore.TryRestore(_runKey, _floor, Capture.Engine);
@@ -254,7 +255,8 @@ public static class CombatFlowPatches
     {
         public static void Prefix(Creature creature, bool wasRemovalPrevented) => Capture.Safe("AfterDeath", () =>
         {
-            if (wasRemovalPrevented || !creature.IsPlayer) return;
+            // After a victory the game kills every player to close the run (v0.18.10): not a death.
+            if (wasRemovalPrevented || !creature.IsPlayer || _runOver) return;
             Capture.Emit(new PlayerDied(Capture.ToActor(creature)));
             // Died with potions that could have been drunk in combat (spec §E0).
             var potions = creature.Player?.Potions.Count(p => p.Usage is PotionUsage.CombatOnly or PotionUsage.AnyTime) ?? 0;
@@ -263,12 +265,18 @@ public static class CombatFlowPatches
         });
     }
 
+    /// The run has ended (its first OnEnded): later deaths and OnEnded calls are the game closing it.
+    private static bool _runOver;
+
     /// Victory or defeat: the end-of-run summary (trophies, records).
     [HarmonyPatch(typeof(RunManager), nameof(RunManager.OnEnded))]
     public static class RunOver
     {
         public static void Prefix(bool isVictory) => Capture.Safe("RunManager.OnEnded", () =>
         {
+            // A won run ends twice: WinRun, then the defeat the game sends when it kills the players (v0.18.10).
+            if (_runOver) return;
+            _runOver = true;
             RunHistoryPatches.Read(CurrentRun, ended: true);
             Capture.Emit(new RunEnded(isVictory));
             KikiMAIster.UI.RunSummary.OnRunEnded(isVictory);

@@ -560,7 +560,8 @@ public static class TurnReview
         {
             if (c.StatusOrCurse || !c.PlayableExceptEnergy || c.KeptOnPurpose || c.Gambit) return false;
             if (!free && (!energyLost || !p.Affordable(c))) return false;
-            if (c.Kind == CardKind.Attack && (c.Thorns > Math.Max(0, surplus) || !c.DealsDamage || c.Punished)) return false;
+            // v0.18.10: not an attack on a sleeping enemy (waking it is a choice).
+            if (c.Kind == CardKind.Attack && (c.Thorns > Math.Max(0, surplus) || !c.DealsDamage || c.Punished || s.EnemyAsleep)) return false;
             if (blockNeeded && !c.GainsBlock && !free && c.Cost + blockCards.Min(b => b.Cost) > energy) return false;
             return true;
         }
@@ -600,7 +601,8 @@ public static class TurnReview
     }
 
     /// A useful free card left in hand is a misplay counted in "Gâché" (v0.17.26), unless kept on purpose, Rage with no
-    /// attack played while it was in hand, punished, dealing no damage, or nothing left to hit.
+    /// attack played while it was in hand, punished, dealing no damage, or nothing left to hit (v0.18.10: nor an attack while
+    /// an enemy sleeps, Matriarche lagavulin).
     private static void FreeCardsLeft(TurnState s, TurnPlayer p, TurnResult r)
     {
         if (s.NothingToKill) return;
@@ -611,7 +613,7 @@ public static class TurnReview
             s.Plays.Any(x => x.Owner == p.Actor && x.Kind == CardKind.Attack && x.HandAtPlay.Any(h => ReferenceEquals(h, rage.Ref)));
         foreach (var c in p.Hand.Where(c => c.Free && c.Useful && !c.StatusOrCurse && c.PlayableExceptEnergy && !c.KeptOnPurpose &&
                                             !c.Punished && !(c.Rage && !RageWouldHelp(c)) &&
-                                            (c.Kind != CardKind.Attack || (c.DealsDamage && c.Thorns <= room))))
+                                            (c.Kind != CardKind.Attack || (c.DealsDamage && c.Thorns <= room && !s.EnemyAsleep))))
             r.Events.Add(new MissedChance(p.Actor, "freeCard", new[] { c.Key }));
     }
 

@@ -1,4 +1,4 @@
-# Handoff — state of the project (2026-10-31, v0.18.9)
+# Handoff — state of the project (2026-10-31, v0.18.10)
 
 > **Next session starts with Zaille75's next co-op test (beta branch, v0.17.38 or later).** He will send it with
 > `Envoyer-a-Claude.bat` → `logs/inbox/<date_time>/` (both logs + F9 `feedback/` folders). **Review and summarize every
@@ -150,6 +150,15 @@ Order: test → default branch → release prep → publish → maintenance. The
 
 Optional roadmap items (only if asked): JSON export, end-of-run Totals / Per act tabs, MVP line, opacity / scale /
 hotkey settings, chart history across Save & Quit.
+
+## v0.18.10 — card-by-card review of the co-op log (2026-10-31, not tested in game)
+`logs/2026-10-31_v0.18.8_beta_coop_3runs.log` (31 fights): every summary figure recomputed from the events matched (differences
+by design: poison credited by stacks, Flex potion's share moved to the potion, one kill per enemy). Every v0.18.8 miss checked
+against the v0.18.9 rules: wrong order 11 → 7 (Glissant / Dur à cuire removed, all real co-op ones kept with the ally's name),
+Impatience ×6 and Préparatifs ×4 removed, Éventail décoratif removed, La grande manœuvre 5 HP removed; new: lethal at the end
+of the turn (Putrilimace Kiki, Idole Oubliée Zaille), Forme du serpent order (Veillée T1, 8), En boule (Progéniteur, Zaille 25),
+Survivant into Fléau de l'ascendant. Fixed: second `RunManager.OnEnded` after `WinRun` (`CombatFlowPatches._runOver`), free
+attack / relic while asleep, `CheckBlockOnHit` consuming its pending block, `PowersCleared` applied lazily (`_cleared`).
 
 ## v0.18.9 — co-op runs of 2026-10-31 (2026-10-31, not tested in game)
 Inbox `logs/inbox/2026-10-31_16-07-31/` (co-op Kiki + Zaille, 3 runs) + Zaille's reports in `logs/inbox/feedback-3/`

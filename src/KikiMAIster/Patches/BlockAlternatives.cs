@@ -136,12 +136,17 @@ public static class BlockAlternatives
     {
         if (blocked <= 0 || !BlockOnHit.TryGetValue(target, out var pending) || pending.Trigger == play) return;
         var (trigger, power, block) = pending;
-        BlockOnHit.Remove(target);
         var inHand = trigger.Player == play.Player ? trigger.HandAtPlay.Contains(play.Card) : trigger.AlliesHandAtPlay.Contains(play.Card);
         var small = trigger.Hits.Where(h => ReferenceEquals(h.Target, target)).Sum(h => h.Raw);
-        if (!inHand || small <= 0 || small >= raw) return;
         var lost = Math.Min(blocked, block) - Math.Min(small, block);
-        if (lost < 1) return;
+        if (!inHand || small <= 0 || small >= raw || lost < 1)
+        {
+            // Not a bigger attack held back: it only used up its share of that block (two Frappes, then Lame souveraine).
+            if (block - blocked > 0) BlockOnHit[target] = (trigger, power, block - blocked);
+            else BlockOnHit.Remove(target);
+            return;
+        }
+        BlockOnHit.Remove(target);
         ModLog.Info($"block on hit: {Key(trigger.Card)} set off {power} before {Key(play.Card)}, {lost} damage lost");
         Capture.Emit(new MissedChance(trigger.Owner, "blockOnHit", new[] { trigger.CardKey,
             TurnReview.Owned(Key(play.Card), play.Owner, trigger.Owner), N(lost), power }));

@@ -24,6 +24,21 @@ public sealed class StatsEngine
     /// Enemies that hit a player or pet since the end of the player turn (v0.18.9): one killed by a player's reaction before
     /// its attack ended (Titos's Maîtrise nécrotique) made the block card kept a fair choice.
     private readonly HashSet<int> _enemyAttackers = new();
+    /// Powers an enemy lost all at once (v0.18.9, a new form): their ledgers are dropped at the next debuff news on that enemy
+    /// or the next round.
+    private readonly HashSet<(int CreatureId, string PowerId)> _cleared = new();
+
+    private void ApplyCleared(int? creatureId = null)
+    {
+        if (_cleared.Count == 0) return;
+        foreach (var (id, power) in _cleared.Where(c => creatureId == null || c.CreatureId == creatureId).ToList())
+        {
+            _cleared.Remove((id, power));
+            _fifo.Remove((id, power));
+            foreach (var key in _dots.Keys.Where(k => k.CreatureId == id && k.PowerId.StartsWith(power, StringComparison.Ordinal)).ToList())
+                _dots.Remove(key);
+        }
+    }
     /// Block cards for allies kept in hand at the end of the turn, and the HP each ally lost to enemies since.
     private readonly Dictionary<ulong, (string Card, int Block, bool All, Dictionary<ulong, double> Lost)> _allyBlockKept = new();
     /// Each player's pet HP by who gave them (Legion of Bone gives pets to allies): owner → giver → HP.
@@ -132,14 +147,20 @@ public sealed class StatsEngine
         {
             case RunStarted: OnRunStarted(); break;
             case CombatStarted c: OnCombatStarted(c); break;
-            case RoundStarted r: OnRoundStarted(r); break;
+            case RoundStarted r:
+                ApplyCleared();
+                OnRoundStarted(r);
+                break;
             case CombatEnded c: OnCombatEnded(c); break;
             case DamageDealt d: OnDamage(d); break;
             case BlockGained b: OnBlockGained(b); break;
             case BlockCleared b: OnBlockCleared(b); break;
             case BlockRemoved b: OnBlockRemoved(b); break;
             case BlockObserved b: OnBlockObserved(b); break;
-            case PowerChanged p: OnPowerChanged(p); break;
+            case PowerChanged p:
+                ApplyCleared(p.Target.CreatureId);
+                OnPowerChanged(p);
+                break;
             case Healed h: OnHealed(h); break;
             case HpLossPrevented h: OnHpLossPrevented(h); break;
             case PetHpGiven p when p.Giver.IsPlayerSide && p.Giver.PlayerId != 0 && p.Amount > 0:
@@ -150,7 +171,10 @@ public sealed class StatsEngine
                 by[p.Giver.PlayerId] = by.GetValueOrDefault(p.Giver.PlayerId) + p.Amount;
                 break;
             }
-            case DebuffEffect x: OnDebuffEffect(x); break;
+            case DebuffEffect x:
+                ApplyCleared(x.Holder.CreatureId);
+                OnDebuffEffect(x);
+                break;
             case PetHpAttack a when a.Pet.IsPlayerSide && a.Pet.PlayerId != 0: OnPetHpAttack(a); break;
             case PetHpBlock b when b.Receiver.Kind == ActorKind.Player: OnPetHpBlock(b.Receiver.PlayerId); break;
             case StrengthBorrowed b: OnStrengthBorrowed(b); break;
@@ -164,11 +188,9 @@ public sealed class StatsEngine
                     s.DamageCapped += c.Amount;
                 });
                 break;
+            // Cleared lazily: a dying enemy loses its powers before its killing hit is reported (a poison kill keeps its credit).
             case PowersCleared pc:
-                foreach (var key in _fifo.Keys.Where(k => k.CreatureId == pc.Creature.CreatureId && pc.PowerIds.Contains(k.PowerId)).ToList())
-                    _fifo.Remove(key);
-                foreach (var key in _dots.Keys.Where(k => k.CreatureId == pc.Creature.CreatureId && pc.PowerIds.Any(id => k.PowerId.StartsWith(id, StringComparison.Ordinal))).ToList())
-                    _dots.Remove(key);
+                foreach (var id in pc.PowerIds) _cleared.Add((pc.Creature.CreatureId, id));
                 break;
             case PlayersSeen seen:
                 foreach (var p in seen.Players.Where(p => p.Name != "")) _players[p.PlayerId] = p;
@@ -475,6 +497,7 @@ public sealed class StatsEngine
         _riskyKept.Clear();
         _riskyDied.Clear();
         _enemyAttackers.Clear();
+        _cleared.Clear();
         _petHp.Clear();
         _playDepth.Clear();
         _playDamage.Clear();
