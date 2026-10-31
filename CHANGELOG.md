@@ -5,6 +5,10 @@ Summary by version line. The detailed notes of every version are in [docs/specs/
 
 ## Unreleased (towards 1.0)
 - README (English / French), MIT license, icon.
+- **0.18.8:** a useless card played with nothing else to play counts again as energy spent for nothing (a stat, not a
+  mistake); new errors: attack into a damage cap a cheaper one matched (if the saving paid something useful), Ruée swap
+  (expensive damage-only attack paid while Ruée played a cheaper one for free), draw before creating cards into a full
+  hand.
 - **0.18.7:** Fatalité x/y (useless / applied) in its own Affaiblissements column; review of the last logs: cards Souillés
   (Prisme infesté) no longer count as energy lost or block kept; full hand no longer counts the Surins a played-again
   Passe-passe created.

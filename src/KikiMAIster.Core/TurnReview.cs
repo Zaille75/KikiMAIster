@@ -137,6 +137,9 @@ public class TurnPlay
     public int EnergyGiven { get; set; }
     /// Cards it created that went to the discard pile because the hand was full, and the hand at that moment (v0.18.6).
     public int LostToFullHand { get; set; }
+    /// A damage cap stopped part of its damage (Dur à cuire, Carapace endurcie…), and the cards it drew (v0.18.7).
+    public bool Capped { get; set; }
+    public int CardsDrawn { get; set; }
     public HashSet<object> HandWhenFull { get; } = new(ReferenceEqualityComparer.Instance);
 
     /// The first enemy it hit, with all the raw damage it dealt to that enemy; null when it hit no enemy.
@@ -181,6 +184,8 @@ public sealed class TurnPlayer
     /// Ruée: how many of its end-of-turn plays found no attack in hand (v0.18.6), and its key.
     public int StampedeShort { get; init; }
     public string StampedeKey { get; init; } = "";
+    /// Ruée had enough plays for every attack in hand (v0.18.7): those attacks, which it played for free.
+    public List<TurnCard> StampedePlayed { get; init; } = new();
 
     public TurnCard? InHand(object card) => Hand.FirstOrDefault(c => ReferenceEquals(c.Ref, card));
     public bool Affordable(TurnCard c) => !c.StatusOrCurse && c.PlayableExceptEnergy && (c.CostsX || c.Cost <= Energy);
@@ -235,6 +240,9 @@ public static class TurnReview
             Stampede(s, p, r);
             DrawBlocked(s, p, r);
             FullHand(s, p, r);
+            CappedAttacks(s, p, r);
+            StampedeSwap(s, p, r);
+            DrawBeforeMaking(s, p, r);
         }
         var used = new HashSet<object>(ReferenceEqualityComparer.Instance);
         var withAlternative = BlockAlternatives(s, used, r);
@@ -426,15 +434,12 @@ public static class TurnReview
                       (s.NothingToKill || !hand.Any(c => p.Affordable(c) && !c.KeptOnPurpose && !NeedlessBlock(c) && !Punished(c) && CanHit(c) && PetReady(c)))
             ? energy : 0;
 
-        // Energy spent for nothing (v0.17.37); Pael's Tears: that energy would have been left.
-        // v0.18.6 (Zaille75): a useless card played while nothing useful was left to play lost nothing more than energy left
-        // unused would have: it counts as surplus energy, not as energy spent for nothing.
-        var useless = UselessPlays(s, p);
-        bool NoChoice(TurnPlay x) => !x.UsefulCardsInHand.Any(c => p.InHand(c.Card) is { } h && !h.StatusOrCurse && h.PlayableExceptEnergy && !h.Punished &&
-                                                                    !h.KeptOnPurpose && (h.CostsX || h.Cost <= x.EnergySpent + p.Energy));
-        energySurplus += useless.Where(NoChoice).Sum(x => x.EnergySpent);
         if (energySurplus > 0) r.Events.Add(new HelpGiven(actor, "energySurplus", energySurplus));
-        var spentForNothing = useless.Where(x => !NoChoice(x)).Sum(x => x.EnergySpent);
+
+        // Energy spent for nothing (v0.17.37), even with nothing else to play (v0.18.7, Zaille75: a stat, not a mistake);
+        // Pael's Tears: that energy would have been left.
+        var useless = UselessPlays(s, p);
+        var spentForNothing = useless.Sum(x => x.EnergySpent);
         if (spentForNothing > 0) r.Events.Add(new HelpGiven(actor, "energyUseless", spentForNothing));
         if (energy == 0 && p.PaelsTears is { } tears && useless.FirstOrDefault() is { } first)
             r.Events.Add(new MissedChance(actor, "paelsTears", new[] { tears, first.CardKey }));
@@ -585,6 +590,70 @@ public static class TurnReview
             r.Events.Add(new MissedChance(p.Actor, "handFull",
                 new[] { maker.CardKey, N(before.Count) }.Concat(before.Select(x => x.CardKey).Distinct()).ToArray(), before.Count));
         }
+    }
+
+    /// A card left in hand that would have been worth playing with more energy (v0.18.7).
+    private static bool UsefulLeft(TurnState s, TurnPlayer p, TurnCard c) =>
+        !c.StatusOrCurse && c.PlayableExceptEnergy && !c.KeptOnPurpose && !c.Punished && !c.CostsX && !c.LacksStars &&
+        (!c.GainsBlock || p.Block < p.Incoming) && (c.Kind != CardKind.Attack || (s.OpenEnemy && !s.NothingToKill && c.DealsDamage)) &&
+        (!c.NeedsPet || p.PetAlive);
+
+    /// The useful card left in hand that only the saved energy would have paid (not already affordable).
+    private static TurnCard? PaidBySaving(TurnState s, TurnPlayer p, int saved, HashSet<object> used, object? besides = null) =>
+        p.Hand.Where(c => !ReferenceEquals(c.Ref, besides) && !used.Contains(c.Ref) && UsefulLeft(s, p, c) && c.Cost > p.Energy && c.Cost <= p.Energy + saved)
+            .OrderByDescending(c => c.Cost).FirstOrDefault();
+
+    /// An attack whose damage a cap stopped in part (v0.18.7, Zaille75): a cheaper attack left in hand would have dealt as much
+    /// to that enemy, and the energy saved would have paid a useful card left in hand. Damage only. Counted in Choix ("capCheaper").
+    private static void CappedAttacks(TurnState s, TurnPlayer p, TurnResult r)
+    {
+        var used = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        foreach (var x in s.Plays.Where(x => x.Owner == p.Actor && x.Kind == CardKind.Attack && x.Capped && x.EnergySpent > 0 &&
+                                             !x.HadNonDamageEffect && x.FirstHit != null))
+        {
+            var dealt = x.FirstHit!.Value.Damage;
+            var cheaper = x.HandDamageOnTarget.Select(kv => (Card: p.InHand(kv.Key), Damage: kv.Value))
+                .Where(a => a.Card is { KeptOnPurpose: false, CostsX: false, Punished: false } c && !used.Contains(c.Ref) && c.Cost < x.EnergySpent && a.Damage >= dealt)
+                .OrderBy(a => a.Card!.Cost).Select(a => a.Card).FirstOrDefault();
+            if (cheaper == null) continue;
+            if (PaidBySaving(s, p, x.EnergySpent - cheaper.Cost, used, cheaper.Ref) is not { } instead) continue;
+            used.Add(cheaper.Ref);
+            used.Add(instead.Ref);
+            r.Events.Add(new MissedChance(p.Actor, "capCheaper", new[] { x.CardKey, cheaper.Key, instead.Key }));
+        }
+    }
+
+    /// Ruée played every attack left in hand for free (v0.18.7, Zaille75): an expensive damage-only attack the player paid for
+    /// (one enemy alive) could have been left to Ruée, a cheaper one it played paid instead, and the energy saved would have
+    /// paid a useful card left in hand. Counted in Gâché ("stampedeSwap").
+    private static void StampedeSwap(TurnState s, TurnPlayer p, TurnResult r)
+    {
+        if (p.StampedePlayed.Count == 0 || s.NothingToKill) return;
+        var used = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        foreach (var y in s.Plays.Where(x => x.Owner == p.Actor && x.Kind == CardKind.Attack && x.EnergySpent > 0 && !x.HadNonDamageEffect &&
+                                             x.EnemiesAlive == 1))
+        {
+            var z = p.StampedePlayed.Where(c => !used.Contains(c.Ref) && !c.CostsX && c.Cost < y.EnergySpent &&
+                                                y.HandAtPlay.Any(h => ReferenceEquals(h, c.Ref)))
+                .OrderBy(c => c.Cost).FirstOrDefault();
+            if (z == null) continue;
+            if (PaidBySaving(s, p, y.EnergySpent - z.Cost, used) is not { } instead) continue;
+            used.Add(z.Ref);
+            used.Add(instead.Ref);
+            r.Events.Add(new MissedChance(p.Actor, "stampedeSwap", new[] { y.CardKey, z.Key, instead.Key }));
+        }
+    }
+
+    /// A card drawing cards played before a card creating cards into the now full hand (v0.18.7, Zaille75: Acrobaties then
+    /// Passe-passe): the other way round, the created cards had room and the draw only stopped (nothing is lost by a draw).
+    /// Counted when the creating card was already in hand and the energy allowed it first. Choix ("drawFirst").
+    private static void DrawBeforeMaking(TurnState s, TurnPlayer p, TurnResult r)
+    {
+        foreach (var maker in s.Plays.Where(x => x.Owner == p.Actor && x.LostToFullHand > 0))
+            foreach (var draw in s.Plays.TakeWhile(x => x != maker).Where(x => x.Owner == p.Actor && x.CardsDrawn > 0 &&
+                         x.HandAtPlay.Any(h => ReferenceEquals(h, maker.CardRef)) && x.EnergyBefore >= x.EnergySpent + maker.EnergySpent))
+                r.Events.Add(new MissedChance(p.Actor, "drawFirst",
+                    new[] { draw.CardKey, maker.CardKey, N(Math.Min(maker.LostToFullHand, draw.CardsDrawn)) }));
     }
 
     /// Wasted block (spec §F): each block card played had a real alternative if a useful card in hand when it was played is

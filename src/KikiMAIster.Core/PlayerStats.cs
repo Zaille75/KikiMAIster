@@ -107,13 +107,13 @@ public sealed class PlayerStats
     /// Worse choices: weak attacks + smaller block, Pen Nib on a weak attack, block below Orichalcum, growing card not played.
     public double MissedChoices => WeakAttacks + ChoiceKinds.Sum(k => MissedByKind.GetValueOrDefault(k));
     public static readonly string[] ChoiceKinds =
-        { "smallBlock", "penNib", "orichalcum", "order", "orderBlock", "orderSlow", "orderTurn", "handFull", "growth", "tent", "orderPotion", "restBoss", "orderDark", "stars", "shell" };
+        { "smallBlock", "penNib", "orichalcum", "order", "orderBlock", "orderSlow", "orderTurn", "handFull", "capCheaper", "drawFirst", "growth", "tent", "orderPotion", "restBoss", "orderDark", "stars", "shell" };
     /// Block card plays whose block was wasted (gâché, rule F3), counted once per play (saved with the run).
     public double WastedPlayCount { get; set; }
     /// "Gâché" misplays: wasted block card plays + useful free cards left in hand (v0.17.26; growing cards: Choix).
     /// v0.17.42: an attack wasted on an enemy a smaller attack or a follow-up (Trou noir) would have killed ("overkill").
     public double MissedWasted => WastedPlayCount + WastedKinds.Sum(k => MissedByKind.GetValueOrDefault(k));
-    public static readonly string[] WastedKinds = { "freeCard", "starsWasted", "overkill", "overkillFollowUp", "stampede", "noDraw", "potionUseless" };
+    public static readonly string[] WastedKinds = { "freeCard", "starsWasted", "overkill", "overkillFollowUp", "stampede", "stampedeSwap", "noDraw", "potionUseless" };
     /// Misplays outside fights (v0.17.42): Max HP gained after a heal that was capped by the old Max HP.
     public double MissedOutside => MissedByKind.GetValueOrDefault("maxHpAfterHeal");
     /// Every missed opportunity counted once (trophies).

@@ -79,6 +79,8 @@ public static class BlockAlternatives
     private static readonly HashSet<Player> PetSacrificed = new();
     /// Ruée's end-of-turn plays that found no attack in hand, per player (v0.18.6).
     private static readonly Dictionary<Player, int> StampedeShort = new();
+    /// The attacks Ruée played for free when it had a play for each of them (v0.18.7).
+    private static readonly Dictionary<Player, List<CardModel>> StampedeAll = new();
 
     public static void Reset()
     {
@@ -103,13 +105,34 @@ public static class BlockAlternatives
         PendingVulnerable.Clear();
         PetSacrificed.Clear();
         StampedeShort.Clear();
+        StampedeAll.Clear();
+    }
+
+    /// A damage cap stopped part of a hit of the player's card play in progress (v0.18.7).
+    public static void OnCapped(Creature dealer)
+    {
+        if (InProgress.TryPeek(out var play) && play != null && play.Player.Creature == dealer) play.Capped = true;
+    }
+
+    /// A card drawn during the player's own card play (not the turn's draw, v0.18.7).
+    public static void OnCardDrawn(Player owner, bool fromHandDraw)
+    {
+        if (!fromHandDraw && InProgress.TryPeek(out var play) && play != null && play.Player == owner) play.CardsDrawn++;
     }
 
     /// Ruée is about to play attacks from the hand (v0.18.6): how many of its plays will find none.
     public static void OnStampede(Player player, int amount)
     {
-        var attacks = player.PlayerCombatState?.Hand.Cards.Count(c => c.Type == CardType.Attack && !c.Keywords.Contains(CardKeyword.Unplayable)) ?? 0;
+        var inHand = player.PlayerCombatState?.Hand.Cards.Where(c => c.Type == CardType.Attack && !c.Keywords.Contains(CardKeyword.Unplayable)).ToList()
+                     ?? new List<CardModel>();
+        var attacks = inHand.Count;
         if (amount > attacks) StampedeShort[player] = StampedeShort.GetValueOrDefault(player) + amount - attacks;
+        // Every attack in hand will be played: which one the player kept did not depend on luck.
+        if (amount >= attacks && attacks > 0)
+        {
+            if (!StampedeAll.TryGetValue(player, out var all)) StampedeAll[player] = all = new();
+            all.AddRange(inHand);
+        }
     }
 
     /// A potion used in a fight when it could do nothing (v0.18.6, Zaille75: Goutte de folie with no card that costs energy in
@@ -713,6 +736,7 @@ public static class BlockAlternatives
             PetSacrificedThisTurn = PetSacrificed.Contains(player),
             StampedeShort = StampedeShort.GetValueOrDefault(player),
             StampedeKey = $"Power:{ModelDb.GetId<StampedePower>().Entry}",
+            StampedePlayed = (StampedeAll.GetValueOrDefault(player) ?? new()).Select(c => CardView(c, combat, creature)).ToList(),
             Plays = (TurnPlays.GetValueOrDefault(player) ?? new()).ToDictionary(kv => KindOf(kv.Key), kv => kv.Value)
         };
     }

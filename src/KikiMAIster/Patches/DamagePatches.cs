@@ -341,7 +341,9 @@ public static class DamagePatches
             {
                 if (DebuffEffectPatches.Computing || target != __instance.Owner || __result >= amount || !CombatManager.Instance.IsInProgress) return;
                 var dealerActor = Capture.ToActor(dealer);
-                if (dealerActor.IsPlayerSide) Capture.Emit(new DamageCapped(dealerActor, Capture.ToActor(target), (double)(amount - __result)));
+                if (!dealerActor.IsPlayerSide) return;
+                Capture.Emit(new DamageCapped(dealerActor, Capture.ToActor(target), (double)(amount - __result)));
+                if (dealer != null) BlockAlternatives.OnCapped(dealer);
             });
     }
 

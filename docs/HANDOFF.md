@@ -1,4 +1,4 @@
-# Handoff — state of the project (2026-10-31, v0.18.7)
+# Handoff — state of the project (2026-10-31, v0.18.8)
 
 > **Next session starts with Zaille75's next co-op test (beta branch, v0.17.38 or later).** He will send it with
 > `Envoyer-a-Claude.bat` → `logs/inbox/<date_time>/` (both logs + F9 `feedback/` folders). **Review and summarize every
@@ -150,6 +150,14 @@ Order: test → default branch → release prep → publish → maintenance. The
 
 Optional roadmap items (only if asked): JSON export, end-of-run Totals / Per act tabs, MVP line, opacity / scale /
 hotkey settings, chart history across Save & Quit.
+
+## v0.18.8 — Zaille75's answers to the review ideas (2026-10-31, not tested in game)
+- A useless card with nothing else to play counts again as `energyUseless` (the v0.18.6 "no choice → surplus" rule is
+  removed): a stat, never a mistake.
+- New misses (TurnReview): `capCheaper` (Choix; `TurnPlay.Capped` from `BlockAlternatives.OnCapped`, called where
+  `DamageCapped` is made), `stampedeSwap` (Gâché; `TurnPlayer.StampedePlayed` = attacks in hand when Ruée had a play for
+  each), `drawFirst` (Choix; `TurnPlay.CardsDrawn` from `Hook.AfterCardDrawn`). Each needs a useful card the saved
+  energy would have paid (`PaidBySaving`) or, for drawFirst, the reverse order possible.
 
 ## v0.18.7 — Fatalité wording + full log review (2026-10-31, not tested in game)
 Zaille75: Doom is **Fatalité** in French (not Malédiction); the useless / applied x/y now replaces times / stacks in the

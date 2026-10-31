@@ -321,7 +321,9 @@ public static class DebuffEffectPatches
                 Computing = false;
             }
             var stopped = (double)(uncapped - capped);
-            if (stopped > 0) effects.Add(new DamageCapped(Capture.ToActor(dealer), Capture.ToActor(target), stopped));
+            if (stopped <= 0) return;
+            effects.Add(new DamageCapped(Capture.ToActor(dealer), Capture.ToActor(target), stopped));
+            BlockAlternatives.OnCapped(dealer);
         }
 
         private static void AddApplied(List<StatEvent> effects, PowerModel p, Creature applier, Creature target, Creature dealer,

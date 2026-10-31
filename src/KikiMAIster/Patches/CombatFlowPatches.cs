@@ -341,6 +341,7 @@ public static class CombatFlowPatches
         public static void Prefix(CardModel card, bool fromHandDraw) => Capture.Safe("AfterCardDrawn", () =>
         {
             BlockAlternatives.OnEffect();
+            BlockAlternatives.OnCardDrawn(card.Owner, fromHandDraw);
             // Drawn for an ally (Huddle Up…): help given by the player acting.
             if (!fromHandDraw && Capture.CurrentActingPlayer is { } giver && card.Owner != giver)
                 Capture.Emit(new HelpGiven(Capture.ToActor(giver), "cards", 1));

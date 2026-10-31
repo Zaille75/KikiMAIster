@@ -173,6 +173,49 @@ public class TurnReview0_18_6Tests
     }
 
     [Fact]
+    public void CappedAttack_CheaperOneDidAsMuch_AndTheSavingPaidAUsefulCard()
+    {
+        // Frappe perfectionnée+ (2) dealt 9 into a cap; Frappe (1) would deal 9 too; Lame d'encre (2) left with 1 energy.
+        var strike = Card("STRIKE");
+        var ink = Card("BLADE_OF_INK", CardKind.Skill, cost: 2);
+        var perfected = Play("PERFECTED_STRIKE", energy: 2);
+        perfected.Capped = true;
+        perfected.Hits.Add(new EnemyHit(Enemy, 9, -1));
+        perfected.HandDamageOnTarget[strike.Ref] = 9;
+        var player = new TurnPlayer { Actor = A, Energy = 1, Hand = { strike, ink } };
+        var miss = Missed(Resolve(player, new[] { perfected }), "capCheaper").Single();
+        Assert.Equal(new[] { "Card:PERFECTED_STRIKE", "Card:STRIKE", "Card:BLADE_OF_INK" }, miss.Args);
+        // Nothing useful the saving would have paid: no mistake.
+        Assert.Empty(Missed(Resolve(new TurnPlayer { Actor = A, Energy = 1, Hand = { strike } }, new[] { perfected }), "capCheaper"));
+    }
+
+    [Fact]
+    public void Stampede_ExpensiveAttackPaid_WhileItPlayedTheCheapOneForFree()
+    {
+        var strike = Card("STRIKE");
+        var wall = Card("BLOOD_WALL", CardKind.Skill, cost: 2, block: 16);
+        var perfected = Play("PERFECTED_STRIKE", energy: 2, hand: new[] { strike.Ref });
+        var player = new TurnPlayer { Actor = A, Energy = 1, Block = 0, Incoming = 10, Hand = { wall }, StampedePlayed = { strike } };
+        var miss = Missed(Resolve(player, new[] { perfected }), "stampedeSwap").Single();
+        Assert.Equal(new[] { "Card:PERFECTED_STRIKE", "Card:STRIKE", "Card:BLOOD_WALL" }, miss.Args);
+        // An attack doing something else may be played on purpose.
+        perfected.HadNonDamageEffect = true;
+        Assert.Empty(Missed(Resolve(player, new[] { perfected }), "stampedeSwap"));
+    }
+
+    [Fact]
+    public void DrawThenCreateIntoAFullHand_IsAMistake_WhenTheOtherOrderWasPossible()
+    {
+        var sleeveRef = new object();
+        var acrobatics = Play("ACROBATICS", CardKind.Skill, hand: new[] { sleeveRef });
+        acrobatics.CardsDrawn = 3;
+        var sleeve = Play("UP_MY_SLEEVE", CardKind.Skill, energy: 2, card: sleeveRef);
+        sleeve.LostToFullHand = 5;
+        var miss = Missed(Resolve(new TurnPlayer { Actor = A }, new[] { acrobatics, sleeve }), "drawFirst").Single();
+        Assert.Equal(new[] { "Card:ACROBATICS", "Card:UP_MY_SLEEVE", "3" }, miss.Args);
+    }
+
+    [Fact]
     public void SouilleCards_LeftInHand_AreNotEnergyLostNorBlockKept()
     {
         // Prisme infesté (v0.18.7): every Skill is Souillé, playing it adds damage to each hit taken this turn.
@@ -184,13 +227,15 @@ public class TurnReview0_18_6Tests
     }
 
     [Fact]
-    public void UselessBlock_WithNothingElseToPlay_IsSurplus()
+    public void UselessBlock_WithNothingElseToPlay_IsSpentForNothing()
     {
         var defend = Play("DEFEND", CardKind.Skill);
         defend.GaveBlock = true;
         defend.BlockAmount = 3;
         var r = Resolve(new TurnPlayer { Actor = A, Block = 17, Incoming = 0 }, new[] { defend });
-        Assert.DoesNotContain(r.Events.OfType<HelpGiven>(), h => h.Kind == "energyUseless");
-        Assert.Equal(1, r.Events.OfType<HelpGiven>().Single(h => h.Kind == "energySurplus").Amount);
+        // v0.18.7 (Zaille75): spent for nothing, never a mistake.
+        Assert.DoesNotContain(r.Events.OfType<HelpGiven>(), h => h.Kind == "energySurplus");
+        Assert.Equal(1, r.Events.OfType<HelpGiven>().Single(h => h.Kind == "energyUseless").Amount);
+        Assert.Empty(r.Events.OfType<MissedChance>());
     }
 }
