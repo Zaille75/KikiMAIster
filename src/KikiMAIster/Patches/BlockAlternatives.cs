@@ -14,6 +14,7 @@ using MegaCrit.Sts2.Core.Localization.DynamicVars;
 using MegaCrit.Sts2.Core.ValueProps;
 using MegaCrit.Sts2.Core.MonsterMoves.Intents;
 using MegaCrit.Sts2.Core.Models.Afflictions;
+using MegaCrit.Sts2.Core.Models.Potions;
 
 namespace KikiMAIster.Patches;
 
@@ -44,6 +45,9 @@ public static class BlockAlternatives
         /// An effect other than damage, block or a debuff on an enemy (draw, energy, own buff…): it may have made a later card
         /// playable, so its place in the turn was a choice (wrong order, v0.18.5: a debuff on the enemy no longer counts).
         public bool OtherThanDebuff { get; set; }
+        /// Enemies it put Doom on, and whether it put another debuff on an enemy (Doom-only cards, v0.18.6).
+        public List<Creature> DoomTargets { get; } = new();
+        public bool OtherDebuff { get; set; }
     }
 
     private static readonly ConditionalWeakTable<CardPlay, Play> Plays = new();
@@ -73,6 +77,8 @@ public static class BlockAlternatives
     private static readonly HashSet<Player> ExtraTurn = new();
     /// Players whose own card killed their pet this turn (Détonation osseuse, v0.17.45).
     private static readonly HashSet<Player> PetSacrificed = new();
+    /// Ruée's end-of-turn plays that found no attack in hand, per player (v0.18.6).
+    private static readonly Dictionary<Player, int> StampedeShort = new();
 
     public static void Reset()
     {
@@ -96,6 +102,63 @@ public static class BlockAlternatives
         TurnPlays.Clear();
         PendingVulnerable.Clear();
         PetSacrificed.Clear();
+        StampedeShort.Clear();
+    }
+
+    /// Ruée is about to play attacks from the hand (v0.18.6): how many of its plays will find none.
+    public static void OnStampede(Player player, int amount)
+    {
+        var attacks = player.PlayerCombatState?.Hand.Cards.Count(c => c.Type == CardType.Attack && !c.Keywords.Contains(CardKeyword.Unplayable)) ?? 0;
+        if (amount > attacks) StampedeShort[player] = StampedeShort.GetValueOrDefault(player) + amount - attacks;
+    }
+
+    /// A potion used in a fight when it could do nothing (v0.18.6, Zaille75: Goutte de folie with no card that costs energy in
+    /// hand). Only the cases sure from the game state: heal at full HP, draw with no room or nothing to draw or under No Draw,
+    /// a card to pick from an empty or unsuitable pile, nothing to double or upgrade, no orb slot.
+    public static bool UselessPotion(PotionModel potion, Creature? target)
+    {
+        var player = (target ?? potion.Owner?.Creature)?.Player ?? potion.Owner;
+        if (player?.PlayerCombatState is not { } st || player.Creature is not { } creature) return false;
+        var hand = st.Hand.Cards;
+        bool NothingToDraw() => creature.HasPower<NoDrawPower>() || hand.Count >= CardPile.MaxCardsInHand ||
+                                st.DrawPile.Cards.Count + st.DiscardPile.Cards.Count == 0;
+        return potion switch
+        {
+            BloodPotion => creature.CurrentHp >= creature.MaxHp,
+            SwiftPotion => NothingToDraw(),
+            TouchOfInsanity => !hand.Any(c => c.CostsEnergyOrStars(includeGlobalModifiers: false) || c.CostsEnergyOrStars(includeGlobalModifiers: true)),
+            BlessingOfTheForge => !hand.Any(c => c.IsUpgradable),
+            Fortifier => creature.Block <= 0,
+            SoldiersStew => !st.AllCards.Any(c => c.Tags.Contains(CardTag.Strike)),
+            LiquidMemories => st.DiscardPile.Cards.Count == 0,
+            DropletOfPrecognition => st.DrawPile.Cards.Count == 0,
+            DistilledChaos => st.DrawPile.Cards.Count + st.DiscardPile.Cards.Count == 0,
+            EssenceOfDarkness => st.OrbQueue.Capacity == 0,
+            GamblersBrew or Ashwater => hand.Count == 0,
+            _ => false
+        };
+    }
+
+    /// A draw was stopped (Pas de pioche) during the card play in progress (v0.18.6).
+    public static void OnDrawPrevented()
+    {
+        if (InProgress.TryPeek(out var play) && play != null) play.DrawBlocked = true;
+    }
+
+    /// Energy the card play in progress gave its own player (Offrande…, v0.18.6).
+    public static void OnEnergyGiven(Player player, decimal amount)
+    {
+        if (InProgress.TryPeek(out var play) && play != null && play.Player == player) play.EnergyGiven += (int)amount;
+    }
+
+    /// Cards created into a player's hand: those beyond the hand's limit go to the discard pile (v0.18.6).
+    public static void OnCardsCreated(Player owner, int count)
+    {
+        if (!InProgress.TryPeek(out var play) || play == null || play.Player != owner || owner.PlayerCombatState is not { } st) return;
+        var lost = st.Hand.Cards.Count + count - CardPile.MaxCardsInHand;
+        if (lost <= 0) return;
+        play.LostToFullHand += Math.Min(lost, count);
+        foreach (var c in st.Hand.Cards) play.HandWhenFull.Add(c);
     }
 
     /// The player's own card killed their pet (v0.17.45): an attack the pet makes, left in hand, could have come first.
@@ -118,6 +181,13 @@ public static class BlockAlternatives
     public static void OnPowerApplied(PowerModel power, decimal amount, bool stacked)
     {
         Capture.Safe("wrong order", () => CheckOrder(power, amount, stacked));
+        // A power the card put on its own player (v0.18.6): later cards it feeds were not in the wrong order.
+        if (InProgress.TryPeek(out var giver) && giver != null && amount > 0)
+        {
+            if (power.Owner == giver.Player.Creature) giver.PowersGiven.Add($"Power:{Capture.IdOf(power)}");
+            else if (power is DoomPower && power.Owner.IsEnemy) giver.DoomTargets.Add(power.Owner);
+            else if (power.Owner.IsEnemy) giver.OtherDebuff = true;
+        }
         if (InProgress.TryPeek(out var play) && play != null && !stacked && amount == 1 && power.Owner.IsEnemy)
         {
             if (power is WeakPower && !Attacks(power.Owner))
@@ -333,7 +403,7 @@ public static class BlockAlternatives
             return;
         }
         foreach (var (drop, loss) in StrengthDrops.Where(d => d.Play.Player == play.Player && d.Play.HandAtPlay.Contains(card)))
-            OrderLosses.Add(new OrderLoss(drop, Key(card), "order", target, Math.Min(loss, raw)));
+            OrderLosses.Add(new OrderLoss(drop, Key(card), "order", target, Math.Min(loss, raw), play));
     }
 
     /// A damage potion thrown at an enemy that the player's attacks of this turn had already hit, when the potion alone
@@ -404,7 +474,15 @@ public static class BlockAlternatives
         play.BlockGains++;
         // Block gained after a Dexterity drop it could have been played before (Décomposition, v0.18.5).
         foreach (var (drop, loss) in DexterityDrops.Where(d => d.Play.Player == play.Player && d.Play.HandAtPlay.Contains(play.Card)))
-            OrderLosses.Add(new OrderLoss(drop, Key(play.Card), "orderBlock", null, Math.Min(loss, amount)));
+            OrderLosses.Add(new OrderLoss(drop, Key(play.Card), "orderBlock", null, Math.Min(loss, amount), play));
+    }
+
+    /// One of the player's powers fired for the card play in progress, or for the one that just ended (Image rémanente's block,
+    /// Lames fantomatiques' damage, v0.18.6).
+    public static void OnPowerTriggered(Creature owner, string powerKey)
+    {
+        var play = InProgress.TryPeek(out var p) && p != null ? p : _justFinished;
+        if (play != null && play.Player.Creature == owner) play.PowersTriggered.Add(powerKey);
     }
 
     /// Another card discarded, exhausted or moved by the play in progress (Survivor, Graveblast bringing a card back to
@@ -461,6 +539,8 @@ public static class BlockAlternatives
         var aim = Aim(cardPlay, hand);
         var play = new Play
         {
+            EnemiesAlive = cardPlay.Card.CombatState is { } cs ? RealEnemies(cs).Count : 1,
+            EnergyBefore = (Capture.PlayerOf(cardPlay).PlayerCombatState?.Energy ?? 0) + cardPlay.Resources.EnergySpent,
             Target = aim.Target,
             TargetLeftBefore = aim.Left,
             DamageOn = aim.DamageOn,
@@ -573,6 +653,10 @@ public static class BlockAlternatives
             foreach (var line in result.Log) ModLog.Info(line);
             foreach (var e in result.Events) Capture.Emit(e);
             foreach (var card in result.GrowingAffordable) GrowingAffordable.Add((CardModel)card);
+            // Doom-only cards (v0.18.6): their energy is judged when their enemies die (StatsEngine).
+            foreach (var play in ThisTurn.Where(p => p.DoomTargets.Count > 0 && p.EnergySpent > 0 && !p.OtherDebuff && !p.OtherThanDebuff &&
+                                                     !p.GaveBlock && p.Hits.Count == 0))
+                Capture.Emit(new DoomPlayed(play.Owner, play.CardKey, play.EnergySpent, play.DoomTargets.Distinct().Select(c => Capture.ToActor(c)).ToList()));
         });
         ClearTurn();
     }
@@ -627,6 +711,8 @@ public static class BlockAlternatives
             AlliesAlive = combat.Players.Any(p => p != player && p.Creature.IsAlive),
             PetAlive = !player.IsOstyMissing,
             PetSacrificedThisTurn = PetSacrificed.Contains(player),
+            StampedeShort = StampedeShort.GetValueOrDefault(player),
+            StampedeKey = $"Power:{ModelDb.GetId<StampedePower>().Entry}",
             Plays = (TurnPlays.GetValueOrDefault(player) ?? new()).ToDictionary(kv => KindOf(kv.Key), kv => kv.Value)
         };
     }

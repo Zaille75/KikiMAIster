@@ -267,5 +267,8 @@ public sealed record MissedEntry(int Round, string Kind, IReadOnlyList<string> A
 /// "energyUseless" (not help: energy spent on a card that did nothing useful, v0.17.37).
 public sealed record HelpGiven(Actor Giver, string Kind, double Amount) : StatEvent;
 
+/// A card whose only effect was Doom on enemies (v0.18.6): its energy was spent for nothing if none of them dies of Doom.
+public sealed record DoomPlayed(Actor Player, string Card, double Energy, IReadOnlyList<Actor> Targets) : StatEvent;
+
 /// Energy a player gained during a fight (cards, powers, relics, potions; not the turn's refill), and its source (v0.18.5).
 public sealed record EnergyGained(Actor Player, string Source, double Amount) : StatEvent;

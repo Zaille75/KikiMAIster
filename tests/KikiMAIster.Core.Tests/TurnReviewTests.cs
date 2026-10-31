@@ -64,8 +64,9 @@ public class TurnReviewTests
     public void BlockNotNeeded_IsEnergySpentForNothing()
     {
         var defend = Card("DEFEND", CardKind.Skill, block: 5);
-        var player = new TurnPlayer { Actor = A, Block = 5, Incoming = 0 };
-        var r = Resolve(player, Play(defend, blockGiven: 5));
+        var strike = Card("STRIKE");
+        var player = new TurnPlayer { Actor = A, Block = 5, Incoming = 0, Hand = { strike } };
+        var r = Resolve(player, Play(defend, blockGiven: 5, hand: new[] { strike }));
         Assert.Equal(1, r.Events.OfType<HelpGiven>().Single(h => h.Kind == "energyUseless").Amount);
     }
 
@@ -78,8 +79,9 @@ public class TurnReviewTests
         var defend = Card("DEFEND", CardKind.Skill, block: 5);
         var a = Play(armaments, blockGiven: 5);
         a.HadOtherEffect = true;
-        var player = new TurnPlayer { Actor = A, Block = 18, Incoming = 10 };
-        var r = Resolve(player, a, Play(defendPlus, blockGiven: 8), Play(defend, blockGiven: 5));
+        var strike = Card("STRIKE");
+        var player = new TurnPlayer { Actor = A, Block = 18, Incoming = 10, Hand = { strike } };
+        var r = Resolve(player, a, Play(defendPlus, blockGiven: 8, hand: new[] { strike }), Play(defend, blockGiven: 5, hand: new[] { strike }));
         Assert.Equal(1, r.Events.OfType<HelpGiven>().Single(h => h.Kind == "energyUseless").Amount);
     }
 
@@ -131,8 +133,8 @@ public class TurnReviewTests
             }
         };
         s.EnemiesLeft[Enemy] = 3;
-        var miss = Missed(TurnReview.Resolve(s), "order").Single();
-        Assert.Equal(new[] { "Card:STRIKE", "Card:INFLAME", "3" }, miss.Args);
+        var miss = Missed(TurnReview.Resolve(s), "orderTurn").Single();
+        Assert.Equal(new[] { "Card:STRIKE", "3", "0", "Card:INFLAME" }, miss.Args);
     }
 
     [Fact]

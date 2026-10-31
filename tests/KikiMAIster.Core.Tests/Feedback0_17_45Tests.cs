@@ -91,6 +91,9 @@ public class Feedback0_17_45Tests : TestBase
         Engine.Handle(new PlayerRoundState(B, 1, true, true));
         Assert.Equal(1, Combat(IdA).TurnsDead);
         Assert.Equal(1, Combat(IdB).TurnsAlone);
+        // v0.18.6: a turn at 1 HP counts once it ended at 1 HP (the next round starts at 1 HP).
+        Assert.Equal(0, Combat(IdB).TurnsAtOneHp);
+        Engine.Handle(new PlayerRoundState(B, 1, true, true));
         Assert.Equal(1, Combat(IdB).TurnsAtOneHp);
     }
 
@@ -200,6 +203,7 @@ public class TurnReview0_17_45Tests
 
         var capped = new TurnPlay { Id = 2, Owner = A, CardRef = new object(), CardKey = "Card:SQUEEZE", Kind = CardKind.Attack, EnergySpent = 3, ShellCapped = 1 };
         r = Resolve(new TurnPlayer { Actor = A }, nothingToKill: true, plays: capped);
-        Assert.Equal(3, r.Events.OfType<HelpGiven>().Single(h => h.Kind == "energyUseless").Amount);
+        // v0.18.6: nothing else to play: the energy is surplus, not spent for nothing.
+        Assert.Equal(3, r.Events.OfType<HelpGiven>().Single(h => h.Kind == "energySurplus").Amount);
     }
 }

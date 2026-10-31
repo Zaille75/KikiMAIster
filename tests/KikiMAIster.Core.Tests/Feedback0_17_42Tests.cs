@@ -67,14 +67,14 @@ public class Feedback0_17_42Tests : TestBase
         var eight = Attack("FALLING_STAR", hand: new[] { six.CardRef });
         eight.Hits.Add(new EnemyHit(_y, 8, 0));
         six.Hits.Add(new EnemyHit(_y, 7, 1)); // 6 × 1.1
-        Assert.Empty(Missed(Resolve(eight, six), "orderSlow"));
+        Assert.Empty(Missed(Resolve(eight, six), "orderTurn"));
 
         // 30 then 10, three cards apart: 0.1 × 3 × 20 = 6 damage lost.
         var ten = Attack("STRIKE");
         var thirty = Attack("BIG", hand: new[] { ten.CardRef });
         thirty.Hits.Add(new EnemyHit(_y, 30, 0));
         ten.Hits.Add(new EnemyHit(_y, 13, 3));
-        Assert.Equal("6", Missed(Resolve(thirty, ten), "orderSlow").Single().Args[2]);
+        Assert.Equal("6", Missed(Resolve(thirty, ten), "orderTurn").Single().Args[1]);
     }
 
     [Fact]
@@ -84,12 +84,12 @@ public class Feedback0_17_42Tests : TestBase
         var big = Attack("BIG", alliesHand: new[] { allySmall.CardRef });
         big.Hits.Add(new EnemyHit(_y, 30, 0));
         allySmall.Hits.Add(new EnemyHit(_y, 13, 3));
-        var miss = Missed(Resolve(big, allySmall), "orderSlow").Single();
+        var miss = Missed(Resolve(big, allySmall), "orderTurn").Single();
         Assert.Equal(PA, miss.Player);
         // The ally's card was not in their hand yet: nothing to reorder.
         var later = Attack("BIG");
         later.Hits.Add(new EnemyHit(_y, 30, 0));
-        Assert.Empty(Missed(Resolve(later, allySmall), "orderSlow"));
+        Assert.Empty(Missed(Resolve(later, allySmall), "orderTurn"));
     }
 
     [Fact]

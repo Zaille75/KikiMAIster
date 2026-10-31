@@ -40,6 +40,19 @@ public sealed class StatsEngine
     private readonly Dictionary<ulong, List<(ulong Owner, string Relic, double Amount)>> _pendingHarm = new();
     /// Enemies already killed in this fight (a kill counts once per enemy, v0.17.38).
     private readonly HashSet<int> _killed = new();
+    /// Doom on each enemy, per player who applied it, and the Doom-only cards played on it (v0.18.6).
+    private readonly Dictionary<int, Dictionary<ulong, double>> _doom = new();
+    private readonly Dictionary<int, List<DoomPlay>> _doomPlays = new();
+
+    /// A Doom-only card: useful as soon as one of its enemies dies of Doom, useless once all of them went another way.
+    private sealed class DoomPlay
+    {
+        public required ulong Player { get; init; }
+        public required double Energy { get; init; }
+        public HashSet<int> Waiting { get; } = new();
+    }
+    /// Players who started this round at 1 HP and were not healed since ("Ce n'est qu'une égratinure", v0.18.6).
+    private readonly HashSet<ulong> _atOneHp = new();
     /// The same saved pet HP, for the pet's current life only (attacks that grow with the pet's HP: Déchaînement).
     private readonly Dictionary<ulong, List<PetSave>> _petSavedAlive = new();
 
@@ -152,16 +165,26 @@ public sealed class StatsEngine
                 foreach (var p in seen.Players.Where(p => p.Name != "")) _players[p.PlayerId] = p;
                 break;
             case PlayerRoundState r when r.Player.Kind == ActorKind.Player && r.Player.PlayerId != 0:
+                // v0.18.6 (Zaille75): a turn at 1 HP counts once it ends at 1 HP, without a death or a heal in between.
+                if (_atOneHp.Remove(r.Player.PlayerId) && r.Alive && r.Hp == 1) Each(r.Player.PlayerId, s => s.TurnsAtOneHp++);
+                if (r.Alive && r.Hp == 1) _atOneHp.Add(r.Player.PlayerId);
                 Each(r.Player.PlayerId, s =>
                 {
                     if (!r.Alive) s.TurnsDead++;
-                    else
-                    {
-                        if (r.Hp == 1) s.TurnsAtOneHp++;
-                        if (r.Alone) s.TurnsAlone++;
-                    }
+                    else if (r.Alone) s.TurnsAlone++;
                 });
                 break;
+            case DoomPlayed dp when dp.Player.IsPlayerSide && dp.Player.PlayerId != 0 && dp.Energy > 0:
+            {
+                var play = new DoomPlay { Player = dp.Player.PlayerId, Energy = dp.Energy };
+                foreach (var t in dp.Targets.Where(t => t.IsEnemy))
+                {
+                    if (!play.Waiting.Add(t.CreatureId)) continue;
+                    if (!_doomPlays.TryGetValue(t.CreatureId, out var plays)) _doomPlays[t.CreatureId] = plays = new();
+                    plays.Add(play);
+                }
+                break;
+            }
             case WaitedFor w when w.Player.Kind == ActorKind.Player && w.Seconds > 0: Each(w.Player.PlayerId, s => s.WaitedSeconds += w.Seconds); break;
             case StrengthGiven g when g.Amount > 0 && g.Player.Kind == ActorKind.Player && g.Giver.IsPlayerSide:
             {
@@ -411,6 +434,10 @@ public sealed class StatsEngine
             }
         FlushDefense();
         ResolveBlockKept(combatEnded: true);
+        // Turn at 1 HP: a won fight ends it; Doom still on enemies did nothing.
+        if (c.Victory) foreach (var id in _atOneHp) Each(id, s => s.TurnsAtOneHp++);
+        _atOneHp.Clear();
+        foreach (var enemy in _doom.Keys.Concat(_doomPlays.Keys).Distinct().ToList()) DoomUseless(enemy);
         // Block left at the end of combat counts as wasted / useless help (spec §F, decision F2).
         foreach (var (owner, ledger) in _block)
             foreach (var layer in ledger.Clear())
@@ -447,6 +474,9 @@ public sealed class StatsEngine
         _petSavedAlive.Clear();
         _killed.Clear();
         _pendingHarm.Clear();
+        _doom.Clear();
+        _doomPlays.Clear();
+        _atOneHp.Clear();
     }
 
     // ---------- Damage ----------
@@ -459,6 +489,12 @@ public sealed class StatsEngine
 
     private void OnDamageToEnemy(DamageDealt d)
     {
+        if (d.Killed)
+        {
+            // Died of Doom: the Doom on it (and the Doom-only cards played on it) did their job; any other death wasted them.
+            if (d.Source.ToString() == "DamageOverTime:DOOM_POWER") DoomUseful(d.Target.CreatureId);
+            else DoomUseless(d.Target.CreatureId);
+        }
         if (d.Source.Kind == SourceKind.DamageOverTime && d.Dealer.IsPlayerSide)
         {
             // A damage-over-time debuff kept per applier (Strangle): the capture already knows whose it is.
@@ -633,11 +669,20 @@ public sealed class StatsEngine
         }
         else if (d.Dealer.IsPlayerSide && d.Dealer.PlayerId == owner)
         {
-            Each(owner, s => { s.HpLostFromSelf += d.Hp; s.SelfDamage += d.Hp; });
+            Each(owner, s =>
+            {
+                s.HpLostFromSelf += d.Hp;
+                s.SelfDamage += d.Hp;
+                PlayerStats.Add(s.SelfDamageBySource, d.Source.ToString(), d.Hp);
+            });
         }
         else if (d.Dealer.IsPlayerSide)
         {
-            Each(owner, s => s.HpLostFromAllies += d.Hp);
+            Each(owner, s =>
+            {
+                s.HpLostFromAllies += d.Hp;
+                PlayerStats.Add(s.HpLostPerAlly, AllyKey(d.Dealer.PlayerId), d.Hp);
+            });
             Each(d.Dealer.PlayerId, s => s.FriendlyDamage += d.Hp);
         }
         else
@@ -841,8 +886,36 @@ public sealed class StatsEngine
 
     // ---------- Powers & healing ----------
 
+    private void DoomUseful(int enemy)
+    {
+        _doom.Remove(enemy);
+        if (!_doomPlays.Remove(enemy, out var plays)) return;
+        // Its other enemies no longer decide anything for these cards.
+        foreach (var play in plays)
+            foreach (var other in play.Waiting.Where(e => e != enemy))
+                _doomPlays.GetValueOrDefault(other)?.Remove(play);
+    }
+
+    /// An enemy died some other way, or the fight ended: its Doom was useless, and so was the energy of the Doom-only cards
+    /// played on it (counted in Énergie inutile, v0.18.6).
+    private void DoomUseless(int enemy)
+    {
+        if (_doom.Remove(enemy, out var byPlayer))
+            foreach (var (player, stacks) in byPlayer) Each(player, s => s.DoomUseless += stacks);
+        if (!_doomPlays.Remove(enemy, out var plays)) return;
+        // Cards on several enemies wait until the last of them goes.
+        foreach (var play in plays)
+            if (play.Waiting.Remove(enemy) && play.Waiting.Count == 0) Each(play.Player, s => s.EnergyUseless += play.Energy);
+    }
+
     private void OnPowerChanged(PowerChanged p)
     {
+        if (p.PowerId == "DOOM_POWER" && p.Target.IsEnemy && p.Applier.IsPlayerSide && p.Applier.PlayerId != 0 && p.Amount > 0)
+        {
+            if (!_doom.TryGetValue(p.Target.CreatureId, out var byPlayer)) _doom[p.Target.CreatureId] = byPlayer = new();
+            byPlayer[p.Applier.PlayerId] = byPlayer.GetValueOrDefault(p.Applier.PlayerId) + p.Amount;
+            Each(p.Applier.PlayerId, s => s.DoomApplied += p.Amount);
+        }
         // Who applied each power's stacks, and from what origin: damage-over-time split, potion powers (Thorns…).
         var applierId = p.Applier.IsPlayerSide ? p.Applier.PlayerId : 0;
         var enabler = p.EnabledBy.IsPlayerSide && p.EnabledBy.PlayerId != applierId ? p.EnabledBy.PlayerId : 0;
@@ -1087,6 +1160,7 @@ public sealed class StatsEngine
     {
         if (h.Target.Kind != ActorKind.Player || h.Amount <= 0) return;
         var target = h.Target.PlayerId;
+        _atOneHp.Remove(target);
         var healer = h.Healer.IsPlayerSide ? h.Healer.PlayerId : target;
         Each(healer, s =>
         {

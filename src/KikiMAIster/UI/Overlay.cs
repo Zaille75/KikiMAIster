@@ -68,7 +68,8 @@ public static class Overlay
     internal static readonly string[] EnergyColumns = { "col.potions", "col.energyGained", "col.energyUnused" };
 
     /// HP (v0.18.5, Zaille75: its own section, out of Dégâts): HP your debuffs avoided, HP lost, heals and max HP.
-    private static readonly string[] TakenColumns = { "col.avoided", "col.hpLost", "col.fromSelf", "col.fromAllies", "col.hpOutside", "col.healOutside", "col.maxHp" };
+    /// v0.18.6: heals in fights (out of Défense's details).
+    private static readonly string[] TakenColumns = { "col.avoided", "col.hpLost", "col.fromSelf", "col.fromAllies", "col.healIn", "col.hpOutside", "col.healOutside", "col.maxHp" };
 
     /// Défense (v0.18.5): block, pet, useless block, pet HP, and the damage your debuffs avoided (also in PV).
     private static readonly string[] ProtectionColumns = { "col.byBlock", "col.byPet", "col.debuffBlock", "col.useless", "col.petHp" };
@@ -475,7 +476,9 @@ public static class Overlay
         var players = stats.Keys.OrderBy(id => id).ToList();
         _damageColumns = DamageColumns(stats);
         _debuffColumns = stats.Values.SelectMany(x => x.DebuffsApplied)
-            .GroupBy(kv => DebuffColumn(kv.Key)).OrderByDescending(g => g.Sum(kv => kv.Value.Stacks)).Select(g => g.Key).ToList();
+            .GroupBy(kv => DebuffColumn(kv.Key)).OrderByDescending(g => g.Sum(kv => kv.Value.Stacks)).Select(g => g.Key)
+            .Concat(stats.Values.Any(x => x.DoomApplied > 0) ? new[] { "col.doomUseless" } : Array.Empty<string>())
+            .Concat(stats.Values.Any(x => x.DebuffsReceived.Count > 0) ? new[] { "col.debuffsReceived" } : Array.Empty<string>()).ToList();
         _restColumns = stats.Values.SelectMany(x => x.RestSiteChoices).GroupBy(kv => kv.Key)
             .OrderByDescending(g => g.Sum(kv => kv.Value)).ThenBy(g => g.Key, StringComparer.Ordinal).Select(g => $"Rest:{g.Key}").ToList();
         _solo = players.Count == 1;
@@ -811,8 +814,8 @@ public static class Overlay
         // Biggest hit / best card are trophies, not shown here (v0.17.17).
         var extra = s.DamageEnabledSelf + s.DamageEnabledAllies;
         // Each column's own details (v0.18.5): the total has every source, a kind of damage its own sources.
-        var summary = Line(("tip.intoBlock", s.DamageIntoBlock, false), ("tip.overkill", s.Overkill, false), ("tip.capped", s.DamageCapped, false),
-            ("tip.kills", s.Kills, false));
+        // v0.18.6: overkill and caps only in Excédents.
+        var summary = Line(("tip.intoBlock", s.DamageIntoBlock, false), ("tip.kills", s.Kills, false));
         // Damage added by card enchantments (v0.17.39): already in the cards' damage.
         var enchantments = s.DamageByEnchantment.Values.Sum() >= 0.5 ? $"{Loc.T("tip.enchantments")}:\n{Lines(s.DamageByEnchantment)}" : "";
         var totalTip = summary + Block(Lines(s.DamageBySource)) + Block(enchantments);
@@ -846,9 +849,12 @@ public static class Overlay
                   + (s.HpLostByKind.Count == 0 ? "" : Block($"{Loc.T("tip.byKind")}: " + string.Join(", ", s.HpLostByKind
                       .Where(kv => Math.Round(kv.Value) != 0).OrderByDescending(kv => kv.Value).Select(kv => $"{Loc.T($"tip.kind.{kv.Key}")} {N(kv.Value)}"))))
                   // Strength the player's relics gave the enemies (Soufre…, v0.17.45): HP it made the players lose.
-                  + (s.HarmByRelic.Values.Sum() >= 0.5 ? Block($"{Loc.T("tip.harmByRelic")}:\n{Lines(s.HarmByRelic)}") : "")
-                  + (s.DebuffsReceived.Count == 0 ? "" : Block($"{Loc.T("tip.debuffsReceived")}:\n{Powers(s.DebuffsReceived)}"))
-                  + (s.SelfDebuffs.Count == 0 ? "" : Block($"{Loc.T("tip.selfDebuffs")}:\n{Powers(s.SelfDebuffs)}"));
+                  + (s.HarmByRelic.Values.Sum() >= 0.5 ? Block($"{Loc.T("tip.harmByRelic")}:\n{Lines(s.HarmByRelic)}") : "");
+        // v0.18.6 (Zaille75): each column its own details; debuffs received are in Affaiblissements.
+        var selfTip = Lines(s.SelfDamageBySource) + (s.SelfDebuffs.Count == 0 ? "" : Block($"{Loc.T("tip.selfDebuffs")}:\n{Powers(s.SelfDebuffs)}"));
+        var alliesTip = string.Join('\n', s.HpLostPerAlly.Where(kv => Math.Round(kv.Value) != 0).OrderByDescending(kv => kv.Value)
+            .Select(kv => $"{AllyName(kv.Key)}: {N(kv.Value)}"));
+        var healTip = Lines(s.HealingBySource);
         // Outside fights (v0.17.34–35): HP lost and healed, by kind of floor.
         string ByFloor(Dictionary<string, double> d) => string.Join(", ", d.OrderByDescending(kv => kv.Value)
             .Select(kv => $"{Loc.T($"tip.floor.{kv.Key}")} {N(kv.Value)}"));
@@ -861,8 +867,9 @@ public static class Overlay
         {
             new Cell("col.avoided", N(avoided), avoidedTip),
             new Cell("col.hpLost", N(s.HpLost), lostTip),
-            new Cell("col.fromSelf", N(s.HpLostFromSelf), lostTip),
-            new Cell("col.fromAllies", N(s.HpLostFromAllies), lostTip),
+            new Cell("col.fromSelf", N(s.HpLostFromSelf), selfTip),
+            new Cell("col.fromAllies", N(s.HpLostFromAllies), alliesTip),
+            new Cell("col.healIn", N(s.HealingSelf), healTip),
             new Cell("col.hpOutside", N(s.HpLostOutside), lostOutside),
             new Cell("col.healOutside", N(s.HealedOutside), healedOutside),
             new Cell("col.maxHp", maxHp > 0 ? $"+{N(maxHp)}" : N(maxHp), maxHpTip)
@@ -907,7 +914,8 @@ public static class Overlay
     {
         var tip = s.RestSiteChoices.Count == 0 ? Loc.T("tip.none")
             : string.Join('\n', s.RestSiteChoices.OrderByDescending(kv => kv.Value).Select(kv => $"{GameNames.RestSiteOption(kv.Key)}: {N(kv.Value)}"));
-        return _restColumns.Select(c => new Cell(c, N(s.RestSiteChoices.GetValueOrDefault(c[5..])), tip))
+        // v0.18.6: a column's number needs no details; the list stays on the empty section.
+        return _restColumns.Select(c => new Cell(c, N(s.RestSiteChoices.GetValueOrDefault(c[5..]))))
             .Append(new Cell("col.noRest", "-", tip)).ToArray();
     }
 
@@ -917,7 +925,7 @@ public static class Overlay
         var peak = Line(("tip.goldPeak", s.GoldPeak, false));
         return new[]
         {
-            new Cell("col.goldGained", N(s.GoldGained), peak),
+            new Cell("col.goldGained", N(s.GoldGained)),
             new Cell("col.goldSpent", N(s.GoldSpent), Line(("tip.purchases", s.Purchases, false))),
             new Cell("col.goldLost", N(s.GoldLost), Line(("tip.goldStolen", s.GoldStolen, false))),
             new Cell("col.goldNow", N(s.GoldNow), peak),
@@ -947,21 +955,20 @@ public static class Overlay
             .OrderByDescending(kv => kv.Value).Select(kv => $"{GameNames.Of(kv.Key)} {N(kv.Value)}")) : "";
         var byDebuffs = s.PreventedByDebuffsSelf + s.PreventedByDebuffsAllies;
         var debuffTip = byDebuffs > 0 ? $"{Loc.T("tip.byDebuffs")}: {N(byDebuffs)}" + Block(DebuffSources(s, offense: false)) : "";
-        var heals = (s.HealingSelf > 0 ? $"{Loc.T("tip.healSelf")}: {N(s.HealingSelf)}" : "")
-                    // Heals given, by source (v0.17.39).
-                    + (s.HealingBySource.Values.Sum() >= 0.5 ? Block($"{Loc.T("tip.healBySource")}: " + string.Join(", ", s.HealingBySource
-                        .Where(kv => Math.Round(kv.Value) != 0).OrderByDescending(kv => kv.Value).Select(kv => $"{GameNames.Of(kv.Key)} {N(kv.Value)}"))) : "");
         string Join(params string[] parts) => string.Join('\n', parts.Where(x => x != ""));
+        // v0.18.6: the total split by column; heals are in PV.
+        var totalTip = Join(Line(("col.byBlock", s.PreventedByBlock, false), ("col.byPet", s.AbsorbedByPet + s.PetAbsorbedForAllies, false),
+            ("col.debuffBlock", byDebuffs, false)), byEffects, forAllies);
         return new[]
         {
-            new Cell("col.prevented", N(s.PreventedTotal), Join(gained, forAllies, byEffects, debuffTip, heals)),
+            new Cell("col.prevented", N(s.PreventedTotal), totalTip),
             new Cell("col.byBlock", N(s.PreventedByBlock), Join(gained, BySource(sources.OrderByDescending(x => x.Stopped)))),
             new Cell("col.byPet", N(s.AbsorbedByPet + s.PetAbsorbedForAllies), pet),
             new Cell("col.debuffBlock", N(byDebuffs), debuffTip),
             // Useless / of which unavoidable (v0.17.34): "29/12".
             new Cell("col.useless", $"{N(s.UnusedBlock)}/{N(Math.Min(s.UnavoidableBlock, s.UnusedBlock))}",
                 BySource(sources.Where(x => Math.Round(x.Unused) > 0).OrderByDescending(x => x.Unused))),
-            new Cell("col.petHp", N(s.PetHpGiven), pet)
+            new Cell("col.petHp", N(s.PetHpGiven), "")
         };
     }
 
@@ -976,6 +983,10 @@ public static class Overlay
         return s.DebuffsApplied.GroupBy(kv => DebuffColumn(kv.Key))
             .Select(g => new Cell(g.Key, $"{g.Sum(kv => kv.Value.Count)}/{N(g.Sum(kv => kv.Value.Stacks))}",
                 Loc.T("tip.debuffXY") + "\n" + Powers(g.ToDictionary(kv => kv.Key, kv => kv.Value))))
+            // v0.18.6: Doom that killed nothing, and the debuffs the player received (out of PV perdus' details).
+            .Append(new Cell("col.doomUseless", $"{N(s.DoomUseless)}/{N(s.DoomApplied)}", Loc.T("tip.col.doomUseless")))
+            .Append(new Cell("col.debuffsReceived", N(s.DebuffsReceived.Values.Sum(t => t.Count)),
+                s.DebuffsReceived.Count == 0 ? "" : Powers(s.DebuffsReceived)))
             .Append(new Cell("col.noDebuff", "-", tip)).ToArray();
     }
 
@@ -993,36 +1004,47 @@ public static class Overlay
         // v0.18.5: each column lists its own misses (most recent first).
         var lethal = s.MissedLethalTurns.AsEnumerable().Reverse().Take(3)
             .Select(m => string.Format(Loc.T("why.lethal"), At(m.Combat, m.Round), string.Join(" + ", m.Cards.Select(GameNames.Of)), m.EnemiesHp)).ToList();
-        var misplays = s.WastedPlays.OrderByDescending(w => w.PlayId).Take(3)
+        var wasted = s.WastedPlays.OrderByDescending(w => w.PlayId).Take(3)
             .Select(w => string.Format(Loc.T("why.wasted"), At(w.Combat, w.Round), w.Choice.IncomingDamage, w.Choice.BlockAtTurnEnd,
-                GameNames.Of(w.Choice.BlockCard), N(w.Amount), GameNames.Of(w.Choice.Alternative)))
-            .Concat(s.WeakAttackPlays.AsEnumerable().Reverse().Take(3)
-                .Select(w => string.Format(Loc.T("why.weak"), At(w.Combat, w.Round), GameNames.Of(w.Played), w.PlayedDamage, GameNames.Of(w.Better), w.BetterDamage)))
+                GameNames.Of(w.Choice.BlockCard), N(w.Amount), GameNames.Of(w.Choice.Alternative))).ToList();
+        var weak = s.WeakAttackPlays.AsEnumerable().Reverse().Take(3)
+            .Select(w => string.Format(Loc.T("why.weak"), At(w.Combat, w.Round), GameNames.Of(w.Played), w.PlayedDamage, GameNames.Of(w.Better), w.BetterDamage))
             .ToList();
         var byColumn = new Dictionary<string, List<string>>();
         foreach (var m in s.MissedEntries.AsEnumerable().Reverse())
         {
             var column = MissedColumn(m.Kind);
-            if (!byColumn.TryGetValue(column, out var list)) byColumn[column] = list = new List<string>();
-            if (list.Count >= 6) continue;
-            list.Add($"{At(m.Combat, m.Round)} · " + (m.Kind == "energy" && m.Args.Count > 1
+            var columns = column != MisplaysKey ? new[] { column }
+                : new[] { MisplaysKey, PlayerStats.WastedKinds.Contains(m.Kind) ? "col.wastedBlock" : "col.choices" };
+            var text = $"{At(m.Combat, m.Round)} · " + (m.Kind == "energy" && m.Args.Count > 1
                 // Unused energy: "2 energy left unused (Strike, Bash could be played)".
                 ? string.Format(Loc.T("why.energyCards"), m.Args[0], string.Join(", ", m.Args.Skip(1).Select(GameNames.Of)))
+                // Wrong order (v0.18.6): "Lames fantomatiques avant Précipitation, Surin : 1 dégâts et 1 armure perdus".
+                : m.Kind == "orderTurn" && m.Args.Count > 3
+                ? string.Format(Loc.T("why.orderTurn"), GameNames.Of(m.Args[0]), string.Join(", ", m.Args.Skip(3).Select(GameNames.Of)), OrderLost(m.Args[1], m.Args[2]))
+                // Full hand: "Passe-passe main pleine : 2 carte(s) perdue(s), Défense pouvait être jouée avant".
+                : m.Kind == "handFull" && m.Args.Count > 2
+                ? string.Format(Loc.T("why.handFull"), GameNames.Of(m.Args[0]), m.Args[1], string.Join(", ", m.Args.Skip(2).Select(GameNames.Of)))
                 // Miniature Tent: "Tente miniature : parti sans Repos, Forge".
                 : m.Kind == "tent" && m.Args.Count > 1
                 ? string.Format(Loc.T("why.tent"), GameNames.Of(m.Args[0]), string.Join(", ", m.Args.Skip(1).Select(GameNames.Of)))
-                : string.Format(Loc.T($"why.{m.Kind}"), m.Args.Select(a => (object)(a.Contains(':') || a == "Unknown" ? GameNames.Of(a) : a)).ToArray())));
+                : string.Format(Loc.T($"why.{m.Kind}"), m.Args.Select(a => (object)(a.Contains(':') || a == "Unknown" ? GameNames.Of(a) : a)).ToArray()));
+            foreach (var c in columns)
+            {
+                if (!byColumn.TryGetValue(c, out var list)) byColumn[c] = list = new List<string>();
+                if (list.Count < 6) list.Add(text);
+            }
         }
         string Tip(string column, IEnumerable<string>? first = null) =>
             string.Join('\n', (first ?? Array.Empty<string>()).Concat(byColumn.GetValueOrDefault(column) ?? new List<string>()));
         double K(string kind) => s.MissedByKind.GetValueOrDefault(kind);
-        var misplaysTip = Tip(MisplaysKey, misplays);
+        // v0.18.6 (Zaille75): Gâché and Choix list their own misses; Erreurs lists both.
         return new[]
         {
             new Cell("col.lethal", N(s.MissedLethals), string.Join('\n', lethal)),
-            new Cell("col.wastedBlock", N(s.MissedWasted), misplaysTip),
-            new Cell("col.choices", N(s.MissedChoices), misplaysTip),
-            new Cell(MisplaysKey, N(s.MissedWasted + s.MissedChoices), misplaysTip),
+            new Cell("col.wastedBlock", N(s.MissedWasted), Tip("col.wastedBlock", wasted)),
+            new Cell("col.choices", N(s.MissedChoices), Tip("col.choices", weak)),
+            new Cell(MisplaysKey, N(s.MissedWasted + s.MissedChoices), Tip(MisplaysKey, wasted.Concat(weak))),
             new Cell("col.unusedEnergy", N(K("energy")), Tip("col.unusedEnergy")),
             new Cell("col.hpAvoidable", N(s.AvoidableHp), Tip("col.hpAvoidable")),
             new Cell("col.relicTrigger", N(K("relic") + K("paelsTears")), Tip("col.relicTrigger")),
@@ -1030,6 +1052,12 @@ public static class Overlay
             new Cell("col.missedOutside", N(s.MissedOutside), Tip("col.missedOutside"))
         };
     }
+
+    /// Damage and block lost by a wrong order: "3 dégâts perdus", "2 armure perdue" or "3 dégâts et 2 armure perdus".
+    private static string OrderLost(string damage, string block) =>
+        block == "0" ? string.Format(Loc.T("why.lostDamage"), damage)
+        : damage == "0" ? string.Format(Loc.T("why.lostBlock"), block)
+        : string.Format(Loc.T("why.lostBoth"), damage, block);
 
     /// The column a kind of miss counts in (the others are misplays: Gâché and Choix).
     private static string MissedColumn(string kind) => kind switch
@@ -1060,15 +1088,16 @@ public static class Overlay
             ? $"{Loc.T("col.friendly")}: {N(s.FriendlyDamage)}" + (s.FriendlyDebuffs.Count > 0 ? "\n" + Powers(s.FriendlyDebuffs) : "") : "";
         return new[]
         {
-            new Cell("col.blockGiven", N(s.BlockGivenToAllies), saved),
+            // v0.18.6: each column its own details.
+            new Cell("col.blockGiven", N(s.BlockGivenToAllies), Line(("tip.stopped", s.PreventedForAllies, false), ("tip.unused", s.UnusedGivenToAllies, false))),
             new Cell("col.saved", N(s.SavedForAllies), saved),
-            new Cell("col.takenForAllies", N(s.TakenForAllies), saved),
+            new Cell("col.takenForAllies", N(s.TakenForAllies)),
             new Cell("col.enabled", N(s.DamageEnabledAllies), enabled),
             new Cell("col.energyGiven", N(s.EnergyGiven)),
             new Cell("col.cardsGiven", N(s.CardsGiven), Line(("tip.orbsGiven", s.OrbsGiven, false))),
             new Cell("col.friendly", N(s.FriendlyDamage), friendly),
             new Cell("col.deaths", N(s.Deaths)),
-            new Cell("col.blockEnabled", N(s.BlockEnabledForAllies), saved)
+            new Cell("col.blockEnabled", N(s.BlockEnabledForAllies))
         };
     }
 
@@ -1091,16 +1120,16 @@ public static class Overlay
                     FightRecordStore.Duration(s.FightSeconds / s.FightsTimed))
                 : string.Format(Loc.T("tip.fightLength"), N(s.FightTurns), FightRecordStore.Duration(s.FightSeconds));
         // Card rewards by kind of floor (fights, events, others).
-        var picks = s.CardPicks.Count == 0 ? "" : string.Join('\n', new[] { "fight", "event", "other" }
-            .Where(k => s.CardPicks.GetValueOrDefault($"offered.{k}") > 0)
-            .Select(k => string.Format(Loc.T("tip.cardPicks"), Loc.T($"tip.picks.{k}"), N(s.CardPicks.GetValueOrDefault($"taken.{k}")),
-                N(s.CardPicks.GetValueOrDefault($"offered.{k}")), N(s.CardPicks.GetValueOrDefault($"skipped.{k}")))));
+        // v0.18.6: each card-reward column split by kind of floor (fights, events, others).
+        string Picks(string what) => string.Join('\n', new[] { "fight", "event", "other" }
+            .Where(k => s.CardPicks.GetValueOrDefault($"{what}.{k}") > 0)
+            .Select(k => $"{Loc.T($"tip.picks.{k}")}: {N(s.CardPicks.GetValueOrDefault($"{what}.{k}"))}"));
         return new[]
         {
-            new Cell("col.drawn", N(s.CardsDrawn), tip), new Cell("col.played", N(s.CardsPlayed), tip),
-            new Cell("col.exhausted", N(s.CardsExhausted), tip), new Cell("col.discarded", N(s.CardsDiscarded), tip),
-            new Cell("col.cardsOffered", N(s.CardsOffered), picks), new Cell("col.cardsTaken", N(s.CardsTaken), picks),
-            new Cell("col.offersSkipped", N(s.CardOffersSkipped), picks)
+            new Cell("col.drawn", N(s.CardsDrawn)), new Cell("col.played", N(s.CardsPlayed), tip),
+            new Cell("col.exhausted", N(s.CardsExhausted)), new Cell("col.discarded", N(s.CardsDiscarded)),
+            new Cell("col.cardsOffered", N(s.CardsOffered), Picks("offered")), new Cell("col.cardsTaken", N(s.CardsTaken), Picks("taken")),
+            new Cell("col.offersSkipped", N(s.CardOffersSkipped), Picks("skipped"))
         };
     }
 
@@ -1137,7 +1166,7 @@ public static class Overlay
             $"{kv.Value.CardsDrawn + kv.Value.CardsPlayed + kv.Value.CardsExhausted + kv.Value.CardsDiscarded + kv.Value.PotionsUsed + kv.Value.EnergySurplus + kv.Value.EnergyUseless + kv.Value.EnergyGained}:" +
             $"{kv.Value.MaxHpGained}:{kv.Value.MaxHpLost}:{kv.Value.HpLostOutside}:{kv.Value.HealedOutside}:{kv.Value.GoldGained}:{kv.Value.GoldSpent}:{kv.Value.GoldLost}:{kv.Value.GoldNow}:{kv.Value.CursesGained}:{kv.Value.CursesRemoved}:{kv.Value.UnavoidableBlock:F1}:{kv.Value.RestSiteChoices.Values.Sum()}:{kv.Value.RestSiteChoices.Count}:{kv.Value.ChifumiWon}:{kv.Value.ChifumiPlayed}:{kv.Value.BlockEnabledForAllies:F1}:{kv.Value.SavedForAllies:F1}:{kv.Value.FightSeconds:F0}:{kv.Value.HpLostByKind.Count}:{kv.Value.HealingBySource.Count}:{kv.Value.DamageByEnchantment.Count}:" +
             $"{kv.Value.Overkill:F1}:{kv.Value.CardsOffered}:{kv.Value.CardsTaken}:{kv.Value.ChifumiMoves.Values.Sum()}:{kv.Value.ChifumiLongest}:" +
-            $"{kv.Value.HpLostFromSelf:F1}:{kv.Value.HpLostFromAllies:F1}:{Capture.Engine.Players.GetValueOrDefault(kv.Key)?.Name}")) +
+            $"{kv.Value.HpLostFromSelf:F1}:{kv.Value.HpLostFromAllies:F1}:{kv.Value.DoomApplied}:{kv.Value.DoomUseless}:{Capture.Engine.Players.GetValueOrDefault(kv.Key)?.Name}")) +
         $"|{Cfg.HideZeroColumns}|{Cfg.ShowGroupLine}|{string.Join(',', Cfg.Detached)}";
 
     /// Rounded, never "-0" (a tiny negative rounding error).

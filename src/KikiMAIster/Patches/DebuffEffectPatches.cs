@@ -288,6 +288,7 @@ public static class DebuffEffectPatches
                 var additive = (double)Additive(m, target, result, props, dealer, cardSource, cardPlay);
                 var amount = (factor > 1 ? damage - damage / factor : 0) + (additive > 0 ? additive * vulnFactor : 0);
                 if (amount > 0) parts.Add((key, amount));
+                if (amount > 0 && m is PowerModel) BlockAlternatives.OnPowerTriggered(dealer, key);
             }
             if (parts.Count == 0) return;
             // Strength and Vulnerable are already measured: the modifiers share what is left of the hit at most.

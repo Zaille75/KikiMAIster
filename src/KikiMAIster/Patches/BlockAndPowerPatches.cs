@@ -67,6 +67,7 @@ public static class BlockAndPowerPatches
             if (call?.Source.Kind == SourceKind.Card && receiver.IsPlayer)
                 Capture.Safe("block enabled", () => EnabledByAllyDexterity(receiver, amount));
             BlockAlternatives.OnBlockGained(call?.PlayId ?? 0, amount);
+            if (call?.Source is { Kind: SourceKind.Power } fed) BlockAlternatives.OnPowerTriggered(receiver, fed.ToString());
             if (call?.Source is { Kind: SourceKind.Orb } orb && orb.Id == ModelDb.GetId<FrostOrb>().Entry && receiver.Player is { } owner)
                 BlockAlternatives.OnOrbTriggered(owner, null, "orderBlock");
         });

@@ -241,9 +241,9 @@ public static class RunSummary
             return;
         }
         string Date(RecordBook.Entry e) => ModConfig.Current.ShowDate(e.Date);
-        // Record (solo: "Record absolu", v0.18.5): the holder on the line in solo, after the date; hovering shows every level.
+        // Record (solo: "Record absolu", v0.18.5): the holder on the line in solo, then the date (v0.18.6); hovering shows every level.
         var recordCell = Overlay.MakeLabel(best == null ? "-"
-                : $"{(newRecord ? "★ " : "")}{Overlay.N(best.Value)} " + (solo ? $"({Date(best)}) {best.Name}" : $"({best.Name}, {Date(best)})"),
+                : $"{(newRecord ? "★ " : "")}{Overlay.N(best.Value)} " + (solo ? $"{best.Name} ({Date(best)})" : $"({best.Name}, {Date(best)})"),
             newRecord ? Overlay.Accent : Overlay.Muted);
         if (book.Best(c.Key, coop) is { } anyLevel)
             HoverTip.Set(recordCell, $"{Loc.T("run.allLevels")}: {Overlay.N(anyLevel.Value)} ({anyLevel.Name}, {Date(anyLevel)})");

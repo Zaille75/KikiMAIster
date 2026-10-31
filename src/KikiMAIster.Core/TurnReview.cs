@@ -124,6 +124,20 @@ public class TurnPlay
     public Dictionary<object, int> HandDamageOnTarget { get; init; } = new(ReferenceEqualityComparer.Instance);
     /// Damage it triggered right after (Trou noir…).
     public List<FollowUpHit> FollowUps { get; } = new();
+    /// Powers it put on its own player ("Power:AFTERIMAGE_POWER"…), and the player's powers that fired for it (block after it,
+    /// damage added to its hits): a card played after one of its powers fed it was not in the wrong order (v0.18.6).
+    public HashSet<string> PowersGiven { get; } = new();
+    public HashSet<string> PowersTriggered { get; } = new();
+    /// Living enemies when it was played (Ruée, v0.18.6).
+    public int EnemiesAlive { get; init; } = 1;
+    /// Energy before it was paid (full hand, v0.18.6).
+    public int EnergyBefore { get; init; }
+    /// Its draw was stopped (Pas de pioche) and the energy it gave (Offrande…, v0.18.6).
+    public bool DrawBlocked { get; set; }
+    public int EnergyGiven { get; set; }
+    /// Cards it created that went to the discard pile because the hand was full, and the hand at that moment (v0.18.6).
+    public int LostToFullHand { get; set; }
+    public HashSet<object> HandWhenFull { get; } = new(ReferenceEqualityComparer.Instance);
 
     /// The first enemy it hit, with all the raw damage it dealt to that enemy; null when it hit no enemy.
     public (object Target, int Damage)? FirstHit =>
@@ -132,7 +146,8 @@ public class TurnPlay
 
 /// Damage or block a later card or potion would have added to an earlier play (wrong order, spec §E0).
 /// Kind "order" / "orderSlow": Extra damage on Enemy; "orderBlock": Extra block; "orderDark": Dark orb charge.
-public sealed record OrderLoss(TurnPlay Early, string Boost, string Kind, object? Enemy, double Extra);
+/// Late: the later play that lost it, when known (a Strength / Dexterity drop, v0.18.6).
+public sealed record OrderLoss(TurnPlay Early, string Boost, string Kind, object? Enemy, double Extra, TurnPlay? Late = null);
 
 public sealed record TurnRelic(string Key, RelicTrigger Trigger, int Every);
 
@@ -163,6 +178,9 @@ public sealed class TurnPlayer
     public bool PetSacrificedThisTurn { get; init; }
     /// Cards played this turn (auto-plays included, as relics count them), by kind.
     public Dictionary<CardKind, int> Plays { get; init; } = new();
+    /// Ruée: how many of its end-of-turn plays found no attack in hand (v0.18.6), and its key.
+    public int StampedeShort { get; init; }
+    public string StampedeKey { get; init; } = "";
 
     public TurnCard? InHand(object card) => Hand.FirstOrDefault(c => ReferenceEquals(c.Ref, card));
     public bool Affordable(TurnCard c) => !c.StatusOrCurse && c.PlayableExceptEnergy && (c.CostsX || c.Cost <= Energy);
@@ -211,7 +229,13 @@ public static class TurnReview
         WeakPlays(s, r);
         Overkills(s, r);
         foreach (var p in s.Players.Where(p => p.Alive)) EndOfTurnChecks(s, p, r);
-        foreach (var p in s.Players.Where(p => p.Alive)) FreeCardsLeft(s, p, r);
+        foreach (var p in s.Players.Where(p => p.Alive))
+        {
+            FreeCardsLeft(s, p, r);
+            Stampede(s, p, r);
+            DrawBlocked(s, p, r);
+            FullHand(s, p, r);
+        }
         var used = new HashSet<object>(ReferenceEqualityComparer.Instance);
         var withAlternative = BlockAlternatives(s, used, r);
         foreach (var p in s.Players.Where(p => p.Alive))
@@ -223,31 +247,43 @@ public static class TurnReview
     }
 
     /// Wrong order: damage is only lost on enemies still alive (up to their HP + block), block only when it was below the
-    /// incoming attack (up to the difference). One miss per (earlier play, boosting card or potion).
+    /// incoming attack (up to the difference).
+    /// v0.18.6 (Zaille75): one miss per earlier play and turn ("orderTurn": the play, damage lost, block lost, then the later
+    /// cards or potions), and no loss for a later play one of the earlier play's powers fed (Image rémanente gives block for
+    /// each card after it, Lames fantomatiques adds damage to the Surin after it).
     private static void ResolveOrder(TurnState s, TurnResult r)
     {
         var deficit = new Dictionary<Actor, int>();
-        foreach (var g in s.OrderLosses.GroupBy(o => (o.Early, o.Boost, o.Kind)))
+        var lost = new List<(TurnPlay Early, string Boost, bool Block, int Amount)>();
+        foreach (var g in s.OrderLosses.Where(o => o.Late == null || !o.Late.PowersTriggered.Overlaps(o.Early.PowersGiven))
+                     .GroupBy(o => (o.Early, o.Boost, o.Kind)))
         {
             var (early, boost, kind) = g.Key;
-            double lost;
+            double amount;
             // Dark orb charged: the damage it stores is lost whatever the enemies left.
             if (kind == "orderDark")
-                lost = g.Sum(o => o.Extra);
+                amount = g.Sum(o => o.Extra);
             else if (kind is "order" or "orderSlow")
-                lost = g.Where(o => o.Enemy != null).GroupBy(o => o.Enemy!, ReferenceEqualityComparer.Instance)
+                amount = g.Where(o => o.Enemy != null).GroupBy(o => o.Enemy!, ReferenceEqualityComparer.Instance)
                     .Sum(e => s.EnemiesLeft.TryGetValue(e.Key, out var left) ? Math.Min(e.Sum(o => o.Extra), left) : 0);
             else
             {
                 if (!deficit.TryGetValue(early.Owner, out var left))
                     left = s.Player(early.Owner) is { } p ? Math.Max(0, p.Incoming - p.Block) : 0;
-                lost = Math.Min(g.Sum(o => o.Extra), left);
-                deficit[early.Owner] = left - (int)lost;
+                amount = Math.Min(g.Sum(o => o.Extra), left);
+                deficit[early.Owner] = left - (int)amount;
             }
-            var amount = (int)Math.Round(lost);
-            if (amount < 1) continue;
-            r.Log.Add($"wrong order: {early.CardKey} before {boost}, {kind} {amount}");
-            r.Events.Add(new MissedChance(early.Owner, kind, new[] { early.CardKey, boost, N(amount) }));
+            var rounded = (int)Math.Round(amount);
+            if (rounded < 1) continue;
+            r.Log.Add($"wrong order: {early.CardKey} before {boost}, {kind} {rounded}");
+            lost.Add((early, boost, kind == "orderBlock", rounded));
+        }
+        foreach (var g in lost.GroupBy(x => x.Early))
+        {
+            var damage = g.Where(x => !x.Block).Sum(x => x.Amount);
+            var block = g.Where(x => x.Block).Sum(x => x.Amount);
+            var boosts = g.Select(x => x.Boost).Distinct();
+            r.Events.Add(new MissedChance(g.Key.Owner, "orderTurn", new[] { g.Key.CardKey, N(damage), N(block) }.Concat(boosts).ToArray()));
         }
     }
 
@@ -376,21 +412,29 @@ public static class TurnReview
         bool CanHit(TurnCard c) => c.Kind != CardKind.Attack || (s.OpenEnemy && !s.NothingToKill);
         bool PetReady(TurnCard c) => !c.NeedsPet || p.PetAlive || p.PetSacrificedThisTurn;
         bool WouldHelp(TurnCard c) => p.Affordable(c) && !c.KeptOnPurpose && !NeedlessBlock(c) && !Punished(c) && CanHit(c) && PetReady(c);
-        if (energy > 0 && !s.NothingToKill && !s.EnemyAsleep && energyLost && hand.Any(WouldHelp))
+        var missedEnergy = energy > 0 && !s.NothingToKill && !s.EnemyAsleep && energyLost && hand.Any(WouldHelp);
+        if (missedEnergy)
         {
             // Args: the energy, then the cards it could have paid (most expensive first, at most 3).
             var playable = hand.Where(WouldHelp).GroupBy(c => c.Key).Select(g => g.First())
                 .OrderByDescending(c => c.CostsX ? energy : c.Cost).Take(3).Select(c => c.Key);
             r.Events.Add(new MissedChance(actor, "energy", new[] { N(energy) }.Concat(playable).ToArray(), energy));
         }
-        // Energy lost with nothing useful to spend it on (v0.17.29): counted for the trophy "Batterie pleine".
-        else if (energy > 0 && !s.EnemyAsleep && energyLost &&
-                 (s.NothingToKill || !hand.Any(c => p.Affordable(c) && !NeedlessBlock(c) && !Punished(c) && CanHit(c) && PetReady(c))))
-            r.Events.Add(new HelpGiven(actor, "energySurplus", energy));
+        // Energy lost with nothing useful to spend it on (v0.17.29): counted for the trophy "Survolté".
+        // v0.18.6: cards kept on purpose (Danse des lames…) do not stop it from counting.
+        var energySurplus = !missedEnergy && energy > 0 && !s.EnemyAsleep && energyLost &&
+                      (s.NothingToKill || !hand.Any(c => p.Affordable(c) && !c.KeptOnPurpose && !NeedlessBlock(c) && !Punished(c) && CanHit(c) && PetReady(c)))
+            ? energy : 0;
 
         // Energy spent for nothing (v0.17.37); Pael's Tears: that energy would have been left.
+        // v0.18.6 (Zaille75): a useless card played while nothing useful was left to play lost nothing more than energy left
+        // unused would have: it counts as surplus energy, not as energy spent for nothing.
         var useless = UselessPlays(s, p);
-        var spentForNothing = useless.Sum(x => x.EnergySpent);
+        bool NoChoice(TurnPlay x) => !x.UsefulCardsInHand.Any(c => p.InHand(c.Card) is { } h && !h.StatusOrCurse && h.PlayableExceptEnergy &&
+                                                                    !h.KeptOnPurpose && (h.CostsX || h.Cost <= x.EnergySpent + p.Energy));
+        energySurplus += useless.Where(NoChoice).Sum(x => x.EnergySpent);
+        if (energySurplus > 0) r.Events.Add(new HelpGiven(actor, "energySurplus", energySurplus));
+        var spentForNothing = useless.Where(x => !NoChoice(x)).Sum(x => x.EnergySpent);
         if (spentForNothing > 0) r.Events.Add(new HelpGiven(actor, "energyUseless", spentForNothing));
         if (energy == 0 && p.PaelsTears is { } tears && useless.FirstOrDefault() is { } first)
             r.Events.Add(new MissedChance(actor, "paelsTears", new[] { tears, first.CardKey }));
@@ -486,6 +530,60 @@ public static class TurnReview
                                             !c.Punished && !(c.Rage && !RageWouldHelp(c)) &&
                                             (c.Kind != CardKind.Attack || (c.DealsDamage && c.Thorns <= room))))
             r.Events.Add(new MissedChance(p.Actor, "freeCard", new[] { c.Key }));
+    }
+
+    /// Ruée plays attacks from the hand at the end of the turn (v0.18.6, Zaille75): when it found none, the last attacks the
+    /// player paid for themself (one enemy alive, so Ruée would have hit the same one) could have been left to it, and their
+    /// energy spent on a card still in hand. Counted in Gâché ("stampede"), one per attack, the latest first.
+    private static void Stampede(TurnState s, TurnPlayer p, TurnResult r)
+    {
+        if (p.StampedeShort <= 0 || s.NothingToKill) return;
+        var budget = p.Energy;
+        var used = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        foreach (var attack in s.Plays.Where(x => x.Owner == p.Actor && x.Kind == CardKind.Attack && x.EnergySpent > 0 && x.EnemiesAlive == 1)
+                     .Reverse().Take(p.StampedeShort))
+        {
+            budget += attack.EnergySpent;
+            // Any card left in hand that the energy pays (a block card only if the block was short; HP-costing cards included).
+            var instead = p.Hand.FirstOrDefault(c => !used.Contains(c.Ref) && !c.StatusOrCurse && c.PlayableExceptEnergy && !c.CostsX &&
+                                                    c.Cost <= budget && c.Kind != CardKind.Attack && (!c.GainsBlock || p.Block < p.Incoming));
+            if (instead == null) continue;
+            used.Add(instead.Ref);
+            budget -= instead.Cost;
+            r.Events.Add(new MissedChance(p.Actor, "stampede", new[] { attack.CardKey, p.StampedeKey, instead.Key }));
+        }
+    }
+
+    /// A card whose draw was stopped by Pas de pioche (v0.18.6, Zaille75: Offrande after Ivresse du combat): a misplay when
+    /// it did nothing else, or when the energy it gave was still left at the end of the turn. Counted in Gâché ("noDraw").
+    private static void DrawBlocked(TurnState s, TurnPlayer p, TurnResult r)
+    {
+        foreach (var play in s.Plays.Where(x => x.Owner == p.Actor && x.DrawBlocked))
+            if (play.EnergyGiven > 0 ? p.Energy >= play.EnergyGiven : !play.HadOtherEffect)
+                r.Events.Add(new MissedChance(p.Actor, "noDraw", new[] { play.CardKey }));
+    }
+
+    /// Cards created into a full hand go to the discard pile (v0.18.6, Zaille75: Passe-passe with 6 cards in hand): each card
+    /// played after it that was already in hand, and could have been paid before, would have made room for one of them.
+    /// Counted in Choix ("handFull"): one per card that could have been kept.
+    private static void FullHand(TurnState s, TurnPlayer p, TurnResult r)
+    {
+        foreach (var maker in s.Plays.Where(x => x.Owner == p.Actor && x.LostToFullHand > 0))
+        {
+            var room = maker.EnergyBefore - maker.EnergySpent;
+            var before = new List<TurnPlay>();
+            foreach (var later in s.Plays.SkipWhile(x => x != maker).Skip(1)
+                         .Where(x => x.Owner == p.Actor && maker.HandWhenFull.Contains(x.CardRef)))
+            {
+                if (before.Count >= maker.LostToFullHand) break;
+                if (later.EnergySpent > room) continue;
+                room -= later.EnergySpent;
+                before.Add(later);
+            }
+            if (before.Count == 0) continue;
+            r.Events.Add(new MissedChance(p.Actor, "handFull",
+                new[] { maker.CardKey, N(before.Count) }.Concat(before.Select(x => x.CardKey).Distinct()).ToArray(), before.Count));
+        }
     }
 
     /// Wasted block (spec §F): each block card played had a real alternative if a useful card in hand when it was played is

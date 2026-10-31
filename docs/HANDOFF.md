@@ -1,4 +1,4 @@
-# Handoff — state of the project (2026-10-31, v0.18.5)
+# Handoff — state of the project (2026-10-31, v0.18.6)
 
 > **Next session starts with Zaille75's next co-op test (beta branch, v0.17.38 or later).** He will send it with
 > `Envoyer-a-Claude.bat` → `logs/inbox/<date_time>/` (both logs + F9 `feedback/` folders). **Review and summarize every
@@ -150,6 +150,29 @@ Order: test → default branch → release prep → publish → maintenance. The
 
 Optional roadmap items (only if asked): JSON export, end-of-run Totals / Per act tabs, MVP line, opacity / scale /
 hotkey settings, chart history across Save & Quit.
+
+## v0.18.6 — solo runs of 2026-10-31 (2026-10-31, not tested in game)
+Inbox `logs/inbox/2026-10-31_12-07-39/` (beta, the v0.18.5 code but labelled "v0.18.4": dist was packaged before the
+version bump — **always build after bumping the version**; solo Soldat de fer, Tisse-Mort, Silencieuse ×2; 12 F9 reports,
+archived as `logs/2026-10-31_v0.18.5_beta_solo_ironclad_necrobinder_silent.log` + `.previous.log`, reports in
+`logs/feedback-2026-10-31/`). Answered without change: Frappe préparatoire after Frappe jumelée (it killed the last
+enemy before its Strength came). Zaille75's batch (01-metrics / 02-ui v0.18.6):
+- Tooltips: every column its own (new PV column **Soins**; Affaiblissements **Reçus** and **Malédiction inutile x/y**).
+- Wrong order: `TurnReview.ResolveOrder` emits one `orderTurn` miss per earlier play (args: card, damage, block, later
+  cards); `OrderLoss.Late` + `TurnPlay.PowersGiven/PowersTriggered` (`BlockAlternatives.OnPowerTriggered`, from power
+  block gains and `DebuffEffectPatches.AddModifiers`) excuse later plays the earlier card's power fed.
+- New misses: Ruée (`StampedePower` prefix → `TurnPlayer.StampedeShort`, "stampede"), Pas de pioche
+  (`Hook.AfterPreventingDraw` → `DrawBlocked`, `EnergyGiven`, "noDraw"), full hand (`CardPileCmd.AddGeneratedCardsToCombat`
+  → `LostToFullHand`, "handFull"), potions (`BlockAlternatives.UselessPotion`, "potionUseless").
+- Doom: `StatsEngine` tracks Doom per enemy (`DoomApplied/DoomUseless`), `DoomPlayed` events for Doom-only cards add
+  their energy to `EnergyUseless` when none of their enemies dies of Doom.
+- Energy: max-energy bonuses (Domaine) emitted as `EnergyGained` at each turn start; surplus also when only kept cards
+  are left; a useless card with no swappable useful card in hand counts as surplus, not `energyUseless` (Zaille75 called
+  the 11:31 case a bug: a Défense against no attack with nothing else to play).
+- Trophy Ce n'est qu'une égratinure: counted at the next round (or a won fight) if still at 1 HP without a heal.
+- Record absolu: "value holder (date)".
+Check in the next logs: `wrong order:` lines merged per card, "stampede" / "noDraw" / "handFull" / "potionUseless"
+misses, `EnergyGained` with `Power:DEMESNE_POWER`.
 
 ## v0.18.5 — solo runs of 2026-10-30 (2026-10-31, not tested in game)
 Inbox `logs/inbox/2026-10-31_09-51-55/` (beta v0.18.4, 5 solo runs: Régent, Soldat de fer ×2, Tisse-Mort, Défectueux;

@@ -48,6 +48,9 @@ public sealed class PlayerStats
     public Dictionary<string, PowerTally> SelfDebuffs { get; } = new();
     public double FriendlyDamage { get; set; }
     public double SelfDamage { get; set; }
+    /// HP the player made themself lose, by source; HP allies made them lose, by ally (v0.18.6, tooltips).
+    public Dictionary<string, double> SelfDamageBySource { get; } = new();
+    public Dictionary<string, double> HpLostPerAlly { get; } = new();
     /// HP that the Strength this player's relics gave enemies made the players lose (Soufre, Pierre philosophale; v0.17.45),
     /// by "Relic:<ID>": already in SelfDamage / FriendlyDamage.
     public Dictionary<string, double> HarmByRelic { get; } = new();
@@ -102,12 +105,15 @@ public sealed class PlayerStats
     public Dictionary<string, double> MissedByKind { get; } = new();
     public List<MissedEntry> MissedEntries { get; } = new();
     /// Worse choices: weak attacks + smaller block, Pen Nib on a weak attack, block below Orichalcum, growing card not played.
-    public double MissedChoices => WeakAttacks + new[] { "smallBlock", "penNib", "orichalcum", "order", "orderBlock", "orderSlow", "growth", "tent", "orderPotion", "restBoss", "orderDark", "stars", "shell" }.Sum(k => MissedByKind.GetValueOrDefault(k));
+    public double MissedChoices => WeakAttacks + ChoiceKinds.Sum(k => MissedByKind.GetValueOrDefault(k));
+    public static readonly string[] ChoiceKinds =
+        { "smallBlock", "penNib", "orichalcum", "order", "orderBlock", "orderSlow", "orderTurn", "handFull", "growth", "tent", "orderPotion", "restBoss", "orderDark", "stars", "shell" };
     /// Block card plays whose block was wasted (gâché, rule F3), counted once per play (saved with the run).
     public double WastedPlayCount { get; set; }
     /// "Gâché" misplays: wasted block card plays + useful free cards left in hand (v0.17.26; growing cards: Choix).
     /// v0.17.42: an attack wasted on an enemy a smaller attack or a follow-up (Trou noir) would have killed ("overkill").
-    public double MissedWasted => WastedPlayCount + new[] { "freeCard", "starsWasted", "overkill", "overkillFollowUp" }.Sum(k => MissedByKind.GetValueOrDefault(k));
+    public double MissedWasted => WastedPlayCount + WastedKinds.Sum(k => MissedByKind.GetValueOrDefault(k));
+    public static readonly string[] WastedKinds = { "freeCard", "starsWasted", "overkill", "overkillFollowUp", "stampede", "noDraw", "potionUseless" };
     /// Misplays outside fights (v0.17.42): Max HP gained after a heal that was capped by the old Max HP.
     public double MissedOutside => MissedByKind.GetValueOrDefault("maxHpAfterHeal");
     /// Every missed opportunity counted once (trophies).
@@ -150,6 +156,9 @@ public sealed class PlayerStats
     /// Energy spent for nothing (v0.17.37): paid for a block card whose block was not needed (block at the end of the turn
     /// minus its block still covers the attack) or a card whose only effect was a useless debuff.
     public double EnergyUseless { get; set; }
+    /// Doom (Malédiction) put on enemies, and the stacks on enemies that did not die of it (v0.18.6).
+    public double DoomApplied { get; set; }
+    public double DoomUseless { get; set; }
     /// Energy gained during fights (Orbite, Sursis, Éclair+…; not the turn's refill), and by source (v0.18.5, Zaille75).
     public double EnergyGained { get; set; }
     public Dictionary<string, double> EnergyGainedBySource { get; } = new();

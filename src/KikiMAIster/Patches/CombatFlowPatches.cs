@@ -220,7 +220,21 @@ public static class CombatFlowPatches
         {
             PlayLog.TurnStarted(player);
             BlockAlternatives.OnTurnStarted(player);
+            Capture.Safe("max energy", () => MaxEnergyGained(player));
         });
+    }
+
+    /// Énergie gagnée (v0.18.6, Zaille75: Domaine): what each relic or power adds to the player's max energy, every turn.
+    private static void MaxEnergyGained(Player player)
+    {
+        decimal max = player.MaxEnergy;
+        foreach (var model in player.Relics.Cast<AbstractModel>().Concat(player.Creature.Powers))
+        {
+            var added = model.ModifyMaxEnergy(player, max) - max;
+            if (added <= 0) continue;
+            max += added;
+            Capture.Emit(new Core.EnergyGained(Capture.ToActor(player), Capture.SourceOf(model.GetType()).ToString(), (double)added));
+        }
     }
 
     /// Called for every creature starting its turn, after the game cleared (or kept) its block.
@@ -425,10 +439,39 @@ public static class CombatFlowPatches
         public static void Prefix(decimal amount, Player player) => Capture.Safe("PlayerCmd.GainEnergy", () =>
         {
             BlockAlternatives.OnEffect();
+            BlockAlternatives.OnEnergyGiven(player, amount);
             PlayLog.Note($"{PlayLog.Who(player)} +{amount} energy");
             // Énergie gagnée (v0.18.5): whatever gave it (card, power, orb, relic, potion).
             Capture.Emit(new Core.EnergyGained(Capture.ToActor(player), Capture.SourceOf(Capture.CallingModelType()).ToString(), (double)amount));
             if (Capture.CurrentActingPlayer is { } giver && giver != player) Capture.Emit(new HelpGiven(Capture.ToActor(giver), "energy", (double)amount));
+        });
+    }
+
+    /// Ruée (v0.18.6): checked before it plays the attacks of the hand.
+    [HarmonyPatch(typeof(StampedePower), nameof(StampedePower.AfterAutoPostPlayPhaseEntered))]
+    public static class Stampede
+    {
+        public static void Prefix(StampedePower __instance, Player player) => Capture.Safe("Stampede", () =>
+        {
+            if (player == __instance.Owner.Player) BlockAlternatives.OnStampede(player, __instance.Amount);
+        });
+    }
+
+    /// A draw stopped by Pas de pioche (v0.18.6).
+    [HarmonyPatch(typeof(Hook), nameof(Hook.AfterPreventingDraw))]
+    public static class DrawPrevented
+    {
+        public static void Prefix() => Capture.Safe("AfterPreventingDraw", BlockAlternatives.OnDrawPrevented);
+    }
+
+    /// Cards created into the hand (v0.18.6): those that do not fit go to the discard pile.
+    [HarmonyPatch(typeof(CardPileCmd), nameof(CardPileCmd.AddGeneratedCardsToCombat))]
+    public static class CardsCreated
+    {
+        public static void Prefix(IEnumerable<CardModel> cards, PileType newPileType) => Capture.Safe("AddGeneratedCardsToCombat", () =>
+        {
+            if (newPileType != PileType.Hand) return;
+            foreach (var g in cards.Where(c => c.Owner != null).GroupBy(c => c.Owner)) BlockAlternatives.OnCardsCreated(g.Key, g.Count());
         });
     }
 
@@ -474,6 +517,9 @@ public static class CombatFlowPatches
             Capture.PotionUser = potion.Owner;
             Capture.PotionId = $"Potion:{Capture.IdOf(potion)}";
             Capture.Emit(new PotionUsed(Capture.ToActor(potion.Owner)));
+            // A potion that could do nothing (v0.18.6): an error, in Gâché.
+            if (potion.Owner?.Creature.CombatState != null && BlockAlternatives.UselessPotion(potion, target))
+                Capture.Emit(new MissedChance(Capture.ToActor(potion.Owner), "potionUseless", new[] { Capture.PotionId }));
         });
     }
 
