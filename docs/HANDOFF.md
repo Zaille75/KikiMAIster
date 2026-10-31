@@ -8,6 +8,34 @@
 > sends a new inbox (`logs/inbox/<date_time>/`): **review and summarize every report first, wait for his go, then implement
 > the whole batch** (memory rules).
 
+## NEXT: publish the v1.0.0 release (do this first in the new conversation)
+**Done (2026-10-31):** 1.0.0 built and pushed (`main` = `aedbbc9`); history rewritten and force-pushed (no private info,
+final scan clean); release zips built in `dist/release/` (`KikiMAIster-1.0.0-beta.zip`, `KikiMAIster-1.0.0-default.zip`,
+git-ignored; rebuild with `./build.sh beta release` and `./build.sh default release` if missing).
+**Not done:** tag `v1.0.0`, repo still **private**, no GitHub release. Blocker: `gh` (`~/.local/bin/gh`) is **not logged
+in**: two `gh auth login --web` device codes expired before Zaille75 approved them.
+
+Steps (Claude runs them; Zaille75 only does the login):
+1. **Login.** Ask Zaille75 to be at his PC first, then run in the background
+   `gh auth login --hostname github.com --git-protocol ssh --web --skip-ssh-key`, read the 8-character code from the
+   output at once and give it to him: open https://github.com/login/device, type the code, Continue, Authorize GitHub CLI
+   (the code lasts ~15 min). Fallback: he creates a classic token (github.com → Settings → Developer settings → Personal
+   access tokens → Tokens (classic), scope `repo`) and runs `! gh auth login --with-token`, pasting it. Check: `gh auth status`.
+2. **Final private-info scan** of the files and history (`git grep` / `git log -p --all` for nicknames, Steam IDs,
+   Windows user names, server address, local paths) before going public.
+3. **Tag:** `git tag v1.0.0 aedbbc9 && git push origin v1.0.0` (or the current `main` if a commit was added).
+4. **Public:** `gh repo edit Zaille75/KikiMAIster --visibility public --accept-visibility-change-consequences`.
+5. **Release:** `gh release create v1.0.0 dist/release/KikiMAIster-1.0.0-beta.zip dist/release/KikiMAIster-1.0.0-default.zip
+   --title "KikiMAIster 1.0.0" --notes-file <notes>` (notes: the CHANGELOG "1.0.0" lines + which zip for which game
+   branch + install: unzip into `<game folder>/mods/`). Give Zaille75 the release URL.
+6. **Cleanup (optional, ask):** delete the local branch `backup/before-v1-scrub` (pre-rewrite history, never push it) and
+   the old tag `backup/v0.17.7-pet-protection-immediate`; GitHub Support can purge the old unreachable commits.
+7. Then Steam Workshop (see "Path to v1.0").
+
+Without the login, Zaille75 can do it on github.com: Settings → General → Change visibility → Make public; Releases →
+Draft a new release → tag `v1.0.0` (create) → title, notes, drag the two zips (copy command in `docs/HANDOFF.local.md`)
+→ Publish release.
+
 ## Open topics
 1. **In-game test of v0.18.5 → 1.0.0** (the main blocker). Riskiest: the "Réglages de KikiMAIster" button in the game's
    Mods screen (its position under the description is a guess), changing a hotkey, the chifumi table, Dégâts PV / Bloqués,
