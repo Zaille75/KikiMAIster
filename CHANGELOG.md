@@ -3,8 +3,10 @@
 Summary by version line. The detailed notes of every version are in [docs/specs/02-ui.md](docs/specs/02-ui.md)
 (interface) and [docs/specs/01-metrics.md](docs/specs/01-metrics.md) (rules).
 
-## Unreleased (towards 1.0)
-- README (English / French), MIT license, icon.
+## 1.0.0 (2026-10-31)
+First public version: v0.18.10 as it is, released as 1.0.0. README (English / French), MIT license, icon.
+
+## 0.18 — towards 1.0
 - **0.18.10:** card-by-card review of the co-op log: a won run no longer ends a second time as a defeat (the game kills
   the players to close it: an extra death each, a potion error); no free card or relic error for an attack while an enemy
   sleeps (Matriarche lagavulin); En boule: a smaller hit before the big one no longer hides the miss; an enemy's powers

@@ -40,7 +40,7 @@ dealt damage, a card kept on purpose (Retain, Stars, Exhaust…) is never a mist
 Language (English / Français), which sections and columns to show, hide columns at 0, put any section in its own
 window, show the combat summary automatically.
 
-## Keys
+## Keys (change them in the settings, or from the game's Mods screen)
 - **F7**: show / hide the panel
 - **F8**: group compositions
 - **F9**: report a bug, a wrong stat or an idea (also in the settings). The mod makes a zip with a screenshot, the game
@@ -114,7 +114,7 @@ compte que si elle a vraiment sauvé des PV ou fait des dégâts, une carte gard
 Langue (English / Français), sections et colonnes affichées, masquer les colonnes à 0, mettre une section dans sa
 propre fenêtre, afficher le résumé à la fin de chaque combat.
 
-### Touches
+### Touches (modifiables dans les réglages, ou depuis l'écran Mods du jeu)
 - **F7** : afficher / masquer le panneau
 - **F8** : compositions de groupe
 - **F9** : signaler un bug, une stat fausse ou une idée (aussi dans les paramètres). Le mod crée un zip avec une capture
