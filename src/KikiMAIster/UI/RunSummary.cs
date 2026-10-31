@@ -160,7 +160,7 @@ public static class RunSummary
                 moves.GetValueOrDefault("Scissors")));
         }
         if (book.Longest.Rounds > 0)
-            lines.Add(string.Format(Loc.T("run.chifumiLongest"), book.Longest.Rounds, Name(book.Longest.Winner), book.Longest.Date));
+            lines.Add(string.Format(Loc.T("run.chifumiLongest"), book.Longest.Rounds, Name(book.Longest.Winner), ModConfig.Current.ShowDate(book.Longest.Date)));
         if (lines.Count == 0) lines.Add(Loc.T("run.chifumiNone"));
         foreach (var line in lines) _content.AddChild(Overlay.MakeLabel("  " + line, Overlay.Text));
     }
@@ -173,7 +173,8 @@ public static class RunSummary
     private static GridContainer NewGrid(string? soloCharacter)
     {
         var solo = soloCharacter != null;
-        var heads = solo ? new[] { "run.trophy", "run.value", "run.record", "run.character" }
+        // Solo (v0.18.5, Zaille75): the character's record, then the overall record ("Record absolu").
+        var heads = solo ? new[] { "run.trophy", "run.value", "run.character", "run.recordAbsolute" }
             : new[] { "run.trophy", "run.winner", "run.value", "run.record", "run.personal", "run.character" };
         var grid = new GridContainer { Columns = heads.Length, MouseFilter = Control.MouseFilterEnum.Pass };
         grid.AddThemeConstantOverride("h_separation", 14);
@@ -182,7 +183,7 @@ public static class RunSummary
         {
             var text = solo && h == "run.character" && soloCharacter != "" ? string.Format(Loc.T("run.characterSolo"), GameNames.Of($"Character:{soloCharacter}")) : Loc.T(h);
             var l = Overlay.MakeLabel(text, Overlay.Muted);
-            if (Loc.Has($"{h}.tip")) HoverTip.Set(l, Loc.T($"{h}.tip"));
+            if (Loc.Has($"{h}.tip") && !(solo && h == "run.character")) HoverTip.Set(l, Loc.T($"{h}.tip"));
             grid.AddChild(l);
         }
         return grid;
@@ -201,6 +202,12 @@ public static class RunSummary
         HoverTip.Set(name, Loc.T($"{c.Key}.tip"));
         grid.AddChild(name);
         (ulong Id, double Value)? winner = winners.Count > 0 ? winners[0] : null;
+        // Records at this run's ascension level (v0.17.24); the best of the winner's character (in solo: the character played).
+        var best = book.Best(c.Key, coop, level);
+        var newRecord = update?.NewRecords.Contains(c.Key) == true;
+        var character = winner is { } cw ? engine.Players.GetValueOrDefault(cw.Id)?.Character ?? "" : "";
+        var ofCharacter = character == "" ? null : book.OfCharacter(c.Key, character, coop, level);
+        var newCharacter = update?.NewCharacter.Contains((c.Key, character)) == true;
         if (winner is not { } w)
         {
             if (!solo) grid.AddChild(Overlay.MakeLabel("-", Overlay.Muted));
@@ -216,8 +223,11 @@ public static class RunSummary
             if (c.Participation) grid.AddChild(Overlay.MakeLabel("", Overlay.Muted));
             else
             {
+                // A value that beats a record is highlighted like the record (v0.18.5, Zaille75): the run's new records once it
+                // ended, the records it beats while it goes on.
+                var isRecord = ended ? newRecord || newCharacter : Beats(c, w.Value, best) || Beats(c, w.Value, ofCharacter);
                 // Hovering the winning value shows every player's score (v0.17.0).
-                var value = Overlay.MakeLabel(Overlay.N(w.Value), Overlay.Text, HorizontalAlignment.Right);
+                var value = Overlay.MakeLabel(Overlay.N(w.Value), isRecord ? Overlay.Accent : Overlay.Text, HorizontalAlignment.Right);
                 HoverTip.Set(value, Loc.T("run.others") + ":\n" + string.Join('\n', run.Where(kv => c.CanWin(kv.Value))
                     .Select(kv => (Id: kv.Key, Value: c.Value(kv.Value)))
                     .OrderBy(x => c.LowerIsBetter ? x.Value : -x.Value).ThenBy(x => x.Id)
@@ -230,36 +240,39 @@ public static class RunSummary
             for (var i = 0; i < (solo ? 2 : 3); i++) grid.AddChild(Overlay.MakeLabel("", Overlay.Muted));
             return;
         }
-        // Records at this run's ascension level (v0.17.24); hovering shows the record of every level together.
-        var best = book.Best(c.Key, coop, level);
-        var newRecord = update?.NewRecords.Contains(c.Key) == true;
-        // Solo (v0.18.3): no name on the line (the holder, a character, is in the tooltip).
-        var recordCell = Overlay.MakeLabel(best == null ? "-" : $"{(newRecord ? "★ " : "")}{Overlay.N(best.Value)} ({(solo ? "" : best.Name + ", ")}{best.Date})",
+        string Date(RecordBook.Entry e) => ModConfig.Current.ShowDate(e.Date);
+        // Record (solo: "Record absolu", v0.18.5): the holder on the line in solo, after the date; hovering shows every level.
+        var recordCell = Overlay.MakeLabel(best == null ? "-"
+                : $"{(newRecord ? "★ " : "")}{Overlay.N(best.Value)} " + (solo ? $"({Date(best)}) {best.Name}" : $"({best.Name}, {Date(best)})"),
             newRecord ? Overlay.Accent : Overlay.Muted);
-        var tips = new List<string>();
-        if (solo && best != null) tips.Add(best.Name);
         if (book.Best(c.Key, coop) is { } anyLevel)
-            tips.Add($"{Loc.T("run.allLevels")}: {Overlay.N(anyLevel.Value)} ({anyLevel.Name}, {anyLevel.Date})");
-        if (tips.Count > 0) HoverTip.Set(recordCell, string.Join('\n', tips));
-        grid.AddChild(recordCell);
+            HoverTip.Set(recordCell, $"{Loc.T("run.allLevels")}: {Overlay.N(anyLevel.Value)} ({anyLevel.Name}, {Date(anyLevel)})");
         var personal = winner is { } pw ? book.Personal(c.Key, pw.Id, coop, level) : null;
         var newPersonal = winner is { } nw && update?.NewPersonal.Contains((c.Key, nw.Id)) == true;
-        if (!solo)
-            grid.AddChild(Overlay.MakeLabel(personal == null ? "-" : $"{(newPersonal ? "★ " : "")}{Overlay.N(personal.Value)}",
-                newPersonal ? Overlay.Accent : Overlay.Muted));
-        // The best of the winner's character (in solo: the character played); the tooltip lists every character.
-        var character = winner is { } cw ? engine.Players.GetValueOrDefault(cw.Id)?.Character ?? "" : "";
-        var ofCharacter = character == "" ? null : book.OfCharacter(c.Key, character, coop, level);
-        var newCharacter = update?.NewCharacter.Contains((c.Key, character)) == true;
-        // Solo: the header names the character, so the cell keeps only the date.
-        var cell = Overlay.MakeLabel(ofCharacter == null ? "-" : $"{(newCharacter ? "★ " : "")}{Overlay.N(ofCharacter.Value)} ({(solo ? "" : ofCharacter.Name + ", ")}{ofCharacter.Date})",
+        // Solo: the header names the character, so the cell keeps only the date, and no tooltip (v0.18.5).
+        var cell = Overlay.MakeLabel(ofCharacter == null ? "-"
+                : $"{(newCharacter ? "★ " : "")}{Overlay.N(ofCharacter.Value)} ({(solo ? "" : ofCharacter.Name + ", ")}{Date(ofCharacter)})",
             newCharacter ? Overlay.Accent : Overlay.Muted);
-        var all = book.Characters(c.Key, coop, level).ToList();
-        if (all.Count > 0)
+        if (!solo && book.Characters(c.Key, coop, level).ToList() is { Count: > 0 } all)
             HoverTip.Set(cell, string.Join('\n', all.Select(x =>
-                $"{GameNames.Of($"Character:{x.Character}")}: {Overlay.N(x.Entry.Value)} ({x.Entry.Name}, {x.Entry.Date})")));
+                $"{GameNames.Of($"Character:{x.Character}")}: {Overlay.N(x.Entry.Value)} ({x.Entry.Name}, {Date(x.Entry)})")));
+        if (solo)
+        {
+            // Solo (v0.18.5, Zaille75): the character's record first, then the overall record.
+            grid.AddChild(cell);
+            grid.AddChild(recordCell);
+            return;
+        }
+        grid.AddChild(recordCell);
+        grid.AddChild(Overlay.MakeLabel(personal == null ? "-" : $"{(newPersonal ? "★ " : "")}{Overlay.N(personal.Value)}",
+            newPersonal ? Overlay.Accent : Overlay.Muted));
         grid.AddChild(cell);
     }
+
+    /// The value beats this record (no record yet: any non-zero value of a "more is better" trophy).
+    private static bool Beats(Trophies.Category c, double value, RecordBook.Entry? record) =>
+        record == null ? !c.LowerIsBetter && Math.Round(value) > 0
+        : c.LowerIsBetter ? Math.Round(value) < Math.Round(record.Value) : Math.Round(value) > Math.Round(record.Value);
 
     private static void Rebuild(bool ended)
     {

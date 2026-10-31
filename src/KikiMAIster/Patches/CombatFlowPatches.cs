@@ -426,6 +426,8 @@ public static class CombatFlowPatches
         {
             BlockAlternatives.OnEffect();
             PlayLog.Note($"{PlayLog.Who(player)} +{amount} energy");
+            // Énergie gagnée (v0.18.5): whatever gave it (card, power, orb, relic, potion).
+            Capture.Emit(new Core.EnergyGained(Capture.ToActor(player), Capture.SourceOf(Capture.CallingModelType()).ToString(), (double)amount));
             if (Capture.CurrentActingPlayer is { } giver && giver != player) Capture.Emit(new HelpGiven(Capture.ToActor(giver), "energy", (double)amount));
         });
     }
@@ -433,7 +435,11 @@ public static class CombatFlowPatches
     [HarmonyPatch(typeof(Hook), nameof(Hook.AfterForge))]
     public static class Forged
     {
-        public static void Prefix() => Capture.Safe("AfterForge", () => BlockAlternatives.OnEffect());
+        public static void Prefix(decimal amount, Player forger) => Capture.Safe("AfterForge", () =>
+        {
+            BlockAlternatives.OnEffect();
+            BlockAlternatives.OnForge(amount, forger);
+        });
     }
 
     [HarmonyPatch(typeof(CardCmd), nameof(CardCmd.ApplySingleTurnSly))]

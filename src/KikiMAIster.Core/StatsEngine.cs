@@ -231,6 +231,13 @@ public sealed class StatsEngine
                 });
                 break;
             case PotionUsed p when p.Player.IsPlayerSide: Each(p.Player.PlayerId, s => s.PotionsUsed++); break;
+            case EnergyGained g when g.Player.IsPlayerSide && g.Player.PlayerId != 0 && g.Amount > 0:
+                Each(g.Player.PlayerId, s =>
+                {
+                    s.EnergyGained += g.Amount;
+                    PlayerStats.Add(s.EnergyGainedBySource, g.Source, g.Amount);
+                });
+                break;
             case PlayerDied p when p.Player.Kind == ActorKind.Player: Each(p.Player.PlayerId, s => s.Deaths++); break;
             case ChifumiFought f when f.Winner.IsPlayerSide && _chifumiFights.Add(f.FightId):
                 foreach (var p in f.Players.Where(p => p.IsPlayerSide).Select(p => p.PlayerId).Distinct())
@@ -1029,6 +1036,7 @@ public sealed class StatsEngine
                 PlayerStats.Add(s.SavedPerAlly, AllyKey(beneficiary), amount);
             }
             PlayerStats.Add(s.DebuffEffectBySource, x.PowerId, amount);
+            if (!x.Offense) PlayerStats.Add(s.DebuffAvoidedBySource, x.PowerId, amount);
         });
     }
 

@@ -41,13 +41,13 @@ public static class UiPatches
     [HarmonyPatch(typeof(NPauseMenu), nameof(NPauseMenu.OnSubmenuOpened))]
     public static class PauseMenuOpened
     {
-        public static void Postfix() => Capture.Safe("PauseMenu.Opened", () => Overlay.SetGameMenuOpen(true));
+        public static void Postfix(NPauseMenu __instance) => Capture.Safe("PauseMenu.Opened", () => Overlay.SetGameMenuOpen(__instance, true));
     }
 
     [HarmonyPatch(typeof(NPauseMenu), nameof(NPauseMenu.OnSubmenuClosed))]
     public static class PauseMenuClosed
     {
-        public static void Postfix() => Capture.Safe("PauseMenu.Closed", () => Overlay.SetGameMenuOpen(false));
+        public static void Postfix(NPauseMenu __instance) => Capture.Safe("PauseMenu.Closed", () => Overlay.SetGameMenuOpen(__instance, false));
     }
 
     [HarmonyPatch(typeof(NGame), nameof(NGame._Input))]

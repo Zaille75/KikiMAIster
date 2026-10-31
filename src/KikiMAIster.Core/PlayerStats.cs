@@ -39,6 +39,8 @@ public sealed class PlayerStats
     public double PreventedByDebuffsAllies { get; set; }
     /// Per debuff ("VULNERABLE_POWER"…): extra damage enabled + damage prevented.
     public Dictionary<string, double> DebuffEffectBySource { get; } = new();
+    /// The part of it that is damage avoided (Affaibli…), by debuff (v0.18.5: the PV évités / Debuff details).
+    public Dictionary<string, double> DebuffAvoidedBySource { get; } = new();
 
     // B. Friendly fire
     public Dictionary<string, PowerTally> FriendlyDebuffs { get; } = new();
@@ -148,6 +150,9 @@ public sealed class PlayerStats
     /// Energy spent for nothing (v0.17.37): paid for a block card whose block was not needed (block at the end of the turn
     /// minus its block still covers the attack) or a card whose only effect was a useless debuff.
     public double EnergyUseless { get; set; }
+    /// Energy gained during fights (Orbite, Sursis, Éclair+…; not the turn's refill), and by source (v0.18.5, Zaille75).
+    public double EnergyGained { get; set; }
+    public Dictionary<string, double> EnergyGainedBySource { get; } = new();
 
     // Run history (read from the game's own map history, run scope only: spec 01-metrics §C4)
     /// Max HP gained and lost during the run (events, relics, cards…).

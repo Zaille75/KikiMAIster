@@ -266,3 +266,6 @@ public sealed record MissedEntry(int Round, string Kind, IReadOnlyList<string> A
 /// "energySurplus" (not help: energy lost with nothing useful to spend it on, counted for the player themself),
 /// "energyUseless" (not help: energy spent on a card that did nothing useful, v0.17.37).
 public sealed record HelpGiven(Actor Giver, string Kind, double Amount) : StatEvent;
+
+/// Energy a player gained during a fight (cards, powers, relics, potions; not the turn's refill), and its source (v0.18.5).
+public sealed record EnergyGained(Actor Player, string Source, double Amount) : StatEvent;

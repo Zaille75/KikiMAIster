@@ -1,4 +1,4 @@
-# Handoff — state of the project (2026-10-30, v0.18.4)
+# Handoff — state of the project (2026-10-31, v0.18.5)
 
 > **Next session starts with Zaille75's next co-op test (beta branch, v0.17.38 or later).** He will send it with
 > `Envoyer-a-Claude.bat` → `logs/inbox/<date_time>/` (both logs + F9 `feedback/` folders). **Review and summarize every
@@ -150,6 +150,24 @@ Order: test → default branch → release prep → publish → maintenance. The
 
 Optional roadmap items (only if asked): JSON export, end-of-run Totals / Per act tabs, MVP line, opacity / scale /
 hotkey settings, chart history across Save & Quit.
+
+## v0.18.5 — solo runs of 2026-10-30 (2026-10-31, not tested in game)
+Inbox `logs/inbox/2026-10-31_09-51-55/` (beta v0.18.4, 5 solo runs: Régent, Soldat de fer ×2, Tisse-Mort, Défectueux;
+13 F9 reports, archived as `logs/2026-10-30_v0.18.4_beta_solo_5runs.log` + `.previous.log`, reports in
+`logs/feedback-2026-10-31/`). **Bug fixed:** after "Sauvegarder et quitter" + "Continuer" the mod stayed hidden (F7/F8/F9
+dead) because `NPauseMenu.OnSubmenuClosed` never fires on quit; `Overlay.GameMenuOpen` now checks the menu node is
+still visible. Answered without change: no lethal missed (Grouilleurs T4, 31 dmg max vs 40 HP); Hologramme+ not
+"for nothing" (it brought Griffure back). Zaille75's batch (all in 02-ui v0.18.5 / 01-metrics): PV section, Défense +
+Debuff column (= PV évités, in both), Erreurs de jeu, renames, Cartes last, Énergie gagnée (`PlayerCmd.GainEnergy` →
+`EnergyGained` event), Énergie inutile x/y, per-column tooltips (`Overlay.Detail` joins them for the opened section),
+Survolté, solo trophies (Record <perso> without tooltip, then Record absolu with the holder), value highlighted when it
+beats a record, date format setting (`ModConfig.ShowDate`), Activation double/multiple/quadruple kept on purpose
+(`EvokesOrbs`). **Wrong order** extended in `BlockAlternatives.CheckOrder` (Calcification via `Play.PetHits`,
+Décomposition via `DexterityDrops`/`StrengthDrops`, Monologue, Rupture, Précision, Lames fantomatiques, Un pour tous,
+Pistage, Bien attaché, Camouflage, Conquérant, Forge via `OnForge`, co-op Encerclement/Renverser); an enemy debuff no
+longer excuses the order (`Play.OtherThanDebuff`). Zaille75 chose Forge in, "X card before energy" out. Campfire
+columns only appear once an option was chosen in the run (answered, no change). Check in the next logs: `wrong order:`
+lines for Calcification / Décomposition, `EnergyGained` sources, the mod visible after Save & Quit + Continue.
 
 ## v0.18.2 → v0.18.4 — solo run feedback (2026-10-30, not tested in game)
 Inbox `logs/inbox/2026-10-30_15-04-14/` (beta v0.18.1, 3 solo runs: Régent, 2× Soldat de fer, 26 fights; archived as

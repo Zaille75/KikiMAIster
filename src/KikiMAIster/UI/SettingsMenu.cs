@@ -114,6 +114,22 @@ public static class SettingsMenu
         }
         _content.AddChild(lang);
 
+        // Date format (v0.18.5, Zaille75): DD/MM/YYYY by default.
+        var dates = new HBoxContainer();
+        dates.AddChild(Overlay.MakeLabel(Loc.T("settings.dateFormat"), Overlay.Text));
+        foreach (var (code, label) in new[] { ("dmy", "DD/MM/YYYY"), ("ymd", "YYYY/MM/DD"), ("ydm", "YYYY/DD/MM") })
+        {
+            var b = Overlay.MakeButton(label);
+            b.AddThemeColorOverride("font_color", Cfg.DateFormat == code ? Overlay.Accent : Overlay.Muted);
+            b.Pressed += () => Capture.Safe("SettingsMenu.DateFormat", () =>
+            {
+                Cfg.DateFormat = code;
+                Changed();
+            });
+            dates.AddChild(b);
+        }
+        _content.AddChild(dates);
+
         _content.AddChild(Check(Loc.T("summary.auto"), Cfg.AutoSummary, on =>
         {
             Cfg.AutoSummary = on;

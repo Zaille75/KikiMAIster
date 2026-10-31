@@ -50,6 +50,29 @@ public sealed class ModConfig
     public bool ChifumiRecordsOpen { get; set; } = true;
     /// The "Maître des malus" records were cleared once (v0.17.1: they counted À l'attaque !, which is no debuff).
     public bool DebuffRecordsCleared { get; set; }
+    /// Dates shown by the mod (v0.18.5, Zaille75): "dmy" (DD/MM/YYYY, default), "ymd" (YYYY/MM/DD) or "ydm" (YYYY/DD/MM).
+    public string DateFormat { get; set; } = "dmy";
+
+    /// A date saved as "yyyy-MM-dd", shown in the chosen format (left as is when it is not such a date).
+    public string ShowDate(string iso)
+    {
+        if (iso.Length != 10 || iso[4] != '-' || iso[7] != '-') return iso;
+        var (y, m, d) = (iso[..4], iso[5..7], iso[8..]);
+        return DateFormat switch { "ymd" => $"{y}/{m}/{d}", "ydm" => $"{y}/{d}/{m}", _ => $"{d}/{m}/{y}" };
+    }
+
+    /// Hidden columns that moved (v0.18.4: potions and energy left Cartes; v0.18.5: HP columns left Dégâts for PV, and
+    /// Énergie en trop / pour rien became one Énergie inutile column).
+    private static string MigrateHidden(string h) => h switch
+    {
+        "col:other:col.potions" => "col:energy:col.potions",
+        "col:other:col.energySurplus" or "col:other:col.energyUseless" or "col:energy:col.energySurplus" or "col:energy:col.energyUseless"
+            => "col:energy:col.energyUnused",
+        _ when h.StartsWith("col:damage:") && h[11..] is "col.avoided" or "col.hpLost" or "col.fromSelf" or "col.fromAllies" or "col.hpOutside"
+            or "col.healOutside" or "col.maxHp" => "col:hp:" + h[11..],
+        _ => h
+    };
+
     /// Not saved: every section starts folded when the game starts.
     public List<string> OpenSections { get; set; } = new();
 
@@ -89,10 +112,8 @@ public sealed class ModConfig
                     case "summaryY": c.SummaryY = float.Parse(v, CultureInfo.InvariantCulture); break;
                     case "settingsX": c.SettingsX = Float(v, -1); break;
                     case "settingsY": c.SettingsY = Float(v, -1); break;
-                    // v0.18.4: potions and energy left the cards section ("other") for their own ("energy").
-                    case "hidden": c.Hidden = v.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                        .Select(h => h is "col:other:col.potions" or "col:other:col.energySurplus" or "col:other:col.energyUseless"
-                            ? h.Replace("col:other:", "col:energy:") : h).ToHashSet(); break;
+                    case "hidden": c.Hidden = v.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(MigrateHidden).ToHashSet(); break;
+                    case "dateFormat": c.DateFormat = v; break;
                     case "chartPerRound": c.ChartPerRound = v == "true"; break;
                     case "hideZeroColumns": c.HideZeroColumns = v == "true"; break;
                     case "showGroupLine": c.ShowGroupLine = v == "true"; break;
@@ -145,7 +166,8 @@ public sealed class ModConfig
                 $"lobbyPanelVisible={(LobbyPanelVisible ? "true" : "false")}", $"compoLobbyOpen={(CompoLobbyOpen ? "true" : "false")}",
                 $"compoFolded={(CompoFolded ? "true" : "false")}", $"detached={string.Join(',', Detached)}",
                 $"debuffRecordsCleared={(DebuffRecordsCleared ? "true" : "false")}",
-                $"funTrophiesShown={(FunTrophiesShown ? "true" : "false")}", $"chifumiRecordsOpen={(ChifumiRecordsOpen ? "true" : "false")}"
+                $"funTrophiesShown={(FunTrophiesShown ? "true" : "false")}", $"chifumiRecordsOpen={(ChifumiRecordsOpen ? "true" : "false")}",
+                $"dateFormat={DateFormat}"
             }.Concat(DetachedPositions.Select(kv => $"pos.{kv.Key}={kv.Value.X.ToString(ci)};{kv.Value.Y.ToString(ci)}")));
         }
         catch (Exception e)

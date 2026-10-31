@@ -39,6 +39,11 @@ public static class BlockAlternatives
         /// (v0.17.32): Lightning / Glass hits ("order", with their enemy), Frost block ("orderBlock"), Dark charging
         /// ("orderDark": its stored damage). Plasma gives energy, which Focus does not change.
         public List<(Creature? Enemy, string Kind)> OrbTriggers { get; } = new();
+        /// Hits the player's pet (Titos) made during this play: Calcification boosts them, Strength does not (v0.18.5).
+        public List<Creature> PetHits { get; } = new();
+        /// An effect other than damage, block or a debuff on an enemy (draw, energy, own buff…): it may have made a later card
+        /// playable, so its place in the turn was a choice (wrong order, v0.18.5: a debuff on the enemy no longer counts).
+        public bool OtherThanDebuff { get; set; }
     }
 
     private static readonly ConditionalWeakTable<CardPlay, Play> Plays = new();
@@ -56,8 +61,10 @@ public static class BlockAlternatives
     private static readonly HashSet<CardModel> GrowingAffordable = new(ReferenceEqualityComparer.Instance);
     private static readonly HashSet<CardModel> GrowingPlayed = new(ReferenceEqualityComparer.Instance);
     private static readonly List<OrderLoss> OrderLosses = new();
-    /// Cards the player chose this turn that lowered their own Strength (Amitié: −2 Strength for +1 energy), and by how much.
+    /// Cards the player chose this turn that lowered their own Strength (Amitié: −2 Strength for +1 energy, or Décomposition
+    /// after a card, v0.18.5), and by how much; the same for Dexterity (Décomposition).
     private static readonly List<(Play Play, double Loss)> StrengthDrops = new();
+    private static readonly List<(Play Play, double Loss)> DexterityDrops = new();
     /// The first play of each card this turn: a card played again (Déflagration, Duplication, Forme résonnante…) is the
     /// same choice, its copies add their hits and block to it (v0.17.38).
     private static readonly Dictionary<CardModel, Play> FirstPlays = new(ReferenceEqualityComparer.Instance);
@@ -80,6 +87,7 @@ public static class BlockAlternatives
     {
         OrderLosses.Clear();
         StrengthDrops.Clear();
+        DexterityDrops.Clear();
         ThisTurn.Clear();
         FirstPlays.Clear();
         ExtraTurn.Clear();
@@ -95,11 +103,13 @@ public static class BlockAlternatives
 
     /// Something other than block happened (power applied, damage, heal, draw, orb, card created…):
     /// credited to the card play in progress, if any.
-    public static void OnEffect(bool damage = false)
+    public static void OnEffect(bool damage = false, bool enemyDebuff = false)
     {
         if (!InProgress.TryPeek(out var play) || play == null) return;
         play.HadOtherEffect = true;
-        if (!damage) play.HadNonDamageEffect = true;
+        if (damage) return;
+        play.HadNonDamageEffect = true;
+        if (!enemyDebuff) play.OtherThanDebuff = true;
     }
 
     /// A power applied during the play in progress: an effect, except 1 Weak on an enemy that does not attack this turn
@@ -123,23 +133,43 @@ public static class BlockAlternatives
                 return;
             }
         }
-        OnEffect();
+        OnEffect(enemyDebuff: power.Owner.IsEnemy);
     }
 
-    /// Wrong order (spec §E0): Vulnerable put on an enemy that had none, Strength or Dexterity gained, by a card the
-    /// player chose or a potion, after plays of the same turn it would have boosted (and while it was already in hand).
+    /// Wrong order (spec §E0): a boost (Vulnerable put on an enemy that had none, Strength, Dexterity, Focus, Calcification…)
+    /// given by a card the player chose or a potion, after plays of the same turn it would have boosted (and while it was
+    /// already in hand); or a Strength / Dexterity drop before plays it lowered.
     private static void CheckOrder(PowerModel power, decimal amount, bool stacked)
     {
-        // A card lowering its player's own Strength (Amitié): attacks played after it, that were already in hand, lose
-        // that much per hit (v0.17.15); checked when they hit (OnHit).
-        if (amount < 0 && power is StrengthPower && InProgress.TryPeek(out var dropping) && dropping != null &&
-            power.Owner == dropping.Player.Creature && Capture.CallingModelType() is { } dropCaller && typeof(CardModel).IsAssignableFrom(dropCaller))
+        var caller = Capture.CallingModelType();
+        if (amount < 0)
         {
-            StrengthDrops.Add((dropping, (double)-amount));
+            if (power is not (StrengthPower or DexterityPower) || caller == null) return;
+            InProgress.TryPeek(out var inProgress);
+            // A card lowering its player's own Strength (Amitié): attacks played after it, that were already in hand, lose that
+            // much per hit (v0.17.15); checked when they hit (OnHit).
+            if (power is StrengthPower && inProgress != null && power.Owner == inProgress.Player.Creature && typeof(CardModel).IsAssignableFrom(caller))
+            {
+                StrengthDrops.Add((inProgress, (double)-amount));
+                return;
+            }
+            // Décomposition (Chasseur-tueur, v0.18.5): −1 Strength and −1 Dexterity after each card the player plays. Attacks and
+            // block cards should come first; a drop after an attack or a block card is not counted (one of them had to go first).
+            var dropping = inProgress ?? _justFinished;
+            if (caller != typeof(TenderPower) || dropping == null || power.Owner != dropping.Player.Creature ||
+                dropping.Card.Type == CardType.Attack || dropping.GaveBlock) return;
+            (power is StrengthPower ? StrengthDrops : DexterityDrops).Add((dropping, (double)-amount));
             return;
         }
-        if (amount <= 0 || power is not (VulnerablePower or StrengthPower or DexterityPower or FocusPower)) return;
         InProgress.TryPeek(out var play);
+        // Monologue (Strength after each card this turn) and Rupture (Strength when a card costs HP), v0.18.5: the card that
+        // triggered it is the boost; an attack triggering it is not counted (one attack had to go first).
+        var triggered = power is StrengthPower && (caller == typeof(MonologuePower) || caller == typeof(RupturePower));
+        if (triggered)
+        {
+            play ??= _justFinished;
+            if (play == null || play.Card.Type == CardType.Attack) return;
+        }
         Player? player;
         string boost;
         if (play != null)
@@ -154,23 +184,27 @@ public static class BlockAlternatives
         }
         else return;
         // Only the card or potion's own effect: a relic or power reacting to the play (Shuriken…) does not depend on the order.
-        var caller = Capture.CallingModelType();
-        if (caller == null || !(typeof(CardModel).IsAssignableFrom(caller) || typeof(PotionModel).IsAssignableFrom(caller) ||
-                                typeof(TemporaryStrengthPower).IsAssignableFrom(caller) || typeof(TemporaryDexterityPower).IsAssignableFrom(caller)))
+        if (!triggered && (caller == null || !(typeof(CardModel).IsAssignableFrom(caller) || typeof(PotionModel).IsAssignableFrom(caller) ||
+                                               typeof(TemporaryStrengthPower).IsAssignableFrom(caller) || typeof(TemporaryDexterityPower).IsAssignableFrom(caller))))
             return;
         var earlier = ThisTurn.TakeWhile(p => p != play)
             .Where(p => p.Player == player && (play == null || p.HandAtPlay.Contains(play.Card))).ToList();
+        var attacks = earlier.Where(p => p.Card.Type == CardType.Attack && !p.OtherThanDebuff).ToList();
+        var blocks = earlier.Where(p => p.GaveBlock && p.BlockGains > 0 && !p.HadOtherEffect).ToList();
+        // Damage per hit added to some of the player's own hits (not the pet's) on each enemy, Vulnerable included.
+        void PerHit(IEnumerable<Play> plays, double perHit)
+        {
+            foreach (var e in plays)
+                foreach (var g in OwnHits(e).GroupBy(h => (Creature)h.Target))
+                    OrderLosses.Add(new OrderLoss(e, boost, "order", g.Key, perHit * g.Count() * Vulnerable(g.Key, player)));
+        }
         switch (power)
         {
             case VulnerablePower when power.Owner.IsEnemy && !stacked:
             {
                 // The game's multiplier (×1.5, more with some relics, v0.17.38).
                 var extra = VulnerableFactor(power, power.Owner, player.Creature) - 1;
-                // Co-op (v0.17.45, Zaille75): an ally's attack made while this card was already in the player's hand should
-                // have come after it; the miss is the attacker's.
-                var allies = play == null ? new List<Play>()
-                    : ThisTurn.TakeWhile(p => p != play).Where(p => p.Player != player && p.AlliesHandAtPlay.Contains(play.Card)).ToList();
-                foreach (var e in earlier.Concat(allies).Where(p => p.Card.Type == CardType.Attack && !p.HadNonDamageEffect))
+                foreach (var e in attacks.Concat(AlliesBefore(play, player)))
                 {
                     var raw = e.Hits.Where(h => ReferenceEquals(h.Target, power.Owner)).Sum(h => h.Raw);
                     if (raw > 0) OrderLosses.Add(new OrderLoss(e, boost, "order", power.Owner, raw * extra));
@@ -178,10 +212,7 @@ public static class BlockAlternatives
                 break;
             }
             case StrengthPower when power.Owner == player.Creature:
-                foreach (var e in earlier.Where(p => p.Card.Type == CardType.Attack && !p.HadNonDamageEffect))
-                    foreach (var g in e.Hits.GroupBy(h => (Creature)h.Target))
-                        OrderLosses.Add(new OrderLoss(e, boost, "order", g.Key, (double)amount * g.Count() *
-                            (g.Key.GetPower<VulnerablePower>() is { } v ? VulnerableFactor(v, g.Key, player.Creature) : 1)));
+                PerHit(attacks, (double)amount);
                 break;
             // Focus gained after orbs fired this turn (Potion de focalisation after an evoke): each orb hit lost that much
             // damage, each Frost trigger that much block, each Dark charge that much stored damage (v0.17.32).
@@ -191,10 +222,89 @@ public static class BlockAlternatives
                         OrderLosses.Add(new OrderLoss(e, boost, kind, enemy, (double)amount));
                 break;
             case DexterityPower when power.Owner == player.Creature:
-                foreach (var e in earlier.Where(p => p.GaveBlock && p.BlockGains > 0 && !p.HadOtherEffect))
+                foreach (var e in blocks)
                     OrderLosses.Add(new OrderLoss(e, boost, "orderBlock", null, (double)amount * e.BlockGains));
                 break;
+            // v0.18.5 (Zaille75): the same with the other boosts. Calcification: each hit of the player's pet (Titos).
+            case CalcifyPower when power.Owner == player.Creature:
+                foreach (var e in earlier.Where(p => !p.OtherThanDebuff))
+                    foreach (var g in e.PetHits.GroupBy(h => h))
+                        OrderLosses.Add(new OrderLoss(e, boost, "order", g.Key, (double)amount * g.Count() * Vulnerable(g.Key, player)));
+                break;
+            // Précision: each Surin hit; Lames fantomatiques: the first Surin of the turn only.
+            case AccuracyPower when power.Owner == player.Creature:
+                PerHit(attacks.Where(p => p.Card.Tags.Contains(CardTag.Shiv)), (double)amount);
+                break;
+            case PhantomBladesPower when power.Owner == player.Creature:
+                PerHit(ThisTurn.Where(p => p.Player == player && p.Card.Tags.Contains(CardTag.Shiv)).Take(1).Intersect(attacks), (double)amount);
+                break;
+#if !GAME_DEFAULT
+            // Un pour tous (beta only): each hit of an X-cost attack.
+            case OneForAllPower when power.Owner == player.Creature:
+                PerHit(attacks.Where(p => p.Card.EnergyCost.CostsX), (double)amount);
+                break;
+#endif
+            // Pistage: +50% on enemies with Weak.
+            case TrackingPower when power.Owner == player.Creature && !stacked:
+                foreach (var e in attacks)
+                    foreach (var g in e.Hits.GroupBy(h => (Creature)h.Target).Where(g => g.Key.HasPower<WeakPower>()))
+                        OrderLosses.Add(new OrderLoss(e, boost, "order", g.Key, g.Sum(h => h.Raw) * (double)amount / 100));
+                break;
+            // Bien attaché: each block gain of a Défense; Camouflage: block doubled this turn.
+            case FastenPower when power.Owner == player.Creature:
+                foreach (var e in blocks.Where(p => p.Card.Tags.Contains(CardTag.Defend)))
+                    OrderLosses.Add(new OrderLoss(e, boost, "orderBlock", null, (double)amount * e.BlockGains));
+                break;
+            case ShadowmeldPower when power.Owner == player.Creature:
+                foreach (var e in blocks)
+                    OrderLosses.Add(new OrderLoss(e, boost, "orderBlock", null, e.BlockAmount * (Math.Pow(2, (double)amount) - 1)));
+                break;
+            // Conquérant: Lame souveraine deals double damage to that enemy.
+            case ConquerorPower when power.Owner.IsEnemy && !stacked:
+                foreach (var e in attacks.Where(p => p.Card is SovereignBlade))
+                {
+                    var raw = OwnHits(e).Where(h => ReferenceEquals(h.Target, power.Owner)).Sum(h => h.Raw);
+                    if (raw > 0) OrderLosses.Add(new OrderLoss(e, boost, "order", power.Owner, raw));
+                }
+                break;
+            // Co-op: Encerclement and Renverser multiply the allies' attack damage on that enemy; an ally's attack made while the
+            // card was already in the player's hand should have come after it (the miss is the attacker's, like Vulnérable).
+            case FlankingPower or KnockdownPower when power.Owner.IsEnemy && !stacked:
+                foreach (var e in AlliesBefore(play, player))
+                {
+                    var raw = e.Hits.Where(h => ReferenceEquals(h.Target, power.Owner)).Sum(h => h.Raw);
+                    if (raw > 0) OrderLosses.Add(new OrderLoss(e, boost, "order", power.Owner, raw * ((double)amount - 1)));
+                }
+                break;
         }
+    }
+
+    /// The allies' attacks made this turn, before this play, while its card was already in the player's hand (co-op).
+    private static IEnumerable<Play> AlliesBefore(Play? play, Player player) => play == null ? Array.Empty<Play>()
+        : ThisTurn.TakeWhile(p => p != play).Where(p => p.Player != player && p.Card.Type == CardType.Attack && !p.OtherThanDebuff &&
+                                                        p.AlliesHandAtPlay.Contains(play.Card)).ToList();
+
+    /// The play's hits made by the player (its pet's left out: Strength does not change them).
+    private static IEnumerable<EnemyHit> OwnHits(Play play)
+    {
+        var pet = play.PetHits.ToList();
+        foreach (var h in play.Hits)
+            if (pet.FirstOrDefault(c => ReferenceEquals(c, h.Target)) is { } c) pet.Remove(c);
+            else yield return h;
+    }
+
+    /// Vulnerable's multiplier on this enemy for the player's attacks (1 without Vulnerable).
+    private static double Vulnerable(Creature enemy, Player player) =>
+        enemy.GetPower<VulnerablePower>() is { } v ? VulnerableFactor(v, enemy, player.Creature) : 1;
+
+    /// Forge (v0.18.5, Zaille75): Lame souveraine played before a Forge card that was already in hand lost the forged damage.
+    public static void OnForge(decimal amount, Player forger)
+    {
+        if (amount <= 0 || !InProgress.TryPeek(out var play) || play == null || play.Player != forger) return;
+        foreach (var e in ThisTurn.TakeWhile(p => p != play).Where(p => p.Player == forger && p.Card is SovereignBlade &&
+                                                                       !p.OtherThanDebuff && p.HandAtPlay.Contains(play.Card)))
+            foreach (var g in OwnHits(e).GroupBy(h => (Creature)h.Target))
+                OrderLosses.Add(new OrderLoss(e, Key(play.Card), "order", g.Key, (double)amount * g.Count() * Vulnerable(g.Key, forger)));
     }
 
     /// Vulnerable's damage multiplier on this enemy for the player's attacks (1.5 when the game gives none).
@@ -217,7 +327,11 @@ public static class BlockAlternatives
             play.Overkill += overkill;
         }
         // Hit by the player after a Strength drop it could have been played before (Osty does not use Strength).
-        if (dealer != play.Player.Creature) return;
+        if (dealer != play.Player.Creature)
+        {
+            if (dealer?.PetOwner == play.Player) play.PetHits.Add(target);
+            return;
+        }
         foreach (var (drop, loss) in StrengthDrops.Where(d => d.Play.Player == play.Player && d.Play.HandAtPlay.Contains(card)))
             OrderLosses.Add(new OrderLoss(drop, Key(card), "order", target, Math.Min(loss, raw)));
     }
@@ -288,6 +402,9 @@ public static class BlockAlternatives
         if (play == null) return;
         play.BlockAmount += amount;
         play.BlockGains++;
+        // Block gained after a Dexterity drop it could have been played before (Décomposition, v0.18.5).
+        foreach (var (drop, loss) in DexterityDrops.Where(d => d.Play.Player == play.Player && d.Play.HandAtPlay.Contains(play.Card)))
+            OrderLosses.Add(new OrderLoss(drop, Key(play.Card), "orderBlock", null, Math.Min(loss, amount)));
     }
 
     /// Another card discarded, exhausted or moved by the play in progress (Survivor, Graveblast bringing a card back to
@@ -298,6 +415,7 @@ public static class BlockAlternatives
         if (!InProgress.TryPeek(out var play) || play == null || play.Card == card) return;
         play.HadOtherEffect = true;
         play.HadNonDamageEffect = true;
+        play.OtherThanDebuff = true;
     }
 
     public static void OnPlayFinished()
@@ -361,6 +479,7 @@ public static class BlockAlternatives
             // Sacrifice kills the player's own pet (validated by Zaille75: never wasted).
             HadOtherEffect = IsGrowing(cardPlay.Card) || cardPlay.Card is Sacrifice,
             HadNonDamageEffect = IsGrowing(cardPlay.Card),
+            OtherThanDebuff = IsGrowing(cardPlay.Card),
             UsefulCardsInHand = hand.Where(c => c != cardPlay.Card && IsUseful(c)).Select(c => new SeenCard(c, Key(c))).ToList(),
             HandAtPlay = hand.Where(c => c != cardPlay.Card).ToList<object>()
         };
@@ -840,11 +959,14 @@ public static class BlockAlternatives
     /// (Retain, or the whole hand is kept: Main retenue…), it costs Stars (they are not refilled each turn), or it Exhausts
     /// (gone once played: v0.17.34, Zaille75 — Surins and Entrave des ténèbres included; missed lethal still uses it), or it
     /// exhausts or transforms other cards of the hand (v0.17.44, Zaille75: HORS DE MA VUE ! kept not to lose a card), or it
-    /// costs HP to play (v0.18.4, Zaille75: Percée kept at 3 HP is a choice).
+    /// costs HP to play (v0.18.4, Zaille75: Percée kept at 3 HP is a choice), or it only evokes orbs (v0.18.5, Activation double).
     private static bool KeptOnPurpose(CardModel card, ICombatState combat) =>
         card.ShouldRetainThisTurn || card.CurrentStarCost > 0 || card.HasStarCostX || card.Keywords.Contains(CardKeyword.Exhaust) ||
         ConsumesHand.Contains(card.Id.Entry) || EnergyOnly.Contains(card.Id.Entry) || SacrificesPet.Contains(card.Id.Entry) ||
-        CostsHp.Contains(card.Id.Entry) || !Hook.ShouldFlush(combat, card.Owner);
+        CostsHp.Contains(card.Id.Entry) || EvokesOrbs.Contains(card.Id.Entry) || !Hook.ShouldFlush(combat, card.Owner);
+
+    /// Cards that only evoke the player's orbs (v0.18.5, Zaille75): keeping an orb is a choice.
+    private static readonly HashSet<string> EvokesOrbs = new() { "DUALCAST", "MULTI_CAST", "QUADCAST" };
 
     /// Cards that make their player lose HP when played (audit of every card, v0.18.4; Saignée is also in EnergyOnly).
     private static readonly HashSet<string> CostsHp = new()

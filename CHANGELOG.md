@@ -5,6 +5,11 @@ Summary by version line. The detailed notes of every version are in [docs/specs/
 
 ## Unreleased (towards 1.0)
 - README (English / French), MIT license, icon.
+- **0.18.5:** fix: the mod no longer stays hidden after "Sauvegarder et quitter" then "Continuer"; new PV section,
+  Défense (with Debuff), Erreurs de jeu, renamed columns, Cartes last; Énergie gagnée and Énergie inutile x/y; each
+  value's tooltip shows only its column; more wrong-order cases (Calcification, Décomposition, Monologue, Forge…);
+  Activation double kept on purpose; solo trophies: Record <personnage> then Record absolu, values highlighted when
+  they beat a record; date format setting; Batterie pleine becomes Survolté.
 - **0.18.4:** "Cartes" and "Potions et énergie" sections; cards that cost HP (Percée…) kept on purpose; "Énergie pour
   rien" no longer counts two block cards when only one was too much; no false weak attack with Piétinement; clearer
   event lines.
