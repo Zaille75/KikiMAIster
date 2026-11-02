@@ -3,6 +3,10 @@
 Summary by version line. The detailed notes of every version are in [docs/specs/02-ui.md](docs/specs/02-ui.md)
 (interface) and [docs/specs/01-metrics.md](docs/specs/01-metrics.md) (rules).
 
+## 1.0.2 (2026-11-02)
+The log says again where the mod's data folder is (its line was empty in 1.0.1). Workshop pages and README: subscribe to
+only one of the two Workshop items (same mod id: the game loads only the first one).
+
 ## 1.0.1 (2026-11-02)
 The mod's files (settings, records, compositions, chifumi, runs, reports, log) move to the game's user folder
 (`%APPDATA%\SlayTheSpire2\KikiMAIster` on Windows), so a mod update, from the Steam Workshop or by hand, never erases

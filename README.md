@@ -51,6 +51,8 @@ window, show the combat summary automatically.
 - Beta branch: [KikiMAIster](https://steamcommunity.com/sharedfiles/filedetails/?id=3832591950)
 - Default branch: [KikiMAIster (default branch)](https://steamcommunity.com/sharedfiles/filedetails/?id=3832592056)
 
+Subscribe to only one of the two: they share the same mod id, so the game loads only the first one, whatever your branch.
+
 Manual install, game closed:
 1. Download the release zip (`KikiMAIster.dll` and `KikiMAIster.json`).
 2. Put both files in `<Steam library>\steamapps\common\Slay the Spire 2\mods\KikiMAIster\`.
@@ -128,6 +130,8 @@ propre fenêtre, afficher le résumé à la fin de chaque combat.
 **Steam Workshop** (le plus simple, mises à jour automatiques) : abonne-toi à l'objet de ta branche du jeu, puis lance le jeu.
 - Branche bêta : [KikiMAIster](https://steamcommunity.com/sharedfiles/filedetails/?id=3832591950)
 - Branche par défaut : [KikiMAIster (default branch)](https://steamcommunity.com/sharedfiles/filedetails/?id=3832592056)
+
+Abonne-toi à un seul des deux : ils ont le même identifiant, le jeu ne charge que le premier, quelle que soit ta branche.
 
 Installation manuelle, jeu fermé :
 1. Télécharge le zip de la version (`KikiMAIster.dll` et `KikiMAIster.json`).

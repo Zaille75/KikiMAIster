@@ -20,8 +20,14 @@ https://github.com/Zaille75/KikiMAIster/releases/tag/v1.0.0 with the beta and de
   public: Zaille75 runs the command himself (`! ...`) or gives his explicit go.
 - **Cleanup done (2026-11-02):** backup branch `backup/before-v1-scrub` and tag `backup/v0.17.7-pet-protection-immediate`
   deleted (local and GitHub).
-- **Not released yet (next version):** the log's "Data folder" line was empty in 1.0.1 (static init order in
-  `DataDir`), fixed on `main`.
+- **1.0.2 (2026-11-02):** log's "Data folder" line fixed (empty in 1.0.1: static init order in `DataDir`); Workshop
+  descriptions + README: subscribe to only one of the two items.
+- **NEXT (Zaille75 agreed to note it, 2026-11-02): one build for both game branches.** Both Workshop items share the mod id
+  `KikiMAIster`: the game loads only the first one in its list, whatever the branch (the other gets DUPLICATE_ID), and
+  our items declare no supported branch, so the game's branch check (`ModManager.CheckSteamBranchSupport`) lets both
+  through. Plan: turn the 16 `#if GAME_DEFAULT` blocks (9 files) into runtime checks, test on both branches, then one
+  Workshop item (retire the default one). Alternative: set each item's supported branch (`SetRequiredGameVersions`,
+  needs a small Steamworks upload tool; SteamCMD likely can't).
 - **1.0.1 (2026-11-02, released on the Workshop and GitHub; checked by Zaille75: data folder `%APPDATA%\SlayTheSpire2\KikiMAIster`):** data moved to the game's user folder (spec 03-technical "Data folder"),
   for the Workshop. `dist/tools/Envoyer-a-Claude.ps1` looks there first (then the old mods folder).
 - **Steam Workshop: PUBLIC since 2026-11-02** (tested by Zaille75, data copy checked, README links). GitHub release

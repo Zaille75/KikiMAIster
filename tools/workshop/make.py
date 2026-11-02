@@ -12,11 +12,19 @@ IDS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "published_ids.js
 
 ITEMS = {
     "beta": ("KikiMAIster",
-             "For the game's BETA branch (public-beta). On the default branch, subscribe to KikiMAIster (default branch).",
-             "Pour la branche BÊTA du jeu. Sur la branche par défaut, abonne-toi à KikiMAIster (default branch)."),
+             "For the game's BETA branch (public-beta). On the default branch, subscribe to KikiMAIster (default branch). "
+             "Subscribe to only one of the two: they have the same mod id, so the game loads only the first one, whatever your branch. "
+             "If you switch branches, swap the subscription (your stats and settings are kept).",
+             "Pour la branche BÊTA du jeu. Sur la branche par défaut, abonne-toi à KikiMAIster (default branch). "
+             "Abonne-toi à un seul des deux : ils ont le même identifiant, le jeu ne charge que le premier, quelle que soit ta branche. "
+             "Si tu changes de branche, change d'abonnement (tes stats et réglages sont gardés)."),
     "default": ("KikiMAIster (default branch)",
-                "For the game's DEFAULT branch. On the beta branch, subscribe to KikiMAIster (the beta item).",
-                "Pour la branche PAR DÉFAUT du jeu. Sur la branche bêta, abonne-toi à KikiMAIster (l'objet bêta)."),
+                "For the game's DEFAULT branch. On the beta branch, subscribe to KikiMAIster (the beta item). "
+                "Subscribe to only one of the two: they have the same mod id, so the game loads only the first one, whatever your branch. "
+                "If you switch branches, swap the subscription (your stats and settings are kept).",
+                "Pour la branche PAR DÉFAUT du jeu. Sur la branche bêta, abonne-toi à KikiMAIster (l'objet bêta). "
+                "Abonne-toi à un seul des deux : ils ont le même identifiant, le jeu ne charge que le premier, quelle que soit ta branche. "
+                "Si tu changes de branche, change d'abonnement (tes stats et réglages sont gardés)."),
 }
 
 
