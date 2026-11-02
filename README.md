@@ -48,7 +48,7 @@ window, show the combat summary automatically.
 
 ## Install
 **Steam Workshop** (easiest, updates are automatic): subscribe to the item for your game branch, then start the game.
-- Beta branch: [KikiMAIster](https://steamcommunity.com/sharedfiles/filedetails/?id=3832591950)
+- Beta branch: [KikiMAIster (beta branch)](https://steamcommunity.com/sharedfiles/filedetails/?id=3832591950)
 - Default branch: [KikiMAIster (default branch)](https://steamcommunity.com/sharedfiles/filedetails/?id=3832592056)
 
 Subscribe to only one of the two: they share the same mod id, so the game loads only the first one, whatever your branch.
@@ -128,7 +128,7 @@ propre fenêtre, afficher le résumé à la fin de chaque combat.
 
 ### Installation
 **Steam Workshop** (le plus simple, mises à jour automatiques) : abonne-toi à l'objet de ta branche du jeu, puis lance le jeu.
-- Branche bêta : [KikiMAIster](https://steamcommunity.com/sharedfiles/filedetails/?id=3832591950)
+- Branche bêta : [KikiMAIster (beta branch)](https://steamcommunity.com/sharedfiles/filedetails/?id=3832591950)
 - Branche par défaut : [KikiMAIster (default branch)](https://steamcommunity.com/sharedfiles/filedetails/?id=3832592056)
 
 Abonne-toi à un seul des deux : ils ont le même identifiant, le jeu ne charge que le premier, quelle que soit ta branche.
