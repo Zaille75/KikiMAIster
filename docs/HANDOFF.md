@@ -20,7 +20,9 @@ https://github.com/Zaille75/KikiMAIster/releases/tag/v1.0.0 with the beta and de
   public: Zaille75 runs the command himself (`! ...`) or gives his explicit go.
 - **Cleanup done (2026-11-02):** backup branch `backup/before-v1-scrub` and tag `backup/v0.17.7-pet-protection-immediate`
   deleted (local and GitHub).
-- **1.0.1 (2026-11-02, not released yet):** data moved to the game's user folder (spec 03-technical "Data folder"),
+- **Not released yet (next version):** the log's "Data folder" line was empty in 1.0.1 (static init order in
+  `DataDir`), fixed on `main`.
+- **1.0.1 (2026-11-02, on the Workshop; checked by Zaille75: data folder `%APPDATA%\SlayTheSpire2\KikiMAIster`):** data moved to the game's user folder (spec 03-technical "Data folder"),
   for the Workshop. `dist/tools/Envoyer-a-Claude.ps1` looks there first (then the old mods folder).
 - **Steam Workshop (in progress):** two items (ids in `tools/workshop/published_ids.json`: beta 3832591950, default
   3832592056, created hidden 2026-11-02), "KikiMAIster" (beta build) and "KikiMAIster (default branch)", uploaded

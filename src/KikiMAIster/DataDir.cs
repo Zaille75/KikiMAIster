@@ -7,12 +7,13 @@ namespace KikiMAIster;
 /// Must not use ModLog (ModLog uses it): what happened is kept in <see cref="Note"/> and logged by ModLog.
 public static class DataDir
 {
+    // Static initializers run in this order: Note must come before Folder (Init sets it), v1.0.2.
+    /// One line for the log: where the data is and what was copied from an older version.
+    public static string Note { get; private set; } = "";
+
     public static readonly string? DllFolder = GetDllFolder();
 
     public static readonly string? Folder = Init();
-
-    /// One line for the log: where the data is and what was copied from an older version.
-    public static string Note { get; private set; } = "";
 
     public static string? File(string name) => Folder == null ? null : System.IO.Path.Combine(Folder, name);
 
