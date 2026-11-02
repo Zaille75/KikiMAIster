@@ -18,8 +18,8 @@ https://github.com/Zaille75/KikiMAIster/releases/tag/v1.0.0 with the beta and de
   origin vX.Y.Z`, then `gh release create vX.Y.Z dist/release/*.zip --title "KikiMAIster X.Y.Z" --notes-file <notes>`
   (notes: CHANGELOG lines, which zip for which game branch, install = unzip into `<game folder>/mods/`). Publishing is
   public: Zaille75 runs the command himself (`! ...`) or gives his explicit go.
-- **Cleanup (optional, ask):** local branch `backup/before-v1-scrub` (pre-rewrite history, never push it) and the old tag
-  `backup/v0.17.7-pet-protection-immediate` (in `main`'s history, harmless).
+- **Cleanup done (2026-11-02):** backup branch `backup/before-v1-scrub` and tag `backup/v0.17.7-pet-protection-immediate`
+  deleted (local and GitHub).
 - **Next:** Steam Workshop (see "Path to v1.0").
 
 ## Open topics
