@@ -4,37 +4,23 @@
 > (interface). The history of every version is in `CHANGELOG.md` and the specs' "vX.Y.Z" notes; the git history has the
 > older handoff sections (v0.7 → v0.17).
 >
-> **State:** v1.0.0 = v0.18.10 renamed (Zaille75, 2026-10-31). Nothing since v0.18.5 is tested in game yet. When Zaille75
+> **State:** v1.0.0 released on GitHub (2026-11-02) = v0.18.10 renamed + new icon. Nothing since v0.18.5 is tested in game yet. When Zaille75
 > sends a new inbox (`logs/inbox/<date_time>/`): **review and summarize every report first, wait for his go, then implement
 > the whole batch** (memory rules).
 
-## NEXT: publish the v1.0.0 release (do this first in the new conversation)
-**Done (2026-10-31):** 1.0.0 built and pushed (`main` = `aedbbc9`); history rewritten and force-pushed (no private info,
-final scan clean); release zips built in `dist/release/` (`KikiMAIster-1.0.0-beta.zip`, `KikiMAIster-1.0.0-default.zip`,
-git-ignored; rebuild with `./build.sh beta release` and `./build.sh default release` if missing).
-**Not done:** tag `v1.0.0`, repo still **private**, no GitHub release. Blocker: `gh` (`~/.local/bin/gh`) is **not logged
-in**: two `gh auth login --web` device codes expired before Zaille75 approved them.
-
-Steps (Claude runs them; Zaille75 only does the login):
-1. **Login.** Ask Zaille75 to be at his PC first, then run in the background
-   `gh auth login --hostname github.com --git-protocol ssh --web --skip-ssh-key`, read the 8-character code from the
-   output at once and give it to him: open https://github.com/login/device, type the code, Continue, Authorize GitHub CLI
-   (the code lasts ~15 min). Fallback: he creates a classic token (github.com → Settings → Developer settings → Personal
-   access tokens → Tokens (classic), scope `repo`) and runs `! gh auth login --with-token`, pasting it. Check: `gh auth status`.
-2. **Final private-info scan** of the files and history (`git grep` / `git log -p --all` for nicknames, Steam IDs,
-   Windows user names, server address, local paths) before going public.
-3. **Tag:** `git tag v1.0.0 aedbbc9 && git push origin v1.0.0` (or the current `main` if a commit was added).
-4. **Public:** `gh repo edit Zaille75/KikiMAIster --visibility public --accept-visibility-change-consequences`.
-5. **Release:** `gh release create v1.0.0 dist/release/KikiMAIster-1.0.0-beta.zip dist/release/KikiMAIster-1.0.0-default.zip
-   --title "KikiMAIster 1.0.0" --notes-file <notes>` (notes: the CHANGELOG "1.0.0" lines + which zip for which game
-   branch + install: unzip into `<game folder>/mods/`). Give Zaille75 the release URL.
-6. **Cleanup (optional, ask):** delete the local branch `backup/before-v1-scrub` (pre-rewrite history, never push it) and
-   the old tag `backup/v0.17.7-pet-protection-immediate`; GitHub Support can purge the old unreachable commits.
-7. Then Steam Workshop (see "Path to v1.0").
-
-Without the login, Zaille75 can do it on github.com: Settings → General → Change visibility → Make public; Releases →
-Draft a new release → tag `v1.0.0` (create) → title, notes, drag the two zips (copy command in `docs/HANDOFF.local.md`)
-→ Publish release.
+## v1.0.0 released (2026-11-02)
+Tag `v1.0.0` (= `db4f751`, new card icon), repo **public**, release
+https://github.com/Zaille75/KikiMAIster/releases/tag/v1.0.0 with the beta and default zips, published by **WTT27**.
+- **Accounts:** releases are made as **WTT27** (`gh` on this machine is logged in as WTT27). WTT27 is a collaborator
+  with write access, not admin: repo settings (visibility, etc.) can only be changed by Zaille75 on github.com.
+  `git push` uses this machine's SSH key.
+- **Release recipe:** build the zips (`./build.sh beta release`, `./build.sh default release`), `git tag vX.Y.Z && git push
+  origin vX.Y.Z`, then `gh release create vX.Y.Z dist/release/*.zip --title "KikiMAIster X.Y.Z" --notes-file <notes>`
+  (notes: CHANGELOG lines, which zip for which game branch, install = unzip into `<game folder>/mods/`). Publishing is
+  public: Zaille75 runs the command himself (`! ...`) or gives his explicit go.
+- **Cleanup (optional, ask):** local branch `backup/before-v1-scrub` (pre-rewrite history, never push it) and the old tag
+  `backup/v0.17.7-pet-protection-immediate` (in `main`'s history, harmless).
+- **Next:** Steam Workshop (see "Path to v1.0").
 
 ## Open topics
 1. **In-game test of v0.18.5 → 1.0.0** (the main blocker). Riskiest: the "Réglages de KikiMAIster" button in the game's
