@@ -360,7 +360,7 @@ public static class RunSummary
     }
 }
 
-/// Rock-paper-scissors results across runs, saved next to the DLL (spec 01-metrics §C4).
+/// Rock-paper-scissors results across runs, saved in the data folder (DataDir; spec 01-metrics §C4).
 public static class ChifumiStore
 {
     private static Chifumi? _book;
@@ -369,8 +369,7 @@ public static class ChifumiStore
     {
         get
         {
-            var dir = Path.GetDirectoryName(typeof(ChifumiStore).Assembly.Location);
-            return string.IsNullOrEmpty(dir) ? null : Path.Combine(dir, "KikiMAIster.chifumi.cfg");
+            return DataDir.File("KikiMAIster.chifumi.cfg");
         }
     }
 
@@ -397,7 +396,7 @@ public static class ChifumiStore
         });
 }
 
-/// The record book, saved next to the DLL (not a .json file: the game reads every .json in mods/ as a manifest).
+/// The record book, saved in the data folder (DataDir; not a .json file, as before v1.0.1 it sat in mods/, where every .json is read as a manifest).
 public static class RecordStore
 {
     private static RecordBook? _book;
@@ -406,8 +405,7 @@ public static class RecordStore
     {
         get
         {
-            var dir = Path.GetDirectoryName(typeof(RecordStore).Assembly.Location);
-            return string.IsNullOrEmpty(dir) ? null : Path.Combine(dir, "KikiMAIster.records.cfg");
+            return DataDir.File("KikiMAIster.records.cfg");
         }
     }
 

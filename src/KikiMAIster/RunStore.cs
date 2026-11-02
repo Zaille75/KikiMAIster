@@ -4,7 +4,7 @@ using MegaCrit.Sts2.Core.Saves;
 
 namespace KikiMAIster;
 
-/// Keeps the run totals across Save & Quit: one small file per run in "runs/" next to the DLL.
+/// Keeps the run totals across Save & Quit: one small file per run in "runs/" in the data folder.
 public static class RunStore
 {
     private const int KeepFiles = 30;
@@ -13,8 +13,7 @@ public static class RunStore
     {
         get
         {
-            var dll = Path.GetDirectoryName(typeof(RunStore).Assembly.Location);
-            return string.IsNullOrEmpty(dll) ? null : Path.Combine(dll, "runs");
+            return DataDir.File("runs");
         }
     }
 

@@ -2,7 +2,7 @@ using MegaCrit.Sts2.Core.Logging;
 
 namespace KikiMAIster;
 
-/// Writes to the game log and to KikiMAIster.log next to the mod DLL (easy to find and share).
+/// Writes to the game log and to KikiMAIster.log in the mod's data folder (DataDir, v1.0.1).
 public static class ModLog
 {
     private static readonly object FileLock = new();
@@ -12,12 +12,12 @@ public static class ModLog
     {
         try
         {
-            var dir = Path.GetDirectoryName(typeof(ModLog).Assembly.Location);
+            var dir = DataDir.Folder;
             if (string.IsNullOrEmpty(dir)) return null;
             var path = Path.Combine(dir, "KikiMAIster.log");
             // The previous session's log is kept (a crash or a restart no longer loses it, v0.17.1).
             if (File.Exists(path)) File.Copy(path, Path.Combine(dir, "KikiMAIster.previous.log"), overwrite: true);
-            File.WriteAllText(path, $"=== KikiMAIster log started {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n");
+            File.WriteAllText(path, $"=== KikiMAIster log started {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n{DataDir.Note}\n");
             return path;
         }
         catch

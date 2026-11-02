@@ -3,7 +3,7 @@ using KikiMAIster.Core;
 
 namespace KikiMAIster.UI;
 
-/// Fastest wins per encounter, from run to run (`KikiMAIster.fights.cfg` next to the DLL, v0.17.39), and the notice shown
+/// Fastest wins per encounter, from run to run (`KikiMAIster.fights.cfg` in the data folder, v0.17.39), and the notice shown
 /// in the combat summary when a fight beats one.
 public static class FightRecordStore
 {
@@ -16,8 +16,7 @@ public static class FightRecordStore
     {
         get
         {
-            var dir = Path.GetDirectoryName(typeof(FightRecordStore).Assembly.Location);
-            return string.IsNullOrEmpty(dir) ? null : Path.Combine(dir, "KikiMAIster.fights.cfg");
+            return DataDir.File("KikiMAIster.fights.cfg");
         }
     }
 

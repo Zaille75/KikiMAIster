@@ -56,8 +56,9 @@ Manual install, game closed:
 
 Only one player needs the mod: every player's game simulates the whole fight, so you see everyone's stats.
 
-The mod writes its own files next to its DLL: settings, records, compositions, rock-paper-scissors results, run
-files (`runs/`, to keep the stats across Save & Quit) and `KikiMAIster.log`.
+The mod keeps its own files in the game's user folder (`%APPDATA%\SlayTheSpire2\KikiMAIster` on Windows), so mod
+updates never erase them: settings, records, compositions, rock-paper-scissors results, run files (`runs/`, to keep the
+stats across Save & Quit) and `KikiMAIster.log`.
 
 ## Compatibility
 Made for the Slay the Spire 2 **beta** branch (early access). Game updates can break some hooks; the mod catches
@@ -132,7 +133,8 @@ Installation manuelle, jeu fermé :
 Un seul joueur a besoin du mod : le jeu de chaque joueur simule tout le combat, tu vois donc les stats de tout le
 monde.
 
-Le mod écrit ses fichiers à côté de sa DLL : paramètres, records, compositions, résultats du chifumi, fichiers de
+Le mod garde ses fichiers dans le dossier utilisateur du jeu (`%APPDATA%\SlayTheSpire2\KikiMAIster` sous Windows),
+les mises à jour du mod ne les effacent donc jamais : paramètres, records, compositions, résultats du chifumi, fichiers de
 partie (`runs/`, pour garder les stats après « Sauvegarder et quitter ») et `KikiMAIster.log`.
 
 ### Compatibilité

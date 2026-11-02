@@ -20,7 +20,14 @@ https://github.com/Zaille75/KikiMAIster/releases/tag/v1.0.0 with the beta and de
   public: Zaille75 runs the command himself (`! ...`) or gives his explicit go.
 - **Cleanup done (2026-11-02):** backup branch `backup/before-v1-scrub` and tag `backup/v0.17.7-pet-protection-immediate`
   deleted (local and GitHub).
-- **Next:** Steam Workshop (see "Path to v1.0").
+- **1.0.1 (2026-11-02, not released yet):** data moved to the game's user folder (spec 03-technical "Data folder"),
+  for the Workshop. `dist/tools/Envoyer-a-Claude.ps1` looks there first (then the old mods folder).
+- **Steam Workshop (in progress):** two items, "KikiMAIster" (beta build) and "KikiMAIster (default branch)", uploaded
+  by Zaille75 from his PC with SteamCMD. Package: `./build.sh beta release && ./build.sh default release &&
+  python3 tools/workshop/make.py "<change note>"` → `dist/workshop/` (copied to `C:\KikiMAIster-workshop`, run
+  `Publier.bat`). After the first upload, put the two ids in `tools/workshop/published_ids.json`
+  (`{"beta": id, "default": id}`): later runs update the same items. Items are created hidden; Zaille75 makes them
+  public on their Steam page after testing. A local copy in `mods/` with the same version disables the Workshop one.
 
 ## Open topics
 1. **In-game test of v0.18.5 → 1.0.0** (the main blocker). Riskiest: the "Réglages de KikiMAIster" button in the game's

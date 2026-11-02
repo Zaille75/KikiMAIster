@@ -88,8 +88,7 @@ public sealed class ModConfig
     {
         get
         {
-            var dir = Path.GetDirectoryName(typeof(ModConfig).Assembly.Location);
-            return string.IsNullOrEmpty(dir) ? null : Path.Combine(dir, "KikiMAIster.settings.cfg");
+            return DataDir.File("KikiMAIster.settings.cfg");
         }
     }
 

@@ -3,7 +3,7 @@
   "name": "KikiMAIster",
   "author": "Zaille75",
   "description": "All-in-one stats for Slay the Spire 2, made for co-op: damage, protection, debuffs, help between players, missed opportunities, trophies and records. Read-only, works in solo and multiplayer, even when your friends don't have it.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "has_pck": false,
   "has_dll": true,
   "dependencies": [],

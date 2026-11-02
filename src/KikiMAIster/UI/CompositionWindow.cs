@@ -535,7 +535,7 @@ public static class CompositionWindow
     }
 }
 
-/// Composition tallies, saved next to the DLL (not a .json file: the game reads every .json in mods/ as a manifest).
+/// Composition tallies, saved in the data folder (DataDir; not a .json file, as before v1.0.1 it sat in mods/, where every .json is read as a manifest).
 public static class CompositionStore
 {
     private static Compositions? _data;
@@ -571,8 +571,7 @@ public static class CompositionStore
     {
         get
         {
-            var dir = Path.GetDirectoryName(typeof(CompositionStore).Assembly.Location);
-            return string.IsNullOrEmpty(dir) ? null : Path.Combine(dir, "KikiMAIster.compositions.cfg");
+            return DataDir.File("KikiMAIster.compositions.cfg");
         }
     }
 

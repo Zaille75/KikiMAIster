@@ -99,13 +99,12 @@ public static class GameNames
         return Pretty(id);
     }
 
-    /// Writes every card, relic, power, potion and orb with its game name ("KikiMAIster.names.txt" next to the DLL),
+    /// Writes every card, relic, power, potion and orb with its game name ("KikiMAIster.names.txt" in the data folder),
     /// once per mod version and language: lets Claude use the names Zaille75 sees in game. Lines: kind|class|id|name.
     public static void ExportOnce() => Capture.Safe("GameNames.Export", () =>
     {
-        var dir = Path.GetDirectoryName(typeof(GameNames).Assembly.Location);
-        if (string.IsNullOrEmpty(dir)) return;
-        var path = Path.Combine(dir, "KikiMAIster.names.txt");
+        var path = DataDir.File("KikiMAIster.names.txt");
+        if (path == null) return;
         var stamp = $"# {typeof(GameNames).Assembly.GetName().Version} {LocManager.Instance?.Language}";
         if (File.Exists(path) && File.ReadLines(path).FirstOrDefault() == stamp) return;
         var lines = new List<string> { stamp };

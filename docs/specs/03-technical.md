@@ -90,6 +90,18 @@ F9 / the settings button write a report the player sends by hand (no network cal
 - The DLL embeds its debug info (line numbers in errors.txt) with the source paths mapped to `/KikiMAIster/`
   (`PathMap`): no folder of the build machine is left in it.
 
+## Data folder (v1.0.1)
+- The mod's files live in **`<game user folder>/KikiMAIster/`** (Godot `OS.GetUserDataDir()`, the folder that holds the
+  game's saves; on Windows `%APPDATA%\SlayTheSpire2\KikiMAIster`), not next to the DLL: a Steam Workshop update replaces
+  the item's folder and would wipe them. Files: `KikiMAIster.settings.cfg`, `.records.cfg`, `.fights.cfg`,
+  `.compositions.cfg`, `.chifumi.cfg`, `runs/`, `feedback/`, `KikiMAIster.log` + `.previous.log`, `KikiMAIster.names.txt`.
+- **Move from older versions:** when that folder does not exist yet, it is created and the `*.cfg` files and the `runs/`
+  and `feedback/` folders next to the DLL **and in `<game>/mods/KikiMAIster/`** (a Workshop copy has nothing next to its
+  DLL) are copied into it (never overwriting; the old files stay). The log says how
+  many were copied and where the folder is.
+- If the user folder cannot be used, the mod falls back to the DLL folder (as before).
+- The Workshop copy and a manual copy in `mods/` share the same data.
+
 ## Safety rules
 - Every patch is wrapped in try/catch and logs errors; the mod must **never** crash the game.
 - The mod never modifies game state.

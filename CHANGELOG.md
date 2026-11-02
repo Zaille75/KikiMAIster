@@ -3,6 +3,11 @@
 Summary by version line. The detailed notes of every version are in [docs/specs/02-ui.md](docs/specs/02-ui.md)
 (interface) and [docs/specs/01-metrics.md](docs/specs/01-metrics.md) (rules).
 
+## 1.0.1 (2026-11-02)
+The mod's files (settings, records, compositions, chifumi, runs, reports, log) move to the game's user folder
+(`%APPDATA%\SlayTheSpire2\KikiMAIster` on Windows), so a mod update, from the Steam Workshop or by hand, never erases
+them. The files of 1.0.0 are copied there the first time it starts. New icon.
+
 ## 1.0.0 (2026-10-31)
 First public version: v0.18.10 as it is, released as 1.0.0. README (English / French), MIT license, icon.
 

@@ -10,7 +10,7 @@ using MegaCrit.Sts2.Core.MonsterMoves.Intents;
 namespace KikiMAIster.UI;
 
 /// F9 or the settings window's button (v0.18.0: every build) opens a small window to write a bug report or an idea in
-/// game. Each report is a folder in "feedback/" next to the DLL, plus a zip of it: the message, a screenshot taken when F9
+/// game. Each report is a folder in "feedback/" in the data folder, plus a zip of it: the message, a screenshot taken when F9
 /// was pressed, the game state (hands, piles, enemies, intents, powers, relics, potions), the run's stats, the end of the
 /// mod's log and the internal errors noted this session. Every text is anonymised first (spec 03-technical, "Reports").
 /// Public builds then open the folder and the GitHub issue form; development builds only save.
@@ -40,8 +40,7 @@ public static class FeedbackWindow
     {
         get
         {
-            var dir = Path.GetDirectoryName(typeof(FeedbackWindow).Assembly.Location);
-            return string.IsNullOrEmpty(dir) ? null : Path.Combine(dir, "feedback");
+            return DataDir.File("feedback");
         }
     }
 
@@ -193,8 +192,8 @@ public static class FeedbackWindow
         Capture.Safe("Feedback.Run", () => Write(dir, "run.txt", RunSnapshot.Write("feedback", 0, Capture.Engine)));
         Capture.Safe("Feedback.Log", () =>
         {
-            var log = Path.Combine(Path.GetDirectoryName(typeof(FeedbackWindow).Assembly.Location)!, "KikiMAIster.log");
-            if (!File.Exists(log)) return;
+            var log = DataDir.File("KikiMAIster.log");
+            if (log == null || !File.Exists(log)) return;
             using var stream = new FileStream(log, FileMode.Open, System.IO.FileAccess.Read, FileShare.ReadWrite);
             using var reader = new StreamReader(stream);
             var lines = reader.ReadToEnd().Split('\n');
