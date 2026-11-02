@@ -4,7 +4,7 @@
 > (interface). The history of every version is in `CHANGELOG.md` and the specs' "vX.Y.Z" notes; the git history has the
 > older handoff sections (v0.7 → v0.17).
 >
-> **State:** v1.0.1 released on GitHub and the Steam Workshop (2026-11-02, both public). Nothing since v0.18.5 is tested in game yet. When Zaille75
+> **State:** v1.0.2 released on GitHub (tag on `9e81469`) and the Steam Workshop (2026-11-02, both public). Nothing since v0.18.5 is tested in game yet. When Zaille75
 > sends a new inbox (`logs/inbox/<date_time>/`): **review and summarize every report first, wait for his go, then implement
 > the whole batch** (memory rules).
 
