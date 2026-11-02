@@ -22,7 +22,8 @@ https://github.com/Zaille75/KikiMAIster/releases/tag/v1.0.0 with the beta and de
   deleted (local and GitHub).
 - **1.0.1 (2026-11-02, not released yet):** data moved to the game's user folder (spec 03-technical "Data folder"),
   for the Workshop. `dist/tools/Envoyer-a-Claude.ps1` looks there first (then the old mods folder).
-- **Steam Workshop (in progress):** two items, "KikiMAIster" (beta build) and "KikiMAIster (default branch)", uploaded
+- **Steam Workshop (in progress):** two items (ids in `tools/workshop/published_ids.json`: beta 3832591950, default
+  3832592056, created hidden 2026-11-02), "KikiMAIster" (beta build) and "KikiMAIster (default branch)", uploaded
   by Zaille75 from his PC with SteamCMD. Package: `./build.sh beta release && ./build.sh default release &&
   python3 tools/workshop/make.py "<change note>"` → `dist/workshop/` (copied to `C:\KikiMAIster-workshop`, run
   `Publier.bat`). After the first upload, put the two ids in `tools/workshop/published_ids.json`
