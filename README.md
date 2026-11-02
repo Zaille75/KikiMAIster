@@ -47,7 +47,9 @@ window, show the combat summary automatically.
   state and its log, with player names and Steam ids removed, then opens a GitHub issue page: drop the zip on it.
 
 ## Install
-*Steam Workshop: coming with version 1.0.*
+**Steam Workshop** (easiest, updates are automatic): subscribe to the item for your game branch, then start the game.
+- Beta branch: [KikiMAIster](https://steamcommunity.com/sharedfiles/filedetails/?id=3832591950)
+- Default branch: [KikiMAIster (default branch)](https://steamcommunity.com/sharedfiles/filedetails/?id=3832592056)
 
 Manual install, game closed:
 1. Download the release zip (`KikiMAIster.dll` and `KikiMAIster.json`).
@@ -123,7 +125,9 @@ propre fenêtre, afficher le résumé à la fin de chaque combat.
   glisse le zip dessus.
 
 ### Installation
-*Steam Workshop : avec la version 1.0.*
+**Steam Workshop** (le plus simple, mises à jour automatiques) : abonne-toi à l'objet de ta branche du jeu, puis lance le jeu.
+- Branche bêta : [KikiMAIster](https://steamcommunity.com/sharedfiles/filedetails/?id=3832591950)
+- Branche par défaut : [KikiMAIster (default branch)](https://steamcommunity.com/sharedfiles/filedetails/?id=3832592056)
 
 Installation manuelle, jeu fermé :
 1. Télécharge le zip de la version (`KikiMAIster.dll` et `KikiMAIster.json`).
