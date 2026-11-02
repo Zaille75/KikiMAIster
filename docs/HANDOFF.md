@@ -4,7 +4,7 @@
 > (interface). The history of every version is in `CHANGELOG.md` and the specs' "vX.Y.Z" notes; the git history has the
 > older handoff sections (v0.7 → v0.17).
 >
-> **State:** v1.0.0 released on GitHub (2026-11-02) = v0.18.10 renamed + new icon. Nothing since v0.18.5 is tested in game yet. When Zaille75
+> **State:** v1.0.1 released on GitHub and the Steam Workshop (2026-11-02, both public). Nothing since v0.18.5 is tested in game yet. When Zaille75
 > sends a new inbox (`logs/inbox/<date_time>/`): **review and summarize every report first, wait for his go, then implement
 > the whole batch** (memory rules).
 
@@ -22,9 +22,10 @@ https://github.com/Zaille75/KikiMAIster/releases/tag/v1.0.0 with the beta and de
   deleted (local and GitHub).
 - **Not released yet (next version):** the log's "Data folder" line was empty in 1.0.1 (static init order in
   `DataDir`), fixed on `main`.
-- **1.0.1 (2026-11-02, on the Workshop; checked by Zaille75: data folder `%APPDATA%\SlayTheSpire2\KikiMAIster`):** data moved to the game's user folder (spec 03-technical "Data folder"),
+- **1.0.1 (2026-11-02, released on the Workshop and GitHub; checked by Zaille75: data folder `%APPDATA%\SlayTheSpire2\KikiMAIster`):** data moved to the game's user folder (spec 03-technical "Data folder"),
   for the Workshop. `dist/tools/Envoyer-a-Claude.ps1` looks there first (then the old mods folder).
-- **Steam Workshop (uploaded and tested by Zaille75 2026-11-02; data copy checked; README links added):** two items (ids in `tools/workshop/published_ids.json`: beta 3832591950, default
+- **Steam Workshop: PUBLIC since 2026-11-02** (tested by Zaille75, data copy checked, README links). GitHub release
+  v1.0.1 (tag on `d09a6b1`, the commit the zips and Workshop items were built from) published by WTT27. two items (ids in `tools/workshop/published_ids.json`: beta 3832591950, default
   3832592056, created hidden 2026-11-02), "KikiMAIster" (beta build) and "KikiMAIster (default branch)", uploaded
   by Zaille75 from his PC with SteamCMD. Package: `./build.sh beta release && ./build.sh default release &&
   python3 tools/workshop/make.py "<change note>"` → `dist/workshop/` (copied to `C:\KikiMAIster-workshop`, run
