@@ -6,7 +6,8 @@
 >
 > **State:** **1.1.0 released** on GitHub (tag on `c769770`, published by WTT27) and the Steam Workshop (2026-11-03):
 > one DLL for both game branches, one Workshop item "KikiMAIster" (3832591950). Short solo test by Zaille75 on both
-> branches OK (`logs/2026-11-03_v1.1.0_*_solo.log`); campfire and F8 in the lobby not exercised yet. Nothing since v0.18.5 is tested in game yet. When Zaille75
+> branches OK (`logs/2026-11-03_v1.1.0_*_solo.log`); beta solo run with campfires and F8 OK too (Tente miniature
+> campfire path and co-op "Ce groupe" not exercised). Zaille75 has several game profiles: a new one has an empty history. Nothing since v0.18.5 is tested in game yet. When Zaille75
 > sends a new inbox (`logs/inbox/<date_time>/`): **review and summarize every report first, wait for his go, then implement
 > the whole batch** (memory rules).
 
@@ -26,8 +27,7 @@ reflection (`CompositionWindow.LobbyPlayers`: the default branch's `LobbyPlayer`
   branches. The "default branch" item (3832592056) had no subscribers: Zaille75 made it invisible (2026-11-03), it is
   no longer updated and will be deleted.
 - Workshop upload: SteamCMD printed no "PublishFileID" line this time, but the Steam page was updated (title,
-  description). `Envoyer-a-Claude` on Zaille75's PC is an old copy (sends the stale logs of `mods\KikiMAIster`):
-  replace it with `dist/tools/`.
+  description). `Envoyer-a-Claude` updated on Zaille75's PC (now on his Desktop), reads `%APPDATA%` (checked 2026-11-03).
 - **Tested (2026-11-03):** on the beta branch AND on the default branch (Steam → Properties → Betas):
   the log's first line says the right branch, no "patch … not applied" error, a fight with block lost / campfire /
   F8 in the lobby works.
