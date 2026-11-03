@@ -46,11 +46,7 @@ public static class FeedbackWindow
 
     private static string Version => typeof(FeedbackWindow).Assembly.GetName().Version?.ToString(3) ?? "?";
 
-#if GAME_DEFAULT
-    private const string Branch = "main";
-#else
-    private const string Branch = "beta";
-#endif
+    private static string Branch => GameBranch.Name;
 
     public static void Attach(CanvasLayer layer)
     {

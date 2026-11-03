@@ -47,11 +47,10 @@ window, show the combat summary automatically.
   state and its log, with player names and Steam ids removed, then opens a GitHub issue page: drop the zip on it.
 
 ## Install
-**Steam Workshop** (easiest, updates are automatic): subscribe to the item for your game branch, then start the game.
-- Beta branch: [KikiMAIster (beta branch)](https://steamcommunity.com/sharedfiles/filedetails/?id=3832591950)
-- Default branch: [KikiMAIster (default branch)](https://steamcommunity.com/sharedfiles/filedetails/?id=3832592056)
-
-Subscribe to only one of the two: they share the same mod id, so the game loads only the first one, whatever your branch.
+**Steam Workshop** (easiest, updates are automatic): subscribe to
+[KikiMAIster](https://steamcommunity.com/sharedfiles/filedetails/?id=3832591950), then start the game. Since 1.1.0 it
+works on both game branches (default and beta). The old "KikiMAIster (default branch)" item is retired: if you have it,
+unsubscribe from it.
 
 Manual install, game closed:
 1. Download the release zip (`KikiMAIster.dll` and `KikiMAIster.json`).
@@ -65,13 +64,14 @@ updates never erase them: settings, records, compositions, rock-paper-scissors r
 stats across Save & Quit) and `KikiMAIster.log`.
 
 ## Compatibility
-Made for the Slay the Spire 2 **beta** branch (early access). Game updates can break some hooks; the mod catches
+Made for Slay the Spire 2 (early access): one build for the **default** and **beta** branches. Game updates can break some hooks; the mod catches
 its own errors so it never crashes the game.
 
 ## Building from source
 .NET 9 SDK, C# with Harmony. Copy the game's `sts2.dll`, `GodotSharp.dll`, `0Harmony.dll` and `release_info.json`
-into `lib/beta/` (game files are not in this repository), then run `./build.sh beta`: it builds, checks that every
-patch matches a game method, runs the unit tests and puts the files to install in `dist/beta/KikiMAIster/`.
+into `lib/beta/`, and the default branch's into `lib/default/` (game files are not in this repository), then run
+`./build.sh`: it builds against the beta, checks on each branch that every patch matches a game method and every game
+member the mod uses exists, runs the unit tests and puts the files to install in `dist/KikiMAIster/`.
 
 ## License
 [MIT](LICENSE) © Zaille75. Slay the Spire 2 belongs to Mega Crit; no game file is included.
@@ -127,11 +127,10 @@ propre fenêtre, afficher le résumé à la fin de chaque combat.
   glisse le zip dessus.
 
 ### Installation
-**Steam Workshop** (le plus simple, mises à jour automatiques) : abonne-toi à l'objet de ta branche du jeu, puis lance le jeu.
-- Branche bêta : [KikiMAIster (beta branch)](https://steamcommunity.com/sharedfiles/filedetails/?id=3832591950)
-- Branche par défaut : [KikiMAIster (default branch)](https://steamcommunity.com/sharedfiles/filedetails/?id=3832592056)
-
-Abonne-toi à un seul des deux : ils ont le même identifiant, le jeu ne charge que le premier, quelle que soit ta branche.
+**Steam Workshop** (le plus simple, mises à jour automatiques) : abonne-toi à
+[KikiMAIster](https://steamcommunity.com/sharedfiles/filedetails/?id=3832591950), puis lance le jeu. Depuis la 1.1.0, il
+marche sur les deux branches du jeu (par défaut et bêta). L'ancien objet « KikiMAIster (default branch) » est retiré : si
+tu l'as, désabonne-toi.
 
 Installation manuelle, jeu fermé :
 1. Télécharge le zip de la version (`KikiMAIster.dll` et `KikiMAIster.json`).
@@ -146,7 +145,7 @@ les mises à jour du mod ne les effacent donc jamais : paramètres, records, com
 partie (`runs/`, pour garder les stats après « Sauvegarder et quitter ») et `KikiMAIster.log`.
 
 ### Compatibilité
-Fait pour la branche **bêta** de Slay the Spire 2 (accès anticipé). Une mise à jour du jeu peut casser certains
+Fait pour Slay the Spire 2 (accès anticipé) : une seule version pour les branches **par défaut** et **bêta**. Une mise à jour du jeu peut casser certains
 branchements ; le mod rattrape ses propres erreurs pour ne jamais faire planter le jeu.
 
 ### Licence

@@ -1,6 +1,8 @@
-"""Builds the Steam Workshop upload folder (dist/workshop/) for both game branches: content, preview, item .vdf files
-and Publier.bat. The folder is copied as is to C:\\KikiMAIster-workshop on the Windows PC (SteamCMD needs absolute paths).
-Run after ./build.sh beta release and ./build.sh default release. Usage: python3 tools/workshop/make.py "<change note>"
+"""Builds the Steam Workshop upload folder (dist/workshop/): content, preview, item .vdf files and Publier.bat. The folder
+is copied as is to C:\\KikiMAIster-workshop on the Windows PC (SteamCMD needs absolute paths).
+Since 1.1.0 one build runs on both game branches: the main item ("beta" id) gets it, and the old "default branch" item
+gets the same build with a "retired, subscribe to KikiMAIster" description (whichever the game loads works).
+Run after ./build.sh release. Usage: python3 tools/workshop/make.py "<change note>"
 """
 import json, os, shutil, sys
 
@@ -9,22 +11,18 @@ OUT = os.path.join(ROOT, "dist", "workshop")
 WIN = "C:\\KikiMAIster-workshop"
 APPID = "2868840"
 IDS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "published_ids.json")  # filled after the first upload
+MAIN_URL = "https://steamcommunity.com/sharedfiles/filedetails/?id=3832591950"
 
+# Key (as in published_ids.json): title, English and French lines put in the description.
 ITEMS = {
-    "beta": ("KikiMAIster (beta branch)",
-             "For the game's BETA branch (public-beta). On the default branch, subscribe to KikiMAIster (default branch). "
-             "Subscribe to only one of the two: they have the same mod id, so the game loads only the first one, whatever your branch. "
-             "If you switch branches, swap the subscription (your stats and settings are kept).",
-             "Pour la branche BÊTA du jeu. Sur la branche par défaut, abonne-toi à KikiMAIster (default branch). "
-             "Abonne-toi à un seul des deux : ils ont le même identifiant, le jeu ne charge que le premier, quelle que soit ta branche. "
-             "Si tu changes de branche, change d'abonnement (tes stats et réglages sont gardés)."),
-    "default": ("KikiMAIster (default branch)",
-                "For the game's DEFAULT branch. On the beta branch, subscribe to KikiMAIster (beta branch). "
-                "Subscribe to only one of the two: they have the same mod id, so the game loads only the first one, whatever your branch. "
-                "If you switch branches, swap the subscription (your stats and settings are kept).",
-                "Pour la branche PAR DÉFAUT du jeu. Sur la branche bêta, abonne-toi à KikiMAIster (beta branch). "
-                "Abonne-toi à un seul des deux : ils ont le même identifiant, le jeu ne charge que le premier, quelle que soit ta branche. "
-                "Si tu changes de branche, change d'abonnement (tes stats et réglages sont gardés)."),
+    "beta": ("KikiMAIster",
+             "Works on both game branches (default and beta).",
+             "Marche sur les deux branches du jeu (par défaut et bêta)."),
+    "default": ("KikiMAIster (default branch) - retired",
+                f"RETIRED: KikiMAIster now works on both game branches. Unsubscribe from this item and subscribe to "
+                f"[url={MAIN_URL}]KikiMAIster[/url] (your stats and settings are kept). Until then this item gets the same build.",
+                f"RETIRÉ : KikiMAIster marche maintenant sur les deux branches du jeu. Désabonne-toi de cet objet et abonne-toi à "
+                f"[url={MAIN_URL}]KikiMAIster[/url] (tes stats et réglages sont gardés). En attendant, cet objet reçoit la même version."),
 }
 
 
@@ -41,7 +39,7 @@ def main():
     os.makedirs(OUT)
     shutil.copy(os.path.join(ROOT, "docs", "images", "icon.png"), os.path.join(OUT, "preview.png"))
     for branch, (title, en, fr) in ITEMS.items():
-        src = os.path.join(ROOT, "dist", branch, "KikiMAIster")
+        src = os.path.join(ROOT, "dist", "KikiMAIster")
         manifest = json.load(open(os.path.join(src, "KikiMAIster.json")))
         shutil.copytree(src, os.path.join(OUT, branch, "content", "KikiMAIster"))
         desc = template.replace("{BRANCH_EN}", en).replace("{BRANCH_FR}", fr)

@@ -11,20 +11,19 @@ public static class ReflectionTargets
     public sealed record Target(string TypeName, string Name, int Parameters = -1)
     {
         public Type? Type => System.Type.GetType($"{TypeName}, sts2");
+        /// Only on the beta branch: not listed on the main branch.
+        public bool BetaOnly { get; init; }
         public override string ToString() => $"{TypeName}.{Name}";
     }
 
-#if GAME_DEFAULT
-    public static readonly Target ModifyDamageInternal = new("MegaCrit.Sts2.Core.Hooks.Hook", "ModifyDamageInternal", 9);
-#else
-    public static readonly Target ModifyDamageInternal = new("MegaCrit.Sts2.Core.Hooks.Hook", "ModifyDamageInternal", 10);
-    public static readonly Target RestSiteLocalPlayer = new("MegaCrit.Sts2.Core.Multiplayer.Game.RestSiteSynchronizer", "LocalPlayer");
-    public static readonly Target SoulboundAddingSoul = new("MegaCrit.Sts2.Core.Models.Powers.SoulboundPower", "IsAddingSoul");
-#endif
+    /// The beta passes a CardPlay too (10 parameters, main branch 9).
+    public static readonly Target ModifyDamageInternal = new("MegaCrit.Sts2.Core.Hooks.Hook", "ModifyDamageInternal", GameBranch.IsBeta ? 10 : 9);
+    public static readonly Target RestSiteLocalPlayer = new("MegaCrit.Sts2.Core.Multiplayer.Game.RestSiteSynchronizer", "LocalPlayer") { BetaOnly = true };
+    public static readonly Target SoulboundAddingSoul = new("MegaCrit.Sts2.Core.Models.Powers.SoulboundPower", "IsAddingSoul") { BetaOnly = true };
     public static readonly Target PenNibAttackToDouble = new("MegaCrit.Sts2.Core.Models.Relics.PenNib", "AttackToDouble");
 
     public static IEnumerable<Target> All => typeof(ReflectionTargets).GetFields(BindingFlags.Public | BindingFlags.Static)
-        .Where(f => f.FieldType == typeof(Target)).Select(f => (Target)f.GetValue(null)!);
+        .Where(f => f.FieldType == typeof(Target)).Select(f => (Target)f.GetValue(null)!).Where(t => GameBranch.IsBeta || !t.BetaOnly);
 
     /// The member, or null when the game no longer has it (one method of that name and parameter count, or the property).
     public static MemberInfo? Find(Target t)

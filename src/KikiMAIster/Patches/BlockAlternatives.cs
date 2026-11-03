@@ -281,6 +281,9 @@ public static class BlockAlternatives
     /// Wrong order (spec §E0): a boost (Vulnerable put on an enemy that had none, Strength, Dexterity, Focus, Calcification…)
     /// given by a card the player chose or a potion, after plays of the same turn it would have boosted (and while it was
     /// already in hand); or a Strength / Dexterity drop before plays it lowered.
+    [BranchOnly, System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static bool IsOneForAll(PowerModel power) => power is OneForAllPower;
+
     private static void CheckOrder(PowerModel power, decimal amount, bool stacked)
     {
         var caller = Capture.CallingModelType();
@@ -380,12 +383,10 @@ public static class BlockAlternatives
             case PhantomBladesPower when power.Owner == player.Creature:
                 PerHit(ThisTurn.Where(p => p.Player == player && p.Card.Tags.Contains(CardTag.Shiv)).Take(1).Intersect(attacks), (double)amount);
                 break;
-#if !GAME_DEFAULT
             // Un pour tous (beta only): each hit of an X-cost attack.
-            case OneForAllPower when power.Owner == player.Creature:
+            case PowerModel when GameBranch.IsBeta && IsOneForAll(power) && power.Owner == player.Creature:
                 PerHit(attacks.Where(p => p.Card.EnergyCost.CostsX), (double)amount);
                 break;
-#endif
             // Pistage: +50% on enemies with Weak.
             case TrackingPower when power.Owner == player.Creature && !stacked:
                 foreach (var e in attacks)
@@ -1081,13 +1082,8 @@ public static class BlockAlternatives
         DebuffEffectPatches.Computing = true;
         try
         {
-#if GAME_DEFAULT
-            damage = Hook.ModifyDamage(owner.RunState, card.CombatState, target, dealer, v.BaseValue, props, card,
+            damage = GameApi.ModifyDamage(owner.RunState, card.CombatState, target, dealer, v.BaseValue, props, card, null,
                 ModifyDamageHookType.All, CardPreviewMode.None, out _);
-#else
-            damage = Hook.ModifyDamage(owner.RunState, card.CombatState, target, dealer, v.BaseValue, props, card, null,
-                ModifyDamageHookType.All, CardPreviewMode.None, out _);
-#endif
         }
         finally
         {
@@ -1117,13 +1113,8 @@ public static class BlockAlternatives
                     foreach (var intent in enemy.Monster.NextMove.Intents.OfType<AttackIntent>())
                     {
                         if (intent.DamageCalc is not { } calc) continue;
-#if GAME_DEFAULT
-                        var hit = Hook.ModifyDamage(combat.RunState, combat, creature, enemy, calc(), ValueProp.Move, null,
+                        var hit = GameApi.ModifyDamage(combat.RunState, combat, creature, enemy, calc(), ValueProp.Move, null, null,
                             ModifyDamageHookType.All, CardPreviewMode.None, out _);
-#else
-                        var hit = Hook.ModifyDamage(combat.RunState, combat, creature, enemy, calc(), ValueProp.Move, null, null,
-                            ModifyDamageHookType.All, CardPreviewMode.None, out _);
-#endif
                         incoming += Math.Max(0, (int)hit) * Math.Max(1, intent.Repeats);
                     }
             foreach (var card in creature.Player?.PlayerCombatState?.Hand.Cards ?? Array.Empty<CardModel>())

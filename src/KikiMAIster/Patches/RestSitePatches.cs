@@ -70,11 +70,12 @@ public static class RestSitePatches
         BossRests.Clear();
     }
 
-#if GAME_DEFAULT
     /// Main branch: no "leaving" message; when the campfire screen closes, every player's options left are checked.
     [HarmonyPatch(typeof(MegaCrit.Sts2.Core.Nodes.Rooms.NRestSiteRoom), nameof(MegaCrit.Sts2.Core.Nodes.Rooms.NRestSiteRoom._ExitTree))]
     public static class RoomLeft
     {
+        public static bool Prepare() => !GameBranch.IsBeta;
+
         public static void Prefix() => Capture.Safe("RestSite.RoomLeft", () =>
         {
             var sync = MegaCrit.Sts2.Core.Runs.RunManager.Instance.RestSiteSynchronizer;
@@ -82,10 +83,11 @@ public static class RestSitePatches
                 Check(player, sync.GetOptionsForPlayer(player));
         });
     }
-#else
     [HarmonyPatch(typeof(RestSiteSynchronizer), nameof(RestSiteSynchronizer.BeforeLocalRestSiteExited))]
     public static class LocalLeft
     {
+        public static bool Prepare() => GameBranch.IsBeta;
+
         public static void Prefix(RestSiteSynchronizer __instance) => Capture.Safe("RestSite.LocalLeft", () =>
         {
             if (Traverse.Create(__instance).Property(ReflectionTargets.RestSiteLocalPlayer.Name).GetValue<Player>() is { } me)
@@ -96,13 +98,14 @@ public static class RestSitePatches
     [HarmonyPatch(typeof(RestSiteSynchronizer), "HandleRestSiteSkippedMessage")]
     public static class RemoteLeft
     {
+        public static bool Prepare() => GameBranch.IsBeta;
+
         public static void Prefix(RestSiteSynchronizer __instance, ulong senderId) => Capture.Safe("RestSite.RemoteLeft", () =>
         {
             var player = CombatFlowPatches.CurrentRun?.Players.FirstOrDefault(p => p.NetId == senderId);
             if (player != null) Check(player, __instance.GetOptionsForPlayer(player));
         });
     }
-#endif
 
     private static void Check(Player player, IReadOnlyList<RestSiteOption> left)
     {

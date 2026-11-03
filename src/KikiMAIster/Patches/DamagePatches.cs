@@ -40,15 +40,15 @@ public static class DamagePatches
     }
 
     /// Every damage command funnels into this overload: remember who/what is dealing damage to each target.
-#if GAME_DEFAULT
-    [HarmonyPatch(typeof(CreatureCmd), nameof(CreatureCmd.Damage), typeof(PlayerChoiceContext), typeof(IEnumerable<Creature>),
-        typeof(decimal), typeof(ValueProp), typeof(Creature), typeof(CardModel))]
-#else
-    [HarmonyPatch(typeof(CreatureCmd), nameof(CreatureCmd.Damage), typeof(PlayerChoiceContext), typeof(IEnumerable<Creature>),
-        typeof(decimal), typeof(ValueProp), typeof(Creature), typeof(CardModel), typeof(CardPlay))]
-#endif
+    [HarmonyPatch]
     public static class DamageCommand
     {
+        /// The beta adds a CardPlay at the end.
+        public static System.Reflection.MethodBase TargetMethod() => AccessTools.Method(typeof(CreatureCmd), nameof(CreatureCmd.Damage),
+            GameBranch.IsBeta
+                ? new[] { typeof(PlayerChoiceContext), typeof(IEnumerable<Creature>), typeof(decimal), typeof(ValueProp), typeof(Creature), typeof(CardModel), typeof(CardPlay) }
+                : new[] { typeof(PlayerChoiceContext), typeof(IEnumerable<Creature>), typeof(decimal), typeof(ValueProp), typeof(Creature), typeof(CardModel) });
+
         public static void Prefix(IEnumerable<Creature>? targets, Creature? dealer, CardModel? cardSource) =>
             Capture.Safe("CreatureCmd.Damage", () =>
             {

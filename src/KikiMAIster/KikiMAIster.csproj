@@ -5,14 +5,12 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>KikiMAIster</AssemblyName>
-    <Version>1.0.2</Version>
+    <Version>1.1.0</Version>
     <RootNamespace>KikiMAIster</RootNamespace>
     <EnableDynamicLoading>true</EnableDynamicLoading>
-    <!-- Game branch to build against: beta (default) or default -->
-    <GameBranch Condition="'$(GameBranch)' == ''">beta</GameBranch>
-    <GameLibDir>$(MSBuildThisFileDirectory)../../lib/$(GameBranch)/</GameLibDir>
-    <!-- GAME_BETA / GAME_DEFAULT: the few places where the two game branches differ -->
-    <DefineConstants>$(DefineConstants);GAME_$(GameBranch.ToUpperInvariant())</DefineConstants>
+    <!-- One DLL for both game branches (v1.1.0): compiled against the beta, main branch differences checked at runtime
+         (GameBranch.cs); build.sh runs PatchCheck against lib/beta and lib/default. -->
+    <GameLibDir>$(MSBuildThisFileDirectory)../../lib/beta/</GameLibDir>
     <!-- Development builds: F9 only saves the report (no browser); public builds (-p:PublicRelease=true) open the issue form -->
     <DefineConstants Condition="'$(PublicRelease)' != 'true'">$(DefineConstants);DEV_TOOLS</DefineConstants>
     <!-- Line numbers in error reports, without the build machine's folders (v0.18.0) -->

@@ -110,7 +110,7 @@ F9 / the settings button write a report the player sends by hand (no network cal
 
 ## Game versions (beta + default)
 - `lib/beta/` and `lib/default/` hold the game DLLs for each branch.
-- The build produces one DLL per branch if their APIs differ; otherwise one shared DLL.
+- One DLL for both branches (v1.1.0, see "Game branches").
 - `docs/COMPATIBILITY.md` tracks which game versions were tested.
 
 ## Risks to verify in the spike (Phase 1) — see GAME-INTERNALS.md
@@ -119,13 +119,27 @@ F9 / the settings button write a report the player sends by hand (no network cal
 - R3: Can we read block **owner/giver** when block is absorbed, so we can compute "prevented for allies"?
 - R4: Where do we hook the rewards and end-of-run screens?
 
-## Game branches (v0.17.22)
-The mod is built separately for each game branch: `./build.sh beta` (lib/beta, v0.111.0) and `./build.sh default`
-(lib/default, main branch v0.107.1), output in `dist/<branch>/KikiMAIster/`. The csproj defines `GAME_BETA` or
-`GAME_DEFAULT`; the few differences are under `#if`:
-- turn end hook: `Hook.BeforeTurnEnd` (main) / `Hook.BeforeSideTurnEnd` (beta);
-- damage modifiers and `Hook.ModifyDamage` take a `CardPlay` on the beta only; `CreatureCmd.Damage` likewise;
-- `CardPlay.Player` (beta) / `CardPlay.Card.Owner` (main); `CreatureCmd.LoseBlock` gives the remover on the beta only
-  (main: the player whose card is being played);
-- campfire leaving: the beta's "leave / skipped" messages, the main branch's `NRestSiteRoom._ExitTree`;
-- cards / powers that only exist on the beta (The Ball, Tutor, Soulbound) are matched by id or left out.
+## Game branches (v1.1.0: one build for both)
+One DLL runs on both game branches (before 1.1.0: one build per branch, `#if GAME_DEFAULT`). Why: both Workshop items
+had the same mod id, so the game loaded the first one in its list whatever the branch.
+- The mod is compiled against `lib/beta/` only: `./build.sh` → `dist/KikiMAIster/`, release zip
+  `dist/release/KikiMAIster-<version>.zip`.
+- `GameBranch.IsBeta` is read once at start-up from the game's own API (`CardPlay.Player` exists only on the beta);
+  `GameBranch.Name` ("beta" / "main") goes in the log's first line and in F9 reports.
+- Patches whose target differs: one patch class per branch with `Prepare()` returning the branch check (Harmony skips the
+  other), or `TargetMethod()` picking the right method. Each patch class is applied on its own: one failing patch is
+  logged and the others still apply.
+- Calls whose signature differs (`Hook.ModifyDamage`, `AbstractModel.ModifyDamageAdditive/Multiplicative`): `GameApi`
+  wrappers; the beta call sits in a method marked `[BranchOnly]`, the main branch's is a delegate made by reflection.
+- Game types / members that exist on one branch only are named only inside methods marked `[BranchOnly]`, called only
+  after a `GameBranch.IsBeta` check (the runtime resolves a method's references when it first runs it). Lobby players
+  (`StartRunLobbyPlayer` beta / `LobbyPlayer` main) are read by reflection.
+- `ReflectionTargets` entries can be beta-only (skipped on the main branch).
+- Differences: turn end hook `Hook.BeforeTurnEnd` (main) / `Hook.BeforeSideTurnEnd` (beta); damage modifiers,
+  `Hook.ModifyDamage` and `CreatureCmd.Damage` take a `CardPlay` on the beta only; `CardPlay.Player` (beta) /
+  `CardPlay.Card.Owner` (main); `CreatureCmd.LoseBlock` gives the remover on the beta only (main: the player whose card
+  is being played); campfire leaving: the beta's "leave / skipped" messages, the main branch's `NRestSiteRoom._ExitTree`;
+  cards / powers that only exist on the beta (Un pour tous, Âme sœur / Soulbound) are left out on the main branch.
+- **Build check:** PatchCheck runs on the same DLL with `lib/beta` and with `lib/default`: every active patch matches one
+  method, every reflection target exists, and every game type / member the DLL names exists in that game build unless
+  only `[BranchOnly]` methods use it. The build fails otherwise.

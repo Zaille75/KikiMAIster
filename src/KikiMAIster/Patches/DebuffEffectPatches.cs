@@ -51,34 +51,38 @@ public static class DebuffEffectPatches
     public static bool Computing;
 
     // The two game branches: the beta passes the CardPlay to damage modifiers, the main branch does not.
-#if GAME_DEFAULT
-    internal static decimal Mult(AbstractModel m, Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? card, CardPlay? _) =>
-        m.ModifyDamageMultiplicative(target, amount, props, dealer, card);
-    internal static decimal Additive(AbstractModel m, Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? card, CardPlay? _) =>
-        m.ModifyDamageAdditive(target, amount, props, dealer, card);
-#else
     internal static decimal Mult(AbstractModel m, Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? card, CardPlay? play) =>
-        m.ModifyDamageMultiplicative(target, amount, props, dealer, card, play);
+        GameApi.ModifyDamageMultiplicative(m, target, amount, props, dealer, card, play);
     internal static decimal Additive(AbstractModel m, Creature? target, decimal amount, ValueProp props, Creature? dealer, CardModel? card, CardPlay? play) =>
-        m.ModifyDamageAdditive(target, amount, props, dealer, card, play);
-#endif
+        GameApi.ModifyDamageAdditive(m, target, amount, props, dealer, card, play);
+
+    /// The main branch has no CardPlay in damage modifiers.
+    [HarmonyPatch(typeof(Hook), nameof(Hook.ModifyDamage))]
+    public static class ModifyDamageMain
+    {
+        public static bool Prepare() => !GameBranch.IsBeta;
+
+        public static void Postfix(IRunState runState, ICombatState? combatState, Creature? target, Creature? dealer, decimal damage,
+            ValueProp props, CardModel? cardSource, ModifyDamageHookType modifyDamageHookType, CardPreviewMode previewMode, decimal __result,
+            ref IEnumerable<AbstractModel> modifiers) =>
+            ModifyDamage.After(runState, combatState, target, dealer, damage, props, cardSource, null, modifyDamageHookType, previewMode,
+                __result, modifiers);
+    }
 
     [HarmonyPatch(typeof(Hook), nameof(Hook.ModifyDamage))]
     public static class ModifyDamage
     {
-#if GAME_DEFAULT
-        // The main branch has no CardPlay in damage modifiers.
-        public static void Postfix(IRunState runState, ICombatState? combatState, Creature? target, Creature? dealer, decimal damage,
-            ValueProp props, CardModel? cardSource, ModifyDamageHookType modifyDamageHookType, CardPreviewMode previewMode, decimal __result,
-            ref IEnumerable<AbstractModel> modifiers)
-        {
-            CardPlay? cardPlay = null;
-#else
+        public static bool Prepare() => GameBranch.IsBeta;
+
         public static void Postfix(IRunState runState, ICombatState? combatState, Creature? target, Creature? dealer, decimal damage,
             ValueProp props, CardModel? cardSource, CardPlay? cardPlay, ModifyDamageHookType modifyDamageHookType, CardPreviewMode previewMode,
-            decimal __result, ref IEnumerable<AbstractModel> modifiers)
+            decimal __result, ref IEnumerable<AbstractModel> modifiers) =>
+            After(runState, combatState, target, dealer, damage, props, cardSource, cardPlay, modifyDamageHookType, previewMode, __result, modifiers);
+
+        internal static void After(IRunState runState, ICombatState? combatState, Creature? target, Creature? dealer, decimal damage,
+            ValueProp props, CardModel? cardSource, CardPlay? cardPlay, ModifyDamageHookType modifyDamageHookType, CardPreviewMode previewMode,
+            decimal __result, IEnumerable<AbstractModel> modifiers)
         {
-#endif
             if (Computing || previewMode != CardPreviewMode.None || target == null || dealer == null ||
                 modifyDamageHookType != ModifyDamageHookType.All) return;
             var mods = modifiers;
@@ -235,11 +239,9 @@ public static class DebuffEffectPatches
             ValueProp props, CardModel cardSource, CardPlay? cardPlay)
         {
             if (Internal == null) return decimal.MaxValue;
-#if GAME_DEFAULT
-            var args = new object?[] { runState, combatState, target, dealer, damage, props, cardSource, ModifyDamageHookType.All, null };
-#else
-            var args = new object?[] { runState, combatState, target, dealer, damage, props, cardSource, cardPlay, ModifyDamageHookType.All, null };
-#endif
+            var args = GameBranch.IsBeta
+                ? new object?[] { runState, combatState, target, dealer, damage, props, cardSource, cardPlay, ModifyDamageHookType.All, null }
+                : new object?[] { runState, combatState, target, dealer, damage, props, cardSource, ModifyDamageHookType.All, null };
             Computing = true;
             try
             {
@@ -260,13 +262,8 @@ public static class DebuffEffectPatches
             Computing = true;
             try
             {
-#if GAME_DEFAULT
-                uncapped = Hook.ModifyDamage(runState, combatState, target, dealer, damage, props, cardSource,
+                uncapped = GameApi.ModifyDamage(runState, combatState, target, dealer, damage, props, cardSource, cardPlay,
                     ModifyDamageHookType.Additive | ModifyDamageHookType.Multiplicative, CardPreviewMode.None, out _);
-#else
-                uncapped = Hook.ModifyDamage(runState, combatState, target, dealer, damage, props, cardSource, cardPlay,
-                    ModifyDamageHookType.Additive | ModifyDamageHookType.Multiplicative, CardPreviewMode.None, out _);
-#endif
             }
             finally
             {
@@ -316,13 +313,8 @@ public static class DebuffEffectPatches
             Computing = true;
             try
             {
-#if GAME_DEFAULT
-                uncapped = Hook.ModifyDamage(runState, combatState, target, dealer, damage, props, cardSource,
+                uncapped = GameApi.ModifyDamage(runState, combatState, target, dealer, damage, props, cardSource, cardPlay,
                     ModifyDamageHookType.Additive | ModifyDamageHookType.Multiplicative, CardPreviewMode.None, out _);
-#else
-                uncapped = Hook.ModifyDamage(runState, combatState, target, dealer, damage, props, cardSource, cardPlay,
-                    ModifyDamageHookType.Additive | ModifyDamageHookType.Multiplicative, CardPreviewMode.None, out _);
-#endif
             }
             finally
             {

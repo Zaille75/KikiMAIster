@@ -121,23 +121,30 @@ public static class BlockAndPowerPatches
     [HarmonyPatch(typeof(CreatureCmd), nameof(CreatureCmd.LoseBlock))]
     public static class LoseBlock
     {
-#if GAME_DEFAULT
-        // The main branch does not say who removes the block: the player's own card being played counts as the remover.
-        public static void Prefix(Creature creature, decimal amount) => Capture.Safe("CreatureCmd.LoseBlock", () =>
-        {
-            var target = creature;
-            var remover = Capture.CurrentActingPlayer?.Creature;
-#else
-        public static void Prefix(Creature target, decimal amount, Creature? remover) => Capture.Safe("CreatureCmd.LoseBlock", () =>
-        {
-#endif
-            if (CombatManager.Instance.IsOverOrEnding || target.IsDead || amount <= 0) return;
-            var lost = (int)Math.Min(amount, target.Block);
-            if (lost <= 0) return;
-            // A player removing their own block (to use it for something else) is "spent", not wasted.
-            var spent = remover != null && remover.IsPlayer && remover == target;
-            Capture.Emit(new BlockRemoved(Capture.ToActor(target), lost, spent));
-        });
+        public static bool Prepare() => GameBranch.IsBeta;
+
+        public static void Prefix(Creature target, decimal amount, Creature? remover) =>
+            Capture.Safe("CreatureCmd.LoseBlock", () => BlockLost(target, amount, remover));
+    }
+
+    /// The main branch does not say who removes the block: the player's own card being played counts as the remover.
+    [HarmonyPatch(typeof(CreatureCmd), nameof(CreatureCmd.LoseBlock))]
+    public static class LoseBlockMain
+    {
+        public static bool Prepare() => !GameBranch.IsBeta;
+
+        public static void Prefix(Creature creature, decimal amount) =>
+            Capture.Safe("CreatureCmd.LoseBlock", () => BlockLost(creature, amount, Capture.CurrentActingPlayer?.Creature));
+    }
+
+    private static void BlockLost(Creature target, decimal amount, Creature? remover)
+    {
+        if (CombatManager.Instance.IsOverOrEnding || target.IsDead || amount <= 0) return;
+        var lost = (int)Math.Min(amount, target.Block);
+        if (lost <= 0) return;
+        // A player removing their own block (to use it for something else) is "spent", not wasted.
+        var spent = remover != null && remover.IsPlayer && remover == target;
+        Capture.Emit(new BlockRemoved(Capture.ToActor(target), lost, spent));
     }
 
     [HarmonyPatch(typeof(CombatHistory), nameof(CombatHistory.PowerReceived))]

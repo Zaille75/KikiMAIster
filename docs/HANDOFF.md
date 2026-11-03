@@ -4,9 +4,29 @@
 > (interface). The history of every version is in `CHANGELOG.md` and the specs' "vX.Y.Z" notes; the git history has the
 > older handoff sections (v0.7 → v0.17).
 >
-> **State:** v1.0.2 released on GitHub (tag on `9e81469`) and the Steam Workshop (2026-11-02, both public). Nothing since v0.18.5 is tested in game yet. When Zaille75
+> **State:** v1.0.2 released on GitHub (tag on `9e81469`) and the Steam Workshop (2026-11-02, both public). **1.1.0 built,
+> not released, not tested in game:** one DLL for both game branches (see "1.1.0" below). Nothing since v0.18.5 is tested in game yet. When Zaille75
 > sends a new inbox (`logs/inbox/<date_time>/`): **review and summarize every report first, wait for his go, then implement
 > the whole batch** (memory rules).
+
+## 1.1.0 — one build for both game branches (2026-11-03, not tested in game, not released)
+Spec 03-technical "Game branches". Compiled against `lib/beta/` only; `GameBranch.IsBeta` (`CardPlay.Player` exists)
+picks the path at runtime; the 16 `#if GAME_DEFAULT` blocks are gone. Patch classes per branch use `Prepare()`
+(`LoseBlock`/`LoseBlockMain`, `ModifyDamage`/`ModifyDamageMain`, campfire `LocalLeft`/`RemoteLeft`/`RoomLeft`) or
+`TargetMethod()` (`TurnEnd`, `DamageCommand`); signature differences go through `GameApi` (`GameBranch.cs`);
+beta-only types only inside `[BranchOnly]` methods (`SoulBinder`, `IsOneForAll`, `GameApi.Beta*`); lobby players by
+reflection (`CompositionWindow.LobbyPlayers`: the default branch's `LobbyPlayer` was a difference the `#if`s missed).
+`ModEntry` applies each patch class on its own and logs `game branch beta|main, N patches`.
+- `./build.sh [release]` → `dist/KikiMAIster/`, zip `dist/release/KikiMAIster-<version>.zip`. PatchCheck runs on the
+  DLL with both `lib/beta` and `lib/default`: patches (skips `Prepare() == false`), reflection targets, `GameApi`
+  delegates, and every game type / member the IL names (allowed only in `[BranchOnly]` methods). It stubs
+  `Sentry.Godot` (sts2's module initializer) in memory.
+- Workshop (`tools/workshop/make.py`): the "beta" item (3832591950) becomes **"KikiMAIster"** for both branches; the
+  "default" item (3832592056) gets the same build, titled "… - retired" with "unsubscribe, subscribe to KikiMAIster".
+  Zaille75 can hide it later on its Steam page.
+- **To test before release (Zaille75):** on the beta branch AND on the default branch (Steam → Properties → Betas):
+  the log's first line says the right branch, no "patch … not applied" error, a fight with block lost / campfire /
+  F8 in the lobby works.
 
 ## v1.0.0 released (2026-11-02)
 Tag `v1.0.0` (= `db4f751`, new card icon), repo **public**, release
@@ -14,15 +34,15 @@ https://github.com/Zaille75/KikiMAIster/releases/tag/v1.0.0 with the beta and de
 - **Accounts:** releases are made as **WTT27** (`gh` on this machine is logged in as WTT27). WTT27 is a collaborator
   with write access, not admin: repo settings (visibility, etc.) can only be changed by Zaille75 on github.com.
   `git push` uses this machine's SSH key.
-- **Release recipe:** build the zips (`./build.sh beta release`, `./build.sh default release`), `git tag vX.Y.Z && git push
-  origin vX.Y.Z`, then `gh release create vX.Y.Z dist/release/*.zip --title "KikiMAIster X.Y.Z" --notes-file <notes>`
-  (notes: CHANGELOG lines, which zip for which game branch, install = unzip into `<game folder>/mods/`). Publishing is
+- **Release recipe (1.1.0+):** build the zip (`./build.sh release`), `git tag vX.Y.Z && git push origin vX.Y.Z`, then
+  `gh release create vX.Y.Z dist/release/KikiMAIster-X.Y.Z.zip --title "KikiMAIster X.Y.Z" --notes-file <notes>`
+  (notes: CHANGELOG lines, one zip for both game branches, install = unzip into `<game folder>/mods/`). Publishing is
   public: Zaille75 runs the command himself (`! ...`) or gives his explicit go.
 - **Cleanup done (2026-11-02):** backup branch `backup/before-v1-scrub` and tag `backup/v0.17.7-pet-protection-immediate`
   deleted (local and GitHub).
 - **1.0.2 (2026-11-02):** log's "Data folder" line fixed (empty in 1.0.1: static init order in `DataDir`); Workshop
   descriptions + README: subscribe to only one of the two items.
-- **NEXT (Zaille75 agreed to note it, 2026-11-02): one build for both game branches.** Both Workshop items share the mod id
+- **DONE in 1.1.0 (see above): one build for both game branches.** Original note: Both Workshop items share the mod id
   `KikiMAIster`: the game loads only the first one in its list, whatever the branch (the other gets DUPLICATE_ID), and
   our items declare no supported branch, so the game's branch check (`ModManager.CheckSteamBranchSupport`) lets both
   through. Plan: turn the 16 `#if GAME_DEFAULT` blocks (9 files) into runtime checks, test on both branches, then one
@@ -33,7 +53,7 @@ https://github.com/Zaille75/KikiMAIster/releases/tag/v1.0.0 with the beta and de
 - **Steam Workshop: PUBLIC since 2026-11-02** (tested by Zaille75, data copy checked, README links). GitHub release
   v1.0.1 (tag on `d09a6b1`, the commit the zips and Workshop items were built from) published by WTT27. two items (ids in `tools/workshop/published_ids.json`: beta 3832591950, default
   3832592056, created hidden 2026-11-02), "KikiMAIster" (beta build) and "KikiMAIster (default branch)", uploaded
-  by Zaille75 from his PC with SteamCMD. Package: `./build.sh beta release && ./build.sh default release &&
+  by Zaille75 from his PC with SteamCMD. Package (1.1.0+): `./build.sh release &&
   python3 tools/workshop/make.py "<change note>"` → `dist/workshop/` (copied to `C:\KikiMAIster-workshop`, run
   `Publier.bat`). After the first upload, put the two ids in `tools/workshop/published_ids.json`
   (`{"beta": id, "default": id}`): later runs update the same items. Items are created hidden; Zaille75 makes them
@@ -61,7 +81,7 @@ https://github.com/Zaille75/KikiMAIster/releases/tag/v1.0.0 with the beta and de
 - **Next:** Steam Workshop first (the game loads subscribed items itself, app 2868840; no uploader in the game folder:
   SteamCMD), then Nexus Mods if wanted. Claude checks each site's requirements; Zaille75 creates accounts / uploads where a
   login is needed.
-- Zaille75 plays the **beta** branch: give the **beta** install command (unless he says otherwise).
+- Zaille75 plays the **beta** branch. Since 1.1.0 the same files work on both branches.
 
 ## How Zaille75 and Claude work
 - Zaille75 writes in English or French, plays in **French**, and doesn't code. He tests in game and sends feedback, screenshots, and logs.
@@ -84,12 +104,12 @@ https://github.com/Zaille75/KikiMAIster/releases/tag/v1.0.0 with the beta and de
 - **Every change:**
   1. Update the spec first (`01-metrics.md` for rules; `02-ui.md` for the UI, with a "vX.Y.Z:" change note).
   2. Bump the version in **both** `src/KikiMAIster/KikiMAIster.json` (`"version"`) and `src/KikiMAIster/KikiMAIster.csproj` (`<Version>`).
-  3. Run `./build.sh beta`. It runs the build, PatchCheck (each patch must match exactly one game method), and the unit tests. Then commit.
+  3. Run `./build.sh`. It runs the build, PatchCheck on both game branches (patches, game members used), and the unit tests. Then commit.
   4. Give Zaille75 the install command (PowerShell, game closed). The real login and server address are in
      `docs/HANDOFF.local.md` (git-ignored, this machine only):
      ```powershell
      $m = "<game folder>\mods\KikiMAIster"
-     scp "<user>@<server>:<repo>/dist/beta/KikiMAIster/*" "$m"
+     scp "<user>@<server>:<repo>/dist/KikiMAIster/*" "$m"
      ```
 - The mod writes `KikiMAIster.log` next to its DLL, in the game's `mods\KikiMAIster` folder on Windows. Zaille75 copies it from there.
 - **Git:** private GitHub repo `git@github.com:Zaille75/KikiMAIster.git` (`origin`, SSH key `~/.ssh/id_ed25519`).

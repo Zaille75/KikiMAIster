@@ -198,13 +198,13 @@ public static class CombatFlowPatches
         public static void Prefix(MonsterModel __instance) => Capture.Safe("MonsterModel.PerformMove", () => ActingEnemy = __instance.Creature);
     }
 
-#if GAME_DEFAULT
-    [HarmonyPatch(typeof(Hook), nameof(Hook.BeforeTurnEnd))] // renamed BeforeSideTurnEnd on the beta branch
-#else
-    [HarmonyPatch(typeof(Hook), nameof(Hook.BeforeSideTurnEnd))]
-#endif
+    [HarmonyPatch]
     public static class TurnEnd
     {
+        /// Hook.BeforeSideTurnEnd (beta), named BeforeTurnEnd on the main branch.
+        public static System.Reflection.MethodBase TargetMethod() =>
+            AccessTools.Method(typeof(Hook), GameBranch.IsBeta ? nameof(Hook.BeforeSideTurnEnd) : "BeforeTurnEnd");
+
         public static void Prefix(ICombatState combatState, CombatSide side) => Capture.Safe("BeforeSideTurnEnd", () =>
         {
             if (side != CombatSide.Player) return;
@@ -419,11 +419,7 @@ public static class CombatFlowPatches
             var giver = creator ?? Capture.CurrentActingPlayer;
             // Âme sœur: the Soul copied into the ally's draw pile is "created" by that ally; it is the Soulbound
             // applier's gift (v0.17.1).
-#if !GAME_DEFAULT // Âme sœur: beta only
-            if (card is Soul && card.Owner.Creature.GetPower<SoulboundPower>() is { } soulbound && soulbound.Applier?.Player is { } binder &&
-                binder != card.Owner && Traverse.Create(soulbound).Property(ReflectionTargets.SoulboundAddingSoul.Name).GetValue<bool>())
-                giver = binder;
-#endif
+            if (GameBranch.IsBeta && SoulBinder(card) is { } binder) giver = binder; // Âme sœur: beta only
             if (giver != null && card.Owner != giver)
             {
                 DamagePatches.GiftedCards.AddOrUpdate(card, giver);
@@ -431,6 +427,12 @@ public static class CombatFlowPatches
             }
         });
     }
+
+    [BranchOnly, MethodImpl(MethodImplOptions.NoInlining)]
+    private static Player? SoulBinder(CardModel card) =>
+        card is Soul && card.Owner.Creature.GetPower<SoulboundPower>() is { } soulbound && soulbound.Applier?.Player is { } binder &&
+        binder != card.Owner && Traverse.Create(soulbound).Property(ReflectionTargets.SoulboundAddingSoul.Name).GetValue<bool>()
+            ? binder : null;
 
     // Side effects that make a block card more than block (Armaments upgrades, Gather Light gives stars).
     [HarmonyPatch(typeof(CardCmd), nameof(CardCmd.Upgrade), typeof(IEnumerable<CardModel>), typeof(CardPreviewStyle))]
