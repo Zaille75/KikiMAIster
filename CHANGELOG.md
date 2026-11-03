@@ -5,8 +5,7 @@ Summary by version line. The detailed notes of every version are in [docs/specs/
 
 ## 1.1.0 (2026-11-03)
 One build for both game branches (default and beta): the mod finds the branch when the game starts. One Steam Workshop
-item, [KikiMAIster](https://steamcommunity.com/sharedfiles/filedetails/?id=3832591950); the "default branch" item is
-retired. A patch that fails no longer stops the others from loading.
+item, [KikiMAIster](https://steamcommunity.com/sharedfiles/filedetails/?id=3832591950). A patch that fails no longer stops the others from loading.
 
 ## 1.0.2 (2026-11-02)
 The log says again where the mod's data folder is (its line was empty in 1.0.1). Workshop pages and README: subscribe to

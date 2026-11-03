@@ -49,8 +49,7 @@ window, show the combat summary automatically.
 ## Install
 **Steam Workshop** (easiest, updates are automatic): subscribe to
 [KikiMAIster](https://steamcommunity.com/sharedfiles/filedetails/?id=3832591950), then start the game. Since 1.1.0 it
-works on both game branches (default and beta). The old "KikiMAIster (default branch)" item is retired: if you have it,
-unsubscribe from it.
+works on both game branches (default and beta).
 
 Manual install, game closed:
 1. Download the release zip (`KikiMAIster.dll` and `KikiMAIster.json`).
@@ -129,8 +128,7 @@ propre fenêtre, afficher le résumé à la fin de chaque combat.
 ### Installation
 **Steam Workshop** (le plus simple, mises à jour automatiques) : abonne-toi à
 [KikiMAIster](https://steamcommunity.com/sharedfiles/filedetails/?id=3832591950), puis lance le jeu. Depuis la 1.1.0, il
-marche sur les deux branches du jeu (par défaut et bêta). L'ancien objet « KikiMAIster (default branch) » est retiré : si
-tu l'as, désabonne-toi.
+marche sur les deux branches du jeu (par défaut et bêta).
 
 Installation manuelle, jeu fermé :
 1. Télécharge le zip de la version (`KikiMAIster.dll` et `KikiMAIster.json`).

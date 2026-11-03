@@ -21,9 +21,9 @@ reflection (`CompositionWindow.LobbyPlayers`: the default branch's `LobbyPlayer`
   DLL with both `lib/beta` and `lib/default`: patches (skips `Prepare() == false`), reflection targets, `GameApi`
   delegates, and every game type / member the IL names (allowed only in `[BranchOnly]` methods). It stubs
   `Sentry.Godot` (sts2's module initializer) in memory.
-- Workshop (`tools/workshop/make.py`): the "beta" item (3832591950) becomes **"KikiMAIster"** for both branches; the
-  "default" item (3832592056) gets the same build, titled "… - retired" with "unsubscribe, subscribe to KikiMAIster".
-  Zaille75 can hide it later on its Steam page.
+- Workshop (`tools/workshop/make.py`): one item, the former beta item (3832591950), now **"KikiMAIster"** for both
+  branches. The "default branch" item (3832592056) had no subscribers: Zaille75 made it invisible (2026-11-03), it is
+  no longer updated and will be deleted.
 - **To test before release (Zaille75):** on the beta branch AND on the default branch (Steam → Properties → Betas):
   the log's first line says the right branch, no "patch … not applied" error, a fight with block lost / campfire /
   F8 in the lobby works.

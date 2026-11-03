@@ -1,7 +1,7 @@
 """Builds the Steam Workshop upload folder (dist/workshop/): content, preview, item .vdf files and Publier.bat. The folder
 is copied as is to C:\\KikiMAIster-workshop on the Windows PC (SteamCMD needs absolute paths).
-Since 1.1.0 one build runs on both game branches: the main item ("beta" id) gets it, and the old "default branch" item
-gets the same build with a "retired, subscribe to KikiMAIster" description (whichever the game loads works).
+Since 1.1.0 one build runs on both game branches: one item, "KikiMAIster" (the former beta item, "beta" id). The old
+"default branch" item (3832592056) was made invisible by Zaille75 on 2026-11-03 (no subscribers) and is no longer updated.
 Run after ./build.sh release. Usage: python3 tools/workshop/make.py "<change note>"
 """
 import json, os, shutil, sys
@@ -11,18 +11,12 @@ OUT = os.path.join(ROOT, "dist", "workshop")
 WIN = "C:\\KikiMAIster-workshop"
 APPID = "2868840"
 IDS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "published_ids.json")  # filled after the first upload
-MAIN_URL = "https://steamcommunity.com/sharedfiles/filedetails/?id=3832591950"
 
 # Key (as in published_ids.json): title, English and French lines put in the description.
 ITEMS = {
     "beta": ("KikiMAIster",
              "Works on both game branches (default and beta).",
              "Marche sur les deux branches du jeu (par défaut et bêta)."),
-    "default": ("KikiMAIster (default branch) - retired",
-                f"RETIRED: KikiMAIster now works on both game branches. Unsubscribe from this item and subscribe to "
-                f"[url={MAIN_URL}]KikiMAIster[/url] (your stats and settings are kept). Until then this item gets the same build.",
-                f"RETIRÉ : KikiMAIster marche maintenant sur les deux branches du jeu. Désabonne-toi de cet objet et abonne-toi à "
-                f"[url={MAIN_URL}]KikiMAIster[/url] (tes stats et réglages sont gardés). En attendant, cet objet reçoit la même version."),
 }
 
 
@@ -54,8 +48,8 @@ def main():
     with open(os.path.join(OUT, "Publier.bat"), "w", encoding="utf-8", newline="\r\n") as f:
         f.write("@echo off\r\nset /p STEAMUSER=Compte Steam : \r\n"
                 f'C:\\steamcmd\\steamcmd.exe +login %STEAMUSER% +workshop_build_item "{WIN}\\beta.vdf" '
-                f'+workshop_build_item "{WIN}\\default.vdf" +quit\r\n'
-                'echo.\r\necho Copie les deux lignes "PublishFileID" ci-dessus et envoie-les a Claude.\r\npause\r\n')
+                f'+quit\r\n'
+                'echo.\r\necho Copie la ligne "PublishFileID" ci-dessus et envoie-la a Claude.\r\npause\r\n')
     print("Ready:", OUT)
 
 
