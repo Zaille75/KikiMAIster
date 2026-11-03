@@ -4,12 +4,13 @@
 > (interface). The history of every version is in `CHANGELOG.md` and the specs' "vX.Y.Z" notes; the git history has the
 > older handoff sections (v0.7 → v0.17).
 >
-> **State:** v1.0.2 released on GitHub (tag on `9e81469`) and the Steam Workshop (2026-11-02, both public). **1.1.0 built,
-> not released, not tested in game:** one DLL for both game branches (see "1.1.0" below). Nothing since v0.18.5 is tested in game yet. When Zaille75
+> **State:** **1.1.0 released** on GitHub (tag on `c769770`, published by WTT27) and the Steam Workshop (2026-11-03):
+> one DLL for both game branches, one Workshop item "KikiMAIster" (3832591950). Short solo test by Zaille75 on both
+> branches OK (`logs/2026-11-03_v1.1.0_*_solo.log`); campfire and F8 in the lobby not exercised yet. Nothing since v0.18.5 is tested in game yet. When Zaille75
 > sends a new inbox (`logs/inbox/<date_time>/`): **review and summarize every report first, wait for his go, then implement
 > the whole batch** (memory rules).
 
-## 1.1.0 — one build for both game branches (2026-11-03, not tested in game, not released)
+## 1.1.0 — one build for both game branches (2026-11-03, released)
 Spec 03-technical "Game branches". Compiled against `lib/beta/` only; `GameBranch.IsBeta` (`CardPlay.Player` exists)
 picks the path at runtime; the 16 `#if GAME_DEFAULT` blocks are gone. Patch classes per branch use `Prepare()`
 (`LoseBlock`/`LoseBlockMain`, `ModifyDamage`/`ModifyDamageMain`, campfire `LocalLeft`/`RemoteLeft`/`RoomLeft`) or
@@ -24,7 +25,10 @@ reflection (`CompositionWindow.LobbyPlayers`: the default branch's `LobbyPlayer`
 - Workshop (`tools/workshop/make.py`): one item, the former beta item (3832591950), now **"KikiMAIster"** for both
   branches. The "default branch" item (3832592056) had no subscribers: Zaille75 made it invisible (2026-11-03), it is
   no longer updated and will be deleted.
-- **To test before release (Zaille75):** on the beta branch AND on the default branch (Steam → Properties → Betas):
+- Workshop upload: SteamCMD printed no "PublishFileID" line this time, but the Steam page was updated (title,
+  description). `Envoyer-a-Claude` on Zaille75's PC is an old copy (sends the stale logs of `mods\KikiMAIster`):
+  replace it with `dist/tools/`.
+- **Tested (2026-11-03):** on the beta branch AND on the default branch (Steam → Properties → Betas):
   the log's first line says the right branch, no "patch … not applied" error, a fight with block lost / campfire /
   F8 in the lobby works.
 
