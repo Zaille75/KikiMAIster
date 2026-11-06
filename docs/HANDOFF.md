@@ -4,12 +4,28 @@
 > (interface). The history of every version is in `CHANGELOG.md` and the specs' "vX.Y.Z" notes; the git history has the
 > older handoff sections (v0.7 → v0.17).
 >
-> **State:** **1.1.0 released** on GitHub (tag on `c769770`, published by WTT27) and the Steam Workshop (2026-11-03):
+> **State:** **1.1.1 built (see below), to test in game.** Before: **1.1.0 released** on GitHub (tag on `c769770`, published by WTT27) and the Steam Workshop (2026-11-03):
 > one DLL for both game branches, one Workshop item "KikiMAIster" (3832591950). Short solo test by Zaille75 on both
 > branches OK (`logs/2026-11-03_v1.1.0_*_solo.log`); beta solo run with campfires and F8 OK too (Tente miniature
 > campfire path and co-op "Ce groupe" not exercised). Zaille75 has several game profiles: a new one has an empty history. Nothing since v0.18.5 is tested in game yet. When Zaille75
 > sends a new inbox (`logs/inbox/<date_time>/`): **review and summarize every report first, wait for his go, then implement
 > the whole batch** (memory rules).
+
+## 1.1.1 — GitHub reports of 2026-11-05 (2026-11-06, built, not tested in game, not released)
+First two public F9 reports (issues #1, #2, by Zaille75 as WTT27; zips added as comments, files in `logs/feedback-2026-11-05/`).
+Read them with `gh issue list --label report` (label created 2026-11-06), zips: `gh issue view N --json comments`.
+- **Vulnérable gardé** (`TurnReview.VulnerableLeft`, kind "vulnLeft", Choix): Tope là kept while plain attacks were played.
+  Next-turn value = 50% of the turn's attack damage on that enemy (Zaille75: "give the debuff for next turn"). Orbs never
+  count (Vulnérable doesn't boost them: checked, the mod uses the game's own multiplier, and order rules use card hits only).
+- **Place bonuses** (Létalité, Géantification, Pointe de stylo, Vigueur, Lames fantomatiques) recorded per hit
+  (`EnemyHit.Place*`, from `DamageModifier`s via `BlockAlternatives.SetPlaceBonus`); `TurnReview.SwapGain` for the Slow
+  order; same idea for "attack before a Vulnérable attack" (`CheckOrder`).
+- **Hibernation:** `FrostOrb.Passive/Evoke` prefixes set an `AsyncLocal` orb owner; Givre block on allies is the owner's.
+- **Upgraded cards** in misplays: key suffix `^` / `^N`, shown "+" / "+N" by `GameNames.Of`.
+- **F9 save only** when `send-to-claude` exists in the data folder; `dist/tools/Envoyer-a-Claude.ps1` creates it (Zaille75
+  must copy the new script to his Desktop). GitHub form: right folder, "wait for the zip's link", reminder in the text.
+- **To test in game:** Tope là kept → miss in Choix; Létalité + Ralenti → no miss; Hibernation → Coop "armure donnée" for
+  the Défectueux; F9 → no browser/folder after running the new Envoyer-a-Claude once.
 
 ## 1.1.0 — one build for both game branches (2026-11-03, released)
 Spec 03-technical "Game branches". Compiled against `lib/beta/` only; `GameBranch.IsBeta` (`CardPlay.Player` exists)

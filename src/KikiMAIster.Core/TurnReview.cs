@@ -54,6 +54,9 @@ public sealed class TurnCard
     public bool DealsDamage { get; init; } = true;
     /// Estimated damage on each enemy; an enemy is missing when the card's number of hits is unknown.
     public IReadOnlyDictionary<object, int> DamageOn { get; init; } = NoDamage;
+    /// An attack putting that much Vulnérable on its target, or on every enemy (Tope là, Coup…; v1.1.1).
+    public int VulnerableStacks { get; init; }
+    public bool AllEnemies { get; init; }
 
     public bool StatusOrCurse => Kind is CardKind.Status or CardKind.Curse;
     /// Attacks, and skills / powers that give no block: an alternative to a block card.
@@ -70,7 +73,15 @@ public readonly record struct SeenCard(object Card, string Key);
 
 /// A hit of a card on an enemy: raw damage (HP + block, overkill left out) and the enemy's Slow when hit (cards played
 /// before it this turn, each +10% attack damage; -1 without Slow).
-public readonly record struct EnemyHit(object Target, int Raw, int Slow);
+/// v1.1.1 (Zaille75): the part of the hit given by its place among the player's attacks of the turn: PlaceMult from a
+/// multiplier (Létalité, Géantification, Pointe de stylo), PlaceAdd from a bonus (Vigueur), PlaceShiv from Lames fantomatiques
+/// (first Surin). Swapped with another attack of the same player, that part goes to the other card.
+/// Vulnerable: the enemy already had Vulnérable when hit (v1.1.1).
+public readonly record struct EnemyHit(object Target, int Raw, int Slow, double PlaceMult = 0, double PlaceAdd = 0, double PlaceShiv = 0,
+    bool Vulnerable = false)
+{
+    public double Place => PlaceMult + PlaceAdd + PlaceShiv;
+}
 
 /// Damage dealt right after a card by something it triggered (Trou noir after Stars were spent), on one enemy.
 public readonly record struct FollowUpHit(string Source, object Target, int Raw);
@@ -83,6 +94,8 @@ public class TurnPlay
     public required object CardRef { get; init; }
     public required string CardKey { get; init; }
     public required CardKind Kind { get; init; }
+    /// A Surin (Lames fantomatiques, v1.1.1).
+    public bool Shiv { get; init; }
     public int EnergySpent { get; init; }
     /// Stars paid for this card (v0.17.34).
     public int StarsSpent { get; init; }
@@ -219,6 +232,8 @@ public sealed class TurnState
     public Dictionary<object, int> EnemiesLeft { get; init; } = new(ReferenceEqualityComparer.Instance);
     /// The only enemy left, when its death ends the fight (v0.18.9: lethal missed at the end of the turn).
     public object? LastEnemy { get; init; }
+    /// Vulnérable stacks of each enemy alive at the end of the turn (v1.1.1).
+    public Dictionary<object, int> EnemyVulnerable { get; init; } = new(ReferenceEqualityComparer.Instance);
 
     public TurnPlayer? Player(Actor a) => Players.FirstOrDefault(p => p.Actor == a);
 }
@@ -264,6 +279,7 @@ public static class TurnReview
             CappedAttacks(s, p, r);
             StampedeSwap(s, p, r);
             DrawBeforeMaking(s, p, r);
+            VulnerableLeft(s, p, r);
         }
         var used = new HashSet<object>(ReferenceEqualityComparer.Instance);
         var withAlternative = BlockAlternatives(s, used, r);
@@ -326,8 +342,10 @@ public static class TurnReview
 
     /// Slow (Ralenti): each card played makes the enemy take 10% more attack damage, so attacks on it should go from the
     /// smallest to the biggest (v0.17.42, Zaille75). A bigger attack played before a smaller one that was already in a hand
-    /// (the player's own, or an ally's in co-op) lost 10% × (its base − the smaller one's base) per card played between
-    /// them. Counted for the player of the bigger attack, in Choix ("orderSlow"), when at least 1 damage is lost.
+    /// (the player's own, or an ally's in co-op) lost damage: the two played the other way round would have dealt more.
+    /// Counted for the player of the bigger attack, in Choix ("orderSlow"), when at least 1 damage is lost.
+    /// v1.1.1 (Zaille75, Idole oubliée with Létalité): a bonus given by the attack's place (Létalité, Vigueur…) moves to the
+    /// other card when two attacks of the same player swap; between two players each keeps its own (SwapGain).
     private static void SlowAttackOrder(TurnState s)
     {
         var attacks = s.Plays.Where(p => p.Kind == CardKind.Attack && !p.HadNonDamageEffect).ToList();
@@ -343,13 +361,115 @@ public static class TurnReview
                 {
                     var earlyHits = early.Hits.Where(h => ReferenceEquals(h.Target, target) && h.Slow >= 0).ToList();
                     var lateHits = late.Hits.Where(h => ReferenceEquals(h.Target, target) && h.Slow >= 0).ToList();
-                    if (lateHits.Count == 0) continue;
-                    double Base(List<EnemyHit> hits) => hits.Sum(h => h.Raw / (1 + 0.1 * h.Slow));
-                    var gap = lateHits[0].Slow - earlyHits[0].Slow;
-                    var extra = 0.1 * gap * (Base(earlyHits) - Base(lateHits));
-                    if (gap > 0 && extra > 0) s.OrderLosses.Add(new OrderLoss(early, late.CardKey, "orderSlow", target, extra));
+                    if (lateHits.Count == 0 || lateHits[0].Slow <= earlyHits[0].Slow) continue;
+                    var extra = SwapGain(early, earlyHits, late, lateHits);
+                    if (extra > 0) s.OrderLosses.Add(new OrderLoss(early, late.CardKey, "orderSlow", target, extra));
                 }
             }
+    }
+
+    /// Damage two attacks on one Slowed enemy would have dealt more played the other way round (negative: the order was right).
+    /// Each card's base is its raw damage without its place bonus, Slow removed; swapped, it takes the other's Slow, and the
+    /// place bonus follows the place for cards of the same player (Lames fantomatiques: only between two Surins).
+    public static double SwapGain(TurnPlay early, IReadOnlyList<EnemyHit> earlyHits, TurnPlay late, IReadOnlyList<EnemyHit> lateHits)
+    {
+        double Base(IReadOnlyList<EnemyHit> hits) => hits.Sum(h => (h.Raw - h.Place) / (1 + 0.1 * h.Slow));
+        // The multiplier of the place (1.75 for Létalité 75), and the bonuses added there.
+        double Mult(IReadOnlyList<EnemyHit> hits)
+        {
+            var mult = hits.Sum(h => h.PlaceMult);
+            var without = hits.Sum(h => h.Raw - h.Place);
+            return mult > 0 && without > 0 ? 1 + mult / without : 1;
+        }
+        double Add(IReadOnlyList<EnemyHit> hits) => hits.Sum(h => h.PlaceAdd);
+        double Shiv(IReadOnlyList<EnemyHit> hits) => hits.Sum(h => h.PlaceShiv);
+        var (se, sl) = (1 + 0.1 * earlyHits[0].Slow, 1 + 0.1 * lateHits[0].Slow);
+        var (be, bl) = (Base(earlyHits), Base(lateHits));
+        var played = earlyHits.Sum(h => h.Raw) + lateHits.Sum(h => h.Raw);
+        var same = early.Owner == late.Owner;
+        // What the first place gives, and the second: same player, they swap; else each card keeps its own.
+        var (firstMult, secondMult) = same ? (Mult(earlyHits), Mult(lateHits)) : (Mult(lateHits), Mult(earlyHits));
+        var (firstAdd, secondAdd) = same ? (Add(earlyHits), Add(lateHits)) : (Add(lateHits), Add(earlyHits));
+        // Lames fantomatiques: the first Surin's bonus; it moves only from a Surin to a Surin.
+        var shivMoves = same && early.Shiv && late.Shiv;
+        var (firstShiv, secondShiv) = shivMoves ? (Shiv(earlyHits), Shiv(lateHits)) : (Shiv(lateHits), Shiv(earlyHits));
+        var swapped = bl * se * firstMult + firstAdd + firstShiv + be * sl * secondMult + secondAdd + secondShiv;
+        return swapped - played;
+    }
+
+    /// The game's Vulnérable multiplier (relics that change it are left out of this estimate).
+    private const double VulnerableFactor = 1.5;
+
+    /// Vulnérable kept (v1.1.1, Zaille75: Tope là left in hand while Claquement de doigts, Déchaînement and Frappe were played).
+    /// An attack putting Vulnérable on enemies stayed in hand while the player paid for plain attacks (no other effect) it could
+    /// have replaced. Best line: that card first, then the best of those attacks that still fit its energy, each hit × 1.5 on an
+    /// enemy it made Vulnérable (hits on an enemy already Vulnérable are not boosted again), damage capped by each enemy's HP.
+    /// Gain = that line − the attacks played, plus, when the Vulnérable lasts into the next turn (2+ stacks, enemy alive at the
+    /// end of the turn, not already Vulnérable for next turn), 50% of the attack damage the players dealt to that enemy this
+    /// turn (cards and pets; orbs never get Vulnérable), as an estimate of the next turn. Counted ("vulnLeft") when the gain is
+    /// at least 1. Any other card the player paid for (power, debuff, block, attack with another effect) was a choice: its
+    /// energy is not available to the line.
+    private static void VulnerableLeft(TurnState s, TurnPlayer p, TurnResult r)
+    {
+        var plain = s.Plays.Where(x => x.Owner == p.Actor && x.Kind == CardKind.Attack && !x.HadNonDamageEffect && !x.GaveBlock && !x.PlayedAgain)
+            .Take(10).ToList();
+        if (plain.Count == 0) return;
+        var budget = p.Energy + plain.Sum(x => x.EnergySpent);
+        var played = plain.Sum(x => x.Hits.Sum(h => h.Raw));
+        // Each enemy's HP + block before these attacks (0 left for the dead ones).
+        var before = new Dictionary<object, double>(ReferenceEqualityComparer.Instance);
+        foreach (var h in plain.SelectMany(x => x.Hits)) before[h.Target] = before.GetValueOrDefault(h.Target) + h.Raw;
+        foreach (var key in before.Keys.ToList()) before[key] += s.EnemiesLeft.GetValueOrDefault(key);
+        foreach (var (enemy, left) in s.EnemiesLeft) before.TryAdd(enemy, left);
+        // The players' attack damage on each enemy this turn (next-turn estimate).
+        var groupDamage = new Dictionary<object, double>(ReferenceEqualityComparer.Instance);
+        foreach (var h in s.Plays.Where(x => x.Kind == CardKind.Attack).SelectMany(x => x.Hits))
+            groupDamage[h.Target] = groupDamage.GetValueOrDefault(h.Target) + h.Raw;
+
+        (TurnCard Card, double Gain, double Now, int Lasting, List<TurnPlay> Line)? best = null;
+        foreach (var v in p.Hand.Where(c => c.Kind == CardKind.Attack && c.VulnerableStacks > 0 && c.PlayableExceptEnergy && c.PlayableInstead &&
+                                            !c.KeptOnPurpose && !c.CostsX && !c.LacksStars && !c.Punished && (!c.NeedsPet || p.PetAlive) &&
+                                            c.Cost <= budget))
+        {
+            // Its targets: every enemy, or the best single one.
+            var choices = v.AllEnemies ? new[] { before.Keys.ToList() } : before.Keys.Select(e => new List<object> { e }).ToArray();
+            foreach (var targets in choices)
+            {
+                var vulnerable = new HashSet<object>(targets, ReferenceEqualityComparer.Instance);
+                var room = budget - v.Cost;
+                var dealt = new Dictionary<object, double>(ReferenceEqualityComparer.Instance);
+                foreach (var e in targets) dealt[e] = v.DamageOn.GetValueOrDefault(e);
+                // The best subset of the plain attacks that still fits (at most 10 cards: 1,024 subsets).
+                var (bestLine, bestDamage) = (new List<TurnPlay>(), Capped(dealt));
+                for (var mask = 1; mask < 1 << plain.Count; mask++)
+                {
+                    var line = plain.Where((_, i) => (mask & (1 << i)) != 0).ToList();
+                    if (line.Sum(x => x.EnergySpent) > room) continue;
+                    var total = new Dictionary<object, double>(dealt, ReferenceEqualityComparer.Instance);
+                    foreach (var h in line.SelectMany(x => x.Hits))
+                        total[h.Target] = total.GetValueOrDefault(h.Target) + h.Raw * (vulnerable.Contains(h.Target) && !h.Vulnerable ? VulnerableFactor : 1);
+                    var damage = Capped(total);
+                    if (damage > bestDamage) (bestLine, bestDamage) = (line, damage);
+                }
+                var now = bestDamage - played;
+                // Next turn: the enemies still alive and not already Vulnérable then.
+                var lasting = v.VulnerableStacks >= 2
+                    ? targets.Where(e => s.EnemiesLeft.GetValueOrDefault(e) > 0 && s.EnemyVulnerable.GetValueOrDefault(e) < 2).ToList()
+                    : new List<object>();
+                var gain = now + lasting.Sum(e => groupDamage.GetValueOrDefault(e) * (VulnerableFactor - 1));
+                if (gain >= 1 && (best == null || gain > best.Value.Gain))
+                    best = (v, gain, now, lasting.Count > 0 ? v.VulnerableStacks : 0, bestLine);
+            }
+        }
+        if (best is not { } b) return;
+        r.Log.Add($"vulnerable kept: {b.Card.Key}, this turn {b.Now:0.#}, gain {b.Gain:0.#}, line {string.Join(' ', b.Line.Select(x => x.CardKey))}");
+        r.Events.Add(new MissedChance(p.Actor, "vulnLeft", new[]
+        {
+            b.Card.Key, string.Join('+', plain.Select(x => x.CardKey).Distinct()), N((int)Math.Round(b.Now)), N(b.Lasting),
+            N((int)Math.Round(b.Gain - b.Now))
+        }));
+
+        double Capped(Dictionary<object, double> total) => total.Sum(kv => Math.Min(kv.Value, before.GetValueOrDefault(kv.Key, kv.Value)));
     }
 
     /// An attack wasted on an enemy that would have died anyway (v0.17.42, Zaille75), counted in Gâché:

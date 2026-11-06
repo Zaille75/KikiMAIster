@@ -85,6 +85,9 @@ F9 / the settings button write a report the player sends by hand (no network cal
 - **Public builds** open the folder (`OS.ShellShowInFileManager`) and the issue form
   `https://github.com/Zaille75/KikiMAIster/issues/new?template=report.yml&…` (fields `kind`, `version`, `branch`,
   `description`; message cut to 1,500 characters in the link). The form is `.github/ISSUE_TEMPLATE/report.yml`.
+- **Save only (v1.1.1, Zaille75):** when the file `send-to-claude` exists in the data folder, F9 only saves the report
+  (folder + zip), like development builds: no file manager, no GitHub form. `Envoyer-a-Claude.ps1` creates that file each
+  time it runs, so only the developer's PC has it; the reports are sent by that script.
 - **Error capture:** `ModLog.Error` also records the error in `ModLog.Errors` (by place: count, first text, thread-safe,
   at most 30 places). `ModLog.UnreportedErrors` drives the panel hint; creating a report sets it back to 0.
 - The DLL embeds its debug info (line numbers in errors.txt) with the source paths mapped to `/KikiMAIster/`

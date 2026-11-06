@@ -3,6 +3,12 @@
 Summary by version line. The detailed notes of every version are in [docs/specs/02-ui.md](docs/specs/02-ui.md)
 (interface) and [docs/specs/01-metrics.md](docs/specs/01-metrics.md) (rules).
 
+## 1.1.1 (2026-11-06)
+Misplays: new "Vulnérable gardé" (an attack giving Vulnérable, like Tope là, kept while plain attacks were played);
+wrong order against Ralenti and before Vulnérable take Létalité, Vigueur, Pointe de stylo… into account; upgraded cards
+show their "+". Co-op: block from Givre orbs under Hibernation counts for the Défectueux who owns the orbs. The GitHub
+report form says where the zip is and asks to wait for its link.
+
 ## 1.1.0 (2026-11-03)
 One build for both game branches (default and beta): the mod finds the branch when the game starts. One Steam Workshop
 item, [KikiMAIster](https://steamcommunity.com/sharedfiles/filedetails/?id=3832591950). A patch that fails no longer stops the others from loading.

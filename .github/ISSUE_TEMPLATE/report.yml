@@ -5,8 +5,13 @@ body:
   - type: markdown
     attributes:
       value: |
-        **Drop the zip made by F9 in the description box below** (it is in `mods/KikiMAIster/feedback/`; player names and Steam ids are already removed).
-        **Glisse le zip créé par F9 dans la case de description ci-dessous** (il est dans `mods/KikiMAIster/feedback/` ; les noms des joueurs et les ids Steam sont déjà retirés).
+        ## ⚠ Drop the zip made by F9 in the "What happened" box below, and wait for its link before submitting
+        The folder opened by F9: `%APPDATA%\SlayTheSpire2\KikiMAIster\feedback\` (player names and Steam ids are already removed).
+        Without the zip, the report cannot be checked.
+
+        ## ⚠ Glisse le zip créé par F9 dans la case « Ce qui s'est passé » ci-dessous, et attends son lien avant d'envoyer
+        Le dossier ouvert par F9 : `%APPDATA%\SlayTheSpire2\KikiMAIster\feedback\` (les noms des joueurs et les ids Steam sont déjà retirés).
+        Sans le zip, le rapport ne peut pas être vérifié.
   - type: input
     id: kind
     attributes:
@@ -30,6 +35,6 @@ body:
     id: description
     attributes:
       label: What happened · Ce qui s'est passé
-      description: What you expected, the fight, the turn, the card… and the zip · Ce que tu attendais, le combat, le tour, la carte… et le zip
+      description: What you expected, the fight, the turn, the card… and DROP THE ZIP HERE · Ce que tu attendais, le combat, le tour, la carte… et GLISSE LE ZIP ICI
     validations:
       required: true

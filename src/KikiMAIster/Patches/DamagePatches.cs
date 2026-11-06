@@ -172,6 +172,7 @@ public static class DamagePatches
         if (Seen.TryGetValue(r, out _)) return;
         Seen.Add(r, true);
         // The extra damage of this hit (Vulnerable…) counts for the HP it removed only.
+        BlockAlternatives.SetPlaceBonus(Array.Empty<DamageModifier>());
         DebuffEffectPatches.ReleaseOffense(dealer, r.Receiver, r.UnblockedDamage, r.BlockedDamage + r.UnblockedDamage + r.OverkillDamage);
         var target = r.Receiver;
         // A hit that did nothing because the enemy's Carapace endurcie limit was reached this turn (v0.17.34).

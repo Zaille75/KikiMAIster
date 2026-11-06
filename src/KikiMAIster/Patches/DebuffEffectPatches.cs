@@ -30,6 +30,7 @@ public static class DebuffEffectPatches
     {
         if (dealer == null || !Offense.TryGetValue((dealer, target), out var queue) || queue.Count == 0) return;
         var effects = queue.Dequeue();
+        Capture.Safe("place bonus", () => BlockAlternatives.SetPlaceBonus(effects.OfType<DamageModifier>()));
         if (raw <= 0 || hp <= 0) return;
         var scale = Math.Min(1.0, (double)hp / raw);
         foreach (var e in effects)

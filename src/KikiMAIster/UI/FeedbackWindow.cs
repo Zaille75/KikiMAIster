@@ -207,14 +207,38 @@ public static class FeedbackWindow
         ModLog.Info($"feedback saved: {name}");
         ModLog.ErrorsReported();
         _text.Text = "";
-#if DEV_TOOLS
-        _status!.Text = string.Format(Loc.T("report.saved"), Directory.GetDirectories(Folder).Length);
-        Hide();
-#else
+        if (DevBuild || SaveOnly)
+        {
+            _status!.Text = string.Format(Loc.T("report.saved"), Directory.GetDirectories(Folder).Length);
+            Hide();
+            return;
+        }
         _status!.Text = Loc.T("report.next");
         Capture.Safe("Feedback.Folder", () => OS.ShellShowInFileManager(File.Exists(zip) ? zip : dir));
-        Capture.Safe("Feedback.Issue", () => OS.ShellOpen(IssueLink(message)));
+        Capture.Safe("Feedback.Issue", () => OS.ShellOpen(IssueLink(message, Path.GetFileName(zip))));
+    }
+
+#if DEV_TOOLS
+    private static readonly bool DevBuild = true;
+#else
+    private static readonly bool DevBuild = false;
 #endif
+
+    /// v1.1.1 (Zaille75): on the PC where Envoyer-a-Claude runs (it creates "send-to-claude" in the data folder), reports are
+    /// only saved, then sent by that script: no folder, no GitHub page.
+    private static bool SaveOnly
+    {
+        get
+        {
+            try
+            {
+                return DataDir.File("send-to-claude") is { } marker && File.Exists(marker);
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
     }
 
     /// Anonymised before it touches the disk.
@@ -222,15 +246,17 @@ public static class FeedbackWindow
         File.WriteAllText(Path.Combine(dir, file), Privacy.Scrub(text));
 
     /// The GitHub issue form, filled with the type, version, branch and the (anonymised, shortened) message.
-    private static string IssueLink(string message)
+    /// v1.1.1: the description ends with a reminder naming the zip to drop there (two GitHub issues came without it).
+    private static string IssueLink(string message, string zipName)
     {
         message = Privacy.Scrub(message.Trim());
         if (message.Length > MaxMessageInLink) message = message[..MaxMessageInLink] + "…";
+        var withZip = $"{message}\n\n⚠ {string.Format(Loc.T("report.dropHere"), zipName)}\n";
         var kind = Loc.T($"report.kind.{_category}");
         var firstLine = message.Split('\n')[0];
         var title = $"[{kind}] {(firstLine.Length > 60 ? firstLine[..60] + "…" : firstLine)}";
         string Q(string s) => Uri.EscapeDataString(s);
-        return $"{IssueForm}&title={Q(title)}&kind={Q(kind)}&version={Q(Version)}&branch={Q(Branch)}&description={Q(message)}";
+        return $"{IssueForm}&title={Q(title)}&kind={Q(kind)}&version={Q(Version)}&branch={Q(Branch)}&description={Q(withZip)}";
     }
 
     /// What is on screen, in text: the run, every player (HP, block, energy, stars, powers, hand, piles, relics,

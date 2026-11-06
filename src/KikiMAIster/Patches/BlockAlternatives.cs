@@ -351,8 +351,21 @@ public static class BlockAlternatives
                 var extra = VulnerableFactor(power, power.Owner, player.Creature) - 1;
                 foreach (var e in attacks.Concat(AlliesBefore(play, player)))
                 {
-                    var raw = e.Hits.Where(h => ReferenceEquals(h.Target, power.Owner)).Sum(h => h.Raw);
-                    if (raw > 0) OrderLosses.Add(new OrderLoss(e, TurnReview.Owned(boost, Capture.ToActor(player), e.Owner), "order", power.Owner, raw * extra));
+                    var hits = e.Hits.Where(h => ReferenceEquals(h.Target, power.Owner)).ToList();
+                    var raw = hits.Sum(h => h.Raw);
+                    if (raw <= 0) continue;
+                    var lost = raw * extra;
+                    // v1.1.1 (Zaille75): the Vulnérable card is an attack of the same player; played first, it would have
+                    // taken the earlier attack's place bonus (Létalité, Vigueur…), which that attack would have lost.
+                    var moved = hits.Sum(h => h.PlaceMult + h.PlaceAdd);
+                    if (play != null && play.Card.Type == CardType.Attack && e.Player == player && moved > 0)
+                    {
+                        var without = raw - moved;
+                        var mult = without > 0 ? 1 + hits.Sum(h => h.PlaceMult) / without : 1;
+                        var boostDamage = play.Hits.Sum(h => h.Raw);
+                        lost = without * (1 + extra) - raw + boostDamage * (mult - 1) + hits.Sum(h => h.PlaceAdd);
+                    }
+                    if (lost > 0) OrderLosses.Add(new OrderLoss(e, TurnReview.Owned(boost, Capture.ToActor(player), e.Owner), "order", power.Owner, lost));
                 }
                 break;
             }
@@ -464,6 +477,23 @@ public static class BlockAlternatives
         return f > 1 ? f : 1.5;
     }
 
+    /// The part of the hit about to be reported given by its place among the player's attacks (v1.1.1, Zaille75): set from its
+    /// damage modifiers just before OnHit (DamagePatches.Report), read once by OnHit.
+    private static (double Mult, double Add, double Shiv) _placeBonus;
+
+    public static void SetPlaceBonus(IEnumerable<DamageModifier> modifiers)
+    {
+        _placeBonus = default;
+        foreach (var m in modifiers)
+        {
+            if (m.Modifier == $"Power:{ModelDb.GetId<LethalityPower>().Entry}" || m.Modifier == $"Power:{ModelDb.GetId<GigantificationPower>().Entry}" ||
+                m.Modifier == $"Relic:{ModelDb.GetId<PenNib>().Entry}")
+                _placeBonus.Mult += m.Amount;
+            else if (m.Modifier == $"Power:{ModelDb.GetId<VigorPower>().Entry}") _placeBonus.Add += m.Amount;
+            else if (m.Modifier == $"Power:{ModelDb.GetId<PhantomBladesPower>().Entry}") _placeBonus.Shiv += m.Amount;
+        }
+    }
+
     /// A hit of the card play in progress on an enemy (for the wrong-order and overkill checks). Raw: block + HP, the overkill
     /// apart.
     public static void OnHit(CardModel card, Creature target, int raw, Creature? dealer = null, int overkill = 0, bool killed = false, int blocked = 0)
@@ -471,7 +501,9 @@ public static class BlockAlternatives
         if (raw <= 0 || !target.IsEnemy || !InProgress.TryPeek(out var play) || play == null || play.Card != card) return;
         CheckBlockOnHit(play, target, raw, blocked);
         var slow = target.GetPower<SlowPower>() is { } power ? (int)power.DynamicVars["SlowAmount"].BaseValue : -1;
-        play.Hits.Add(new EnemyHit(target, raw, slow));
+        var place = _placeBonus;
+        _placeBonus = default;
+        play.Hits.Add(new EnemyHit(target, raw, slow, place.Mult, place.Add, place.Shiv, target.HasPower<VulnerablePower>()));
         if (killed && ReferenceEquals(target, play.Target))
         {
             play.KilledTarget = true;
@@ -515,8 +547,8 @@ public static class BlockAlternatives
         if (late.Card.Type == CardType.Attack) return;
         foreach (var early in ThisTurn.Where(p => p != late && p.Player == late.Player && p.Card.Type == CardType.Attack &&
                                                   !p.HadNonDamageEffect && p.HandAtPlay.Contains(late.Card)))
-            foreach (var (target, raw, slow) in early.Hits.Where(h => h.Slow >= 0))
-                OrderLosses.Add(new OrderLoss(early, Key(late.Card), "orderSlow", target, raw * 0.1 / (1 + 0.1 * slow)));
+            foreach (var h in early.Hits.Where(h => h.Slow >= 0))
+                OrderLosses.Add(new OrderLoss(early, Key(late.Card), "orderSlow", h.Target, h.Raw * 0.1 / (1 + 0.1 * h.Slow)));
     }
 
     /// A real attack hit was increased by Vulnerable on this enemy: the play that applied it did something.
@@ -657,6 +689,7 @@ public static class BlockAlternatives
             CardRef = cardPlay.Card,
             CardKey = Key(cardPlay.Card),
             Kind = KindOf(cardPlay.Card.Type),
+            Shiv = cardPlay.Card.Tags.Contains(CardTag.Shiv),
             EnergySpent = cardPlay.Resources.EnergySpent,
             StarsSpent = cardPlay.Resources.StarsSpent,
             Ethereal = cardPlay.Card.Keywords.Contains(CardKeyword.Ethereal),
@@ -781,7 +814,11 @@ public static class BlockAlternatives
             ShellKey = real.Count == 0 && combat.Enemies.FirstOrDefault(e => e.IsAlive && e.Monster != null) is { Monster: { } giant }
                 ? $"Monster:{Capture.IdOf(giant)}" : $"Power:{ModelDb.GetId<HardenedShellPower>().Entry}"
         };
-        foreach (var e in combat.Enemies.Where(e => e.IsAlive)) s.EnemiesLeft[e] = e.CurrentHp + e.Block;
+        foreach (var e in combat.Enemies.Where(e => e.IsAlive))
+        {
+            s.EnemiesLeft[e] = e.CurrentHp + e.Block;
+            s.EnemyVulnerable[e] = e.GetPower<VulnerablePower>()?.Amount ?? 0;
+        }
         foreach (var player in combat.Players)
             Capture.Safe("turn snapshot", () =>
             {
@@ -856,7 +893,11 @@ public static class BlockAlternatives
         Punished = PunishedAttack(c),
         DealsDamage = c.Type != CardType.Attack || DealsDamage(c, combat),
         DamageOn = c.Type != CardType.Attack ? new Dictionary<object, int>() :
-            combat.HittableEnemies.Where(e => HitCount(c, e) != null).ToDictionary(e => (object)e, e => EstimateDamage(c, e))
+            combat.HittableEnemies.Where(e => HitCount(c, e) != null).ToDictionary(e => (object)e, e => EstimateDamage(c, e)),
+        // v1.1.1: an attack putting Vulnérable on enemies (Tope là, Coup…; Science folle's effect is random).
+        VulnerableStacks = c.Type == CardType.Attack && c is not MadScience && c.TargetType is TargetType.AnyEnemy or TargetType.AllEnemies &&
+                           c.DynamicVars.TryGetValue("VulnerablePower", out var vulnerable) ? vulnerable.IntValue : 0,
+        AllEnemies = c.TargetType == TargetType.AllEnemies
     };
 
     private static CardKind KindOf(CardType type) => type switch
@@ -918,7 +959,10 @@ public static class BlockAlternatives
     private static List<Creature> RealEnemies(ICombatState? combat) =>
         (combat?.HittableEnemies ?? Array.Empty<Creature>()).Where(e => e.HpDisplay == HpDisplay.Normal).ToList();
 
-    private static string Key(CardModel card) => $"Card:{Capture.IdOf(card)}";
+    /// A card in a miss's text: "Card:ID", "^" for an upgraded card ("^3" for the third upgrade of a card upgraded many times),
+    /// shown "+" / "+3" (v1.1.1, Zaille75: "Frappe+ avant Frappe"). Not "+": that sign joins several cards in a miss.
+    private static string Key(CardModel card) => !card.IsUpgraded ? $"Card:{Capture.IdOf(card)}"
+        : card.MaxUpgradeLevel > 1 ? $"Card:{Capture.IdOf(card)}^{card.CurrentUpgradeLevel}" : $"Card:{Capture.IdOf(card)}^";
     private static string N(int v) => v.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     /// The attack would deal damage to at least one enemy (cards whose damage the mod cannot compute count as useful).

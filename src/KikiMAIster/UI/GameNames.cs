@@ -47,6 +47,9 @@ public static class GameNames
             }
             return key[9..];
         }
+        // An upgraded card in a miss (v1.1.1): "Card:STRIKE^" → "Frappe+", "Card:SEARING_BLOW^3" → "… +3".
+        var hat = key.IndexOf('^');
+        if (hat > 0) return Of(key[..hat]) + "+" + key[(hat + 1)..];
         // A stat loss from a temporary power: "Force − (Toucher affaiblissant)".
         var at = key.IndexOf('@');
         if (at > 0) return $"{Of(key[..at])} ({Of(key[(at + 1)..])})";

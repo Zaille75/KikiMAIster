@@ -24,6 +24,22 @@ public static class BlockAndPowerPatches
 
     private static readonly ConditionalWeakTable<Creature, BlockCall> PendingGiver = new();
 
+    /// The player whose Frost orb is triggering (v1.1.1, Zaille75): under Hibernation its block also goes to every other player,
+    /// and it is the orb owner's, not the receiver's. Async-local: each orb trigger's awaited steps keep their own owner.
+    private static readonly AsyncLocal<Player?> FrostOwner = new();
+
+    [HarmonyPatch(typeof(FrostOrb), nameof(FrostOrb.Passive))]
+    public static class FrostPassive
+    {
+        public static void Prefix(FrostOrb __instance) => Capture.Safe("FrostOrb.Passive", () => FrostOwner.Value = __instance.Owner);
+    }
+
+    [HarmonyPatch(typeof(FrostOrb), nameof(FrostOrb.Evoke))]
+    public static class FrostEvoke
+    {
+        public static void Prefix(FrostOrb __instance) => Capture.Safe("FrostOrb.Evoke", () => FrostOwner.Value = __instance.Owner);
+    }
+
     /// Decides who gives the block: card owner, potion user, owner of the power/relic, else the receiver.
     [HarmonyPatch(typeof(CreatureCmd), nameof(CreatureCmd.GainBlock), typeof(Creature), typeof(decimal), typeof(ValueProp),
         typeof(CardPlay), typeof(bool))]
@@ -43,6 +59,7 @@ public static class BlockAndPowerPatches
             {
                 SourceKind.Potion => Capture.PotionUser,
                 SourceKind.Card => Capture.CurrentActingPlayer,
+                SourceKind.Orb when model == typeof(FrostOrb) && FrostOwner.Value is { } orbOwner => orbOwner,
                 _ => creature.CombatState is { } cs ? Capture.UniqueOwnerOf(model, cs.Players) : null
             };
             PendingGiver.AddOrUpdate(creature, new BlockCall(giver, source));
@@ -59,7 +76,7 @@ public static class BlockAndPowerPatches
             PendingGiver.Remove(receiver);
             var giver = call?.Giver != null ? Capture.ToActor(call.Giver) : Capture.ToActor(receiver);
             Capture.Emit(new BlockGained(Capture.ToActor(receiver), giver, amount, call?.Source ?? Source.Unknown, call?.PlayId ?? 0,
-                StatPart(receiver, amount, call?.Source)));
+                StatPart(call?.Source.Kind == SourceKind.Orb && call.Giver != null ? call.Giver.Creature : receiver, amount, call?.Source)));
             // Sacrifice: its block comes from the pet's max HP (allies who gave those HP enabled it).
             if (call?.Source is { Kind: SourceKind.Card } src && src.Id == ModelDb.GetId<Sacrifice>().Entry)
                 Capture.Emit(new PetHpBlock(Capture.ToActor(receiver)));
@@ -72,13 +89,13 @@ public static class BlockAndPowerPatches
                 (guard.Id == ModelDb.GetId<CurlUpPower>().Entry || guard.Id == ModelDb.GetId<SkittishPower>().Entry))
                 BlockAlternatives.OnEnemyBlockOnHit(receiver, amount, guard.ToString());
             if (call?.Source is { Kind: SourceKind.Power } fed) BlockAlternatives.OnPowerTriggered(receiver, fed.ToString());
-            if (call?.Source is { Kind: SourceKind.Orb } orb && orb.Id == ModelDb.GetId<FrostOrb>().Entry && receiver.Player is { } owner)
+            if (call?.Source is { Kind: SourceKind.Orb } orb && orb.Id == ModelDb.GetId<FrostOrb>().Entry && (call.Giver ?? receiver.Player) is { } owner)
                 BlockAlternatives.OnOrbTriggered(owner, null, "orderBlock");
         });
     }
 
-    /// The part of a block gain due to the receiver's Dexterity (a card's block, after Frail) or Focus (a Frost orb), so the
-    /// share a relic or potion gave counts for it (v0.17.45).
+    /// The part of a block gain due to the receiver's Dexterity (a card's block, after Frail) or Focus (a Frost orb: its owner's,
+    /// v1.1.1), so the share a relic or potion gave counts for it (v0.17.45).
     private static double StatPart(Creature receiver, int amount, Source? source)
     {
         if (amount <= 0 || source is not { } src) return 0;

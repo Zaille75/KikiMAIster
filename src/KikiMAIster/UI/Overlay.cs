@@ -1031,6 +1031,11 @@ public static class Overlay
                 // Wrong order (v0.18.6): "Lames fantomatiques avant Précipitation, Surin : 1 dégâts et 1 armure perdus".
                 : m.Kind == "orderTurn" && m.Args.Count > 3
                 ? string.Format(Loc.T("why.orderTurn"), Arg(m.Args[0]), string.Join(", ", m.Args.Skip(3).Select(Arg)), OrderLost(m.Args[1], m.Args[2]))
+                // Vulnérable kept (v1.1.1): "Tope là gardé, Claquement de doigts, Frappe joué(s) : +2 dégâts ce tour, Vulnérable 2
+                // pour le tour suivant (environ +16)".
+                : m.Kind == "vulnLeft" && m.Args.Count > 4
+                ? string.Format(Loc.T("why.vulnLeft"), Arg(m.Args[0]), Arg(m.Args[1]), m.Args[2].StartsWith('-') ? "−" + m.Args[2][1..] : "+" + m.Args[2]) +
+                  (m.Args[3] != "0" ? string.Format(Loc.T("why.vulnNext"), m.Args[3], m.Args[4]) : "")
                 // Full hand: "Passe-passe main pleine : 2 carte(s) perdue(s), Défense pouvait être jouée avant".
                 : m.Kind == "handFull" && m.Args.Count > 2
                 ? string.Format(Loc.T("why.handFull"), Arg(m.Args[0]), m.Args[1], string.Join(", ", m.Args.Skip(2).Select(Arg)))
