@@ -15,7 +15,7 @@
 First two public F9 reports (issues #1, #2, by Zaille75 as WTT27; zips added as comments, files in `logs/feedback-2026-11-05/`).
 Read them with `gh issue list --label report` (label created 2026-11-06), zips: `gh issue view N --json comments`.
 - **Vulnérable gardé** (`TurnReview.VulnerableLeft`, kind "vulnLeft", Choix): Tope là kept while plain attacks were played.
-  Next-turn value = 50% of the turn's attack damage on that enemy (Zaille75: "give the debuff for next turn"). Orbs never
+  Damage of this turn only; "et Vulnérable N pour le tour suivant" shown, no estimate of next turn (Zaille75). Orbs never
   count (Vulnérable doesn't boost them: checked, the mod uses the game's own multiplier, and order rules use card hits only).
 - **Place bonuses** (Létalité, Géantification, Pointe de stylo, Vigueur, Lames fantomatiques) recorded per hit
   (`EnemyHit.Place*`, from `DamageModifier`s via `BlockAlternatives.SetPlaceBonus`); `TurnReview.SwapGain` for the Slow

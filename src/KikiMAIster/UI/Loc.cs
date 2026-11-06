@@ -149,7 +149,7 @@ public static class Loc
         ["why.potionUseless"] = ("{0} could have no effect", "{0} ne pouvait avoir aucun effet"),
         ["why.orderTurn"] = ("{0} before {1}: {2}", "{0} avant {1} : {2}"),
         ["why.vulnLeft"] = ("{0} kept, {1} played: {2} damage this turn", "{0} gardé, {1} joué(s) : {2} dégâts ce tour"),
-        ["why.vulnNext"] = (", Vulnerable {0} for the next turn (about +{1})", ", Vulnérable {0} pour le tour suivant (environ +{1})"),
+        ["why.vulnNext"] = (", and Vulnerable {0} for the next turn", ", et Vulnérable {0} pour le tour suivant"),
         ["why.blockOnHit"] = ("{0} set off {3} before {1}: {2} damage lost in its block", "{0} a déclenché {3} avant {1} : {2} dégâts perdus dans son armure"),
         ["why.discardEthereal"] = ("{0} for nothing discarded {1}, which would have been exhausted at the end of the turn", "{0} pour rien a défaussé {1}, qui aurait été épuisée en fin de tour"),
         ["why.lostDamage"] = ("{0} damage lost", "{0} dégâts perdus"),

@@ -77,7 +77,7 @@ public class Feedback1_1_1Tests : TestBase
 
     /// Scarabrideur, round 1: Tope là (11, Vulnérable 2 on every enemy) kept, Claquement de doigts 7, Déchaînement 7, Frappe 6
     /// played; the ally's two Frappes (6 + 6) hit too. Best line: Tope là 11 + Claquement 7 × 1.5 = 21.5 → +1.5 this turn, and
-    /// Vulnérable 2 next turn: 50% of the 32 attack damage of the turn = +16.
+    /// Vulnérable 2 for the next turn (no estimate of that turn's damage).
     [Fact]
     public void VulnerableKept_WhilePlainAttacksWerePlayed_IsAMiss()
     {
@@ -100,7 +100,27 @@ public class Feedback1_1_1Tests : TestBase
         };
         s.EnemiesLeft[_y] = 48;
         var miss = Missed(Resolve(s), "vulnLeft").Single();
-        Assert.Equal(new[] { "Card:HIGH_FIVE", "Card:SNAP+Card:UNLEASH+Card:STRIKE_NECROBINDER", "2", "2", "16" }, miss.Args);
+        Assert.Equal(new[] { "Card:HIGH_FIVE", "Card:SNAP+Card:UNLEASH+Card:STRIKE_NECROBINDER", "2", "2" }, miss.Args);
+    }
+
+    [Theory]
+    [InlineData(12, 0, true)]   // Tope là 12 = Frappe + Frappe 12: as much this turn, and Vulnérable 2 next turn
+    [InlineData(10, 0, false)]  // 2 damage less this turn: no estimate of the next turn makes up for it
+    [InlineData(12, 2, false)]  // the enemy is already Vulnérable for the next turn
+    public void VulnerableKept_SameDamage_CountsOnlyForTheNextTurnsVulnerable(int topeDamage, int alreadyVulnerable, bool counted)
+    {
+        var tope = HighFive();
+        ((Dictionary<object, int>)tope.DamageOn)[_y] = topeDamage;
+        var s1 = Attack("STRIKE");
+        var s2 = Attack("STRIKE");
+        s1.Hits.Add(new EnemyHit(_y, 6, -1));
+        s2.Hits.Add(new EnemyHit(_y, 6, -1));
+        var s = new TurnState { Players = { new TurnPlayer { Actor = PA, Energy = 0, Hand = { tope } } }, Plays = { s1, s2 } };
+        s.EnemiesLeft[_y] = 30;
+        s.EnemyVulnerable[_y] = alreadyVulnerable;
+        var misses = Missed(Resolve(s), "vulnLeft");
+        Assert.Equal(counted, misses.Count == 1);
+        if (counted) Assert.Equal(new[] { "0", "2" }, misses[0].Args.Skip(2));
     }
 
     [Fact]

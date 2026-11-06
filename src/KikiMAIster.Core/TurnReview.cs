@@ -404,10 +404,10 @@ public static class TurnReview
     /// An attack putting Vulnérable on enemies stayed in hand while the player paid for plain attacks (no other effect) it could
     /// have replaced. Best line: that card first, then the best of those attacks that still fit its energy, each hit × 1.5 on an
     /// enemy it made Vulnérable (hits on an enemy already Vulnérable are not boosted again), damage capped by each enemy's HP.
-    /// Gain = that line − the attacks played, plus, when the Vulnérable lasts into the next turn (2+ stacks, enemy alive at the
-    /// end of the turn, not already Vulnérable for next turn), 50% of the attack damage the players dealt to that enemy this
-    /// turn (cards and pets; orbs never get Vulnérable), as an estimate of the next turn. Counted ("vulnLeft") when the gain is
-    /// at least 1. Any other card the player paid for (power, debuff, block, attack with another effect) was a choice: its
+    /// Gain = that line − the attacks played, this turn only (orbs never get Vulnérable). Counted ("vulnLeft") when the gain is
+    /// at least 1, or when the line deals as much while its Vulnérable lasts into the next turn (2+ stacks, enemy alive at the
+    /// end of the turn, not already Vulnérable for next turn). v1.1.1 (Zaille75): no estimate of the next turn's damage, only
+    /// "Vulnérable N for the next turn". Any other card the player paid for (power, debuff, block, attack with another effect) was a choice: its
     /// energy is not available to the line.
     private static void VulnerableLeft(TurnState s, TurnPlayer p, TurnResult r)
     {
@@ -421,12 +421,7 @@ public static class TurnReview
         foreach (var h in plain.SelectMany(x => x.Hits)) before[h.Target] = before.GetValueOrDefault(h.Target) + h.Raw;
         foreach (var key in before.Keys.ToList()) before[key] += s.EnemiesLeft.GetValueOrDefault(key);
         foreach (var (enemy, left) in s.EnemiesLeft) before.TryAdd(enemy, left);
-        // The players' attack damage on each enemy this turn (next-turn estimate).
-        var groupDamage = new Dictionary<object, double>(ReferenceEqualityComparer.Instance);
-        foreach (var h in s.Plays.Where(x => x.Kind == CardKind.Attack).SelectMany(x => x.Hits))
-            groupDamage[h.Target] = groupDamage.GetValueOrDefault(h.Target) + h.Raw;
-
-        (TurnCard Card, double Gain, double Now, int Lasting, List<TurnPlay> Line)? best = null;
+        (TurnCard Card, double Gain, int Lasting, List<TurnPlay> Line)? best = null;
         foreach (var v in p.Hand.Where(c => c.Kind == CardKind.Attack && c.VulnerableStacks > 0 && c.PlayableExceptEnergy && c.PlayableInstead &&
                                             !c.KeptOnPurpose && !c.CostsX && !c.LacksStars && !c.Punished && (!c.NeedsPet || p.PetAlive) &&
                                             c.Cost <= budget))
@@ -451,22 +446,20 @@ public static class TurnReview
                     var damage = Capped(total);
                     if (damage > bestDamage) (bestLine, bestDamage) = (line, damage);
                 }
-                var now = bestDamage - played;
-                // Next turn: the enemies still alive and not already Vulnérable then.
-                var lasting = v.VulnerableStacks >= 2
-                    ? targets.Where(e => s.EnemiesLeft.GetValueOrDefault(e) > 0 && s.EnemyVulnerable.GetValueOrDefault(e) < 2).ToList()
-                    : new List<object>();
-                var gain = now + lasting.Sum(e => groupDamage.GetValueOrDefault(e) * (VulnerableFactor - 1));
-                if (gain >= 1 && (best == null || gain > best.Value.Gain))
-                    best = (v, gain, now, lasting.Count > 0 ? v.VulnerableStacks : 0, bestLine);
+                var gain = bestDamage - played;
+                // Next turn: an enemy still alive and not already Vulnérable then.
+                var lasting = v.VulnerableStacks >= 2 &&
+                              targets.Any(e => s.EnemiesLeft.GetValueOrDefault(e) > 0 && s.EnemyVulnerable.GetValueOrDefault(e) < 2);
+                var counted = gain >= 1 || (lasting && Math.Round(gain) >= 0);
+                if (counted && (best == null || gain > best.Value.Gain || (lasting && best.Value.Lasting == 0 && gain >= best.Value.Gain)))
+                    best = (v, gain, lasting ? v.VulnerableStacks : 0, bestLine);
             }
         }
         if (best is not { } b) return;
-        r.Log.Add($"vulnerable kept: {b.Card.Key}, this turn {b.Now:0.#}, gain {b.Gain:0.#}, line {string.Join(' ', b.Line.Select(x => x.CardKey))}");
+        r.Log.Add($"vulnerable kept: {b.Card.Key}, this turn {b.Gain:0.#}, Vulnerable next turn {b.Lasting}, line {string.Join(' ', b.Line.Select(x => x.CardKey))}");
         r.Events.Add(new MissedChance(p.Actor, "vulnLeft", new[]
         {
-            b.Card.Key, string.Join('+', plain.Select(x => x.CardKey).Distinct()), N((int)Math.Round(b.Now)), N(b.Lasting),
-            N((int)Math.Round(b.Gain - b.Now))
+            b.Card.Key, string.Join('+', plain.Select(x => x.CardKey).Distinct()), N((int)Math.Round(b.Gain)), N(b.Lasting)
         }));
 
         double Capped(Dictionary<object, double> total) => total.Sum(kv => Math.Min(kv.Value, before.GetValueOrDefault(kv.Key, kv.Value)));
