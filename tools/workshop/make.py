@@ -49,7 +49,7 @@ def main():
         f.write("@echo off\r\nset /p STEAMUSER=Compte Steam : \r\n"
                 f'C:\\steamcmd\\steamcmd.exe +login %STEAMUSER% +workshop_build_item "{WIN}\\beta.vdf" '
                 f'+quit\r\n'
-                'echo.\r\necho Copie la ligne "PublishFileID" ci-dessus et envoie-la a Claude.\r\npause\r\n')
+                'echo.\r\necho Termine. Dis a Claude que c'est publie : il verifie la page Steam.\r\npause\r\n')
     print("Ready:", OUT)
 
 
