@@ -18,8 +18,8 @@ Steam page / untapped / SteamDB block automated fetches.
 - **lib:** `lib/beta/` = v0.113.0 (from Zaille75, `lib/beta-v0.113.0/` raw copy), `lib/default/` = v0.111.0,
   `lib/default-v0.107.1/` = old main (PatchCheck by hand: `dotnet run --project tools/PatchCheck -- lib/default-v0.107.1
   build/mod/KikiMAIster.dll`). Both decompiled with `ilspycmd -p -o <dir>/decompiled <dir>/sts2.dll -r <dir>` (same layout:
-  `diff -rq lib/default/decompiled lib/beta/decompiled`). `lib/beta/names.txt` is still the v0.111.0 table: the Fool's
-  names come with the next `KikiMAIster.names.txt` from Zaille75's game.
+  `diff -rq lib/default/decompiled lib/beta/decompiled`). `lib/beta/names.txt` is the v0.113.0 table (from Zaille75's game, 2026-11-14,
+  the Fool's French names included; `Envoyer-a-Claude` now sends `KikiMAIster.names.txt` each time).
 - **Fixed:** `GameBranch.IsV113`; `GameApi.ShouldTakeExtraTurn`; damage funnel `DamageCommandV113` and kill funnel
   `KillCommandV113` (without them no damage / kill credit on v0.113.0); `HitCount` reads "HitCount" (v0.113.0 renamed
   "Repeat" for Coup double, Ricochet, Sept étoiles…: they counted 1 hit), `REPEAT_SHOT` (X cost) unknown; Paré au combat
@@ -43,18 +43,18 @@ Steam page / untapped / SteamDB block automated fetches.
   Tests 195. Workshop description: 1.2.0 is a first quick update that will evolve quickly.
 - **1.2.1 (merged in main 2026-11-14, from `feature/fool-arrows`):** the Fool's arrow cards (spec 01-metrics
   "The Fool's arrows"). Arrows never come back at turn start (only 3 powered hits of their owner on the enemy, its death,
-  Recall / Uproot / Wrest). Capture: `BlockAlternatives.Arrows` ([BranchOnly], v0.113 types) fills `TurnPlay.ShotArrow /
+  Rappel / Déraciner / Empoignade). Capture: `BlockAlternatives.Arrows` ([BranchOnly], v0.113 types) fills `TurnPlay.ShotArrow /
   ArrowsReady / OwnArrowIn / ArrowIn / SerratedBonus / AimAtStart / AimFactor / NotImpaled / KindCount` and `TurnPlayer.
-  ArrowsReady / OwnArrowIn / UnusedBuffs`; `TurnCard.NoArrow` now = "does nothing now" (red Shot, Nail / Recall / Uproot /
-  Wrest without a target), `TurnCard.Shot`; `Lethal.Find(maxShots)`. Core: `TurnReview.ArrowOrder` ("impaleFirst",
-  "shootFirst", Serrated / Cho Firm / Whistling / Aim order losses), `DidNothing` ("emptyShot" / "notImpaled", relic
-  exception), `BuffsUnused` ("buffUnused", Quietus). Inbox 2026-11-13 (12 reports, `logs/inbox/2026-11-13_23-43-05`,
+  ArrowsReady / OwnArrowIn / UnusedBuffs`; `TurnCard.NoArrow` now = "does nothing now" (red Shot, Clouer / Rappel / Déraciner /
+  Empoignade without a target), `TurnCard.Shot`; `Lethal.Find(maxShots)`. Core: `TurnReview.ArrowOrder` ("impaleFirst",
+  "shootFirst", Serrated / Fermeté Cho / Whistling / Visée order losses), `DidNothing` ("emptyShot" / "notImpaled", relic
+  exception), `BuffsUnused` ("buffUnused", Estocade). Inbox 2026-11-13 (12 reports, `logs/inbox/2026-11-13_23-43-05`,
   played with 1.2.0): arrows in co-op (`AlliesHandAtPlay`), Visée on Glissant kept (`Arrows.AimOnSlippery`), "makerFirst"
   (`TurnReview.CardMakers`), "coveringFireLate" (`TurnPlay.AllyBlockPerShot`), Galvanisé kept on purpose, FOOL color, A level
   in the run title, no panel rebuild under the mouse (`Overlay.MouseOverPanels`). Tests 211.
-- **Fool ideas not done:** melodies (Wah / Cho / Ki: first card of each tag per turn); tarot cards; Epic Retrieval on the
+- **Fool ideas not done:** melodies (Wah / Cho / Ki: first card of each tag per turn); tarot cards; Récupération héroïque on the
   wrong target (an enemy at 1 hit from freeing an arrow); a payoff card on a target without an arrow while another enemy had
-  one; Quietus on a weak Shot; Repeat Shot at 0 energy.
+  one; Estocade on a weak Shot; Tir répété at 0 energy.
 - **To test in game (beta):** log lines `game mode blitz|dread|standard`, `empty shot: …`; F8 "Mode" row; `game branch beta`, no "patch … not applied"; damage / kills credited (summary
   not empty); a multi-hit attack (Coup double…) in a "weak attack" / lethal estimate; a Fool run; main branch: `game
   branch main`.
