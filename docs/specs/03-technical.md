@@ -97,7 +97,7 @@ F9 / the settings button write a report the player sends by hand (no network cal
 - The mod's files live in **`<game user folder>/KikiMAIster/`** (Godot `OS.GetUserDataDir()`, the folder that holds the
   game's saves; on Windows `%APPDATA%\SlayTheSpire2\KikiMAIster`), not next to the DLL: a Steam Workshop update replaces
   the item's folder and would wipe them. Files: `KikiMAIster.settings.cfg`, `.records.cfg`, `.fights.cfg`,
-  `.compositions.cfg`, `.chifumi.cfg`, `runs/`, `feedback/`, `KikiMAIster.log` + `.previous.log`, `KikiMAIster.names.txt`.
+  `.compositions.cfg` (1.2.0: `.records/.fights/.compositions.blitz.cfg` and `.dread.cfg`), `.chifumi.cfg`, `runs/`, `feedback/`, `KikiMAIster.log` + `.previous.log`, `KikiMAIster.names.txt`.
 - **Move from older versions:** when that folder does not exist yet, it is created and the `*.cfg` files and the `runs/`
   and `feedback/` folders next to the DLL **and in `<game>/mods/KikiMAIster/`** (a Workshop copy has nothing next to its
   DLL) are copied into it (never overwriting; the old files stay). The log says how
@@ -152,6 +152,9 @@ had the same mod id, so the game loaded the first one in its list whatever the b
   takes the card (`CreatureCmd.Kill(creatures, cardSource, force)`, `KillCommandV113`); fixed hit counts are in a
   "HitCount" variable instead of "Repeat" (`BlockAlternatives.HitCount` reads both).
   `lib/beta/` = v0.113.0, `lib/default/` = v0.111.0 (both decompiled in the same folder layout, for diffs).
+  Game modes are read by name (`GameModes`, `GameMode.ToString()`): the enum values differ (main: Custom = 3; beta: Dread =
+  3, Blitz = 4, custom runs = Standard + `IsCustomGame`, read in a `[BranchOnly]` method). The Fool's arrows:
+  `Hook.AfterArrowShot` (beta only, `ArrowShot` patch, `Prepare()`), `ValueProp.FromArrow` read as 0x20 behind `IsV113`.
 - **Build check:** PatchCheck runs on the same DLL with `lib/beta` and with `lib/default`: every active patch matches one
   method, every reflection target exists, and every game type / member the DLL names exists in that game build unless
   only `[BranchOnly]` methods use it. The build fails otherwise.

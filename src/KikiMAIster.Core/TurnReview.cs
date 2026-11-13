@@ -33,6 +33,8 @@ public sealed class TurnCard
     public bool KeptOnPurpose { get; init; }
     /// An attack made by the pet (Cliquetis…, v0.17.45): it does nothing while the pet is dead.
     public bool NeedsPet { get; init; }
+    /// The Fool (1.2.0): a Shot with no arrow ready (the game shows it in red): playing it now would do nothing.
+    public bool NoArrow { get; init; }
     /// Playing it kills the player's own pet (Détonation osseuse, Sacrifice; v0.17.45).
     public bool SacrificesPet { get; init; }
     public bool GainsBlock { get; init; }
@@ -160,6 +162,11 @@ public class TurnPlay
     public bool PlayedAgain { get; set; }
     /// An Ethereal status or curse it made the player discard (v0.18.9): left in hand it would have been exhausted.
     public string? DiscardedEthereal { get; set; }
+    /// The Fool (1.2.0): a Shot card played with no arrow ready (all of them stuck in enemies): it shot nothing.
+    public bool EmptyShot { get; set; }
+
+    /// An empty shot that did nothing else (no hit, no block, no other effect): energy and card spent for nothing.
+    public bool ShotForNothing => EmptyShot && Hits.Count == 0 && !HadNonDamageEffect && !GaveBlock;
     public HashSet<object> HandWhenFull { get; } = new(ReferenceEqualityComparer.Instance);
 
     /// The first enemy it hit, with all the raw damage it dealt to that enemy; null when it hit no enemy.
@@ -423,7 +430,7 @@ public static class TurnReview
         foreach (var (enemy, left) in s.EnemiesLeft) before.TryAdd(enemy, left);
         (TurnCard Card, double Gain, int Lasting, List<TurnPlay> Line)? best = null;
         foreach (var v in p.Hand.Where(c => c.Kind == CardKind.Attack && c.VulnerableStacks > 0 && c.PlayableExceptEnergy && c.PlayableInstead &&
-                                            !c.KeptOnPurpose && !c.CostsX && !c.LacksStars && !c.Punished && (!c.NeedsPet || p.PetAlive) &&
+                                            !c.KeptOnPurpose && !c.CostsX && !c.LacksStars && !c.Punished && (!c.NeedsPet || p.PetAlive) && !c.NoArrow &&
                                             c.Cost <= budget))
         {
             // Its targets: every enemy, or the best single one.
@@ -519,7 +526,7 @@ public static class TurnReview
                 .Sum(x => x.EnergySpent);
             var budget = p.Energy + freed;
             var attacks = p.Hand.Where(c => c.Kind == CardKind.Attack && c.PlayableExceptEnergy && !c.CostsX && !c.LacksStars && !c.Punished &&
-                                            (!c.NeedsPet || p.PetAlive) && c.DamageOn.TryGetValue(enemy, out var d) && d > 0).Take(10).ToList();
+                                            (!c.NeedsPet || p.PetAlive) && !c.NoArrow && c.DamageOn.TryGetValue(enemy, out var d) && d > 0).Take(10).ToList();
             var (bestDamage, bestMask) = (0, 0);
             for (var mask = 1; mask < 1 << attacks.Count; mask++)
             {
@@ -583,7 +590,7 @@ public static class TurnReview
                 uselessBlock.Add(x);
                 removed += x.BlockAmount;
             }
-        return mine.Where(x => uselessBlock.Contains(x) || (x.UselessDebuff && !x.GaveBlock) ||
+        return mine.Where(x => uselessBlock.Contains(x) || (x.UselessDebuff && !x.GaveBlock) || x.ShotForNothing ||
             (x.Kind == CardKind.Attack && x.ShellCapped > 0 && x.FirstHit == null && !x.HadNonDamageEffect)).ToList();
     }
 
@@ -605,7 +612,7 @@ public static class TurnReview
         // v0.17.45: an attack is no use when every enemy is at its damage cap (Carapace endurcie), nor a pet attack while the
         // pet is dead (unless the player's own card killed it this turn: the attack could have come first).
         bool CanHit(TurnCard c) => c.Kind != CardKind.Attack || (s.OpenEnemy && !s.NothingToKill);
-        bool PetReady(TurnCard c) => !c.NeedsPet || p.PetAlive || p.PetSacrificedThisTurn;
+        bool PetReady(TurnCard c) => (!c.NeedsPet || p.PetAlive || p.PetSacrificedThisTurn) && !c.NoArrow;
         bool WouldHelp(TurnCard c) => p.Affordable(c) && !c.KeptOnPurpose && !NeedlessBlock(c) && !Punished(c) && CanHit(c) && PetReady(c);
         var missedEnergy = energy > 0 && !s.NothingToKill && !s.EnemyAsleep && energyLost && hand.Any(WouldHelp);
         if (missedEnergy)
@@ -634,6 +641,10 @@ public static class TurnReview
         // have been exhausted; discarded, it comes back. Fine when the card's block was needed.
         foreach (var x in useless.Where(x => x.DiscardedEthereal != null))
             r.Events.Add(new MissedChance(actor, "discardEthereal", new[] { x.CardKey, x.DiscardedEthereal! }));
+        // The Fool (1.2.0, Zaille75: "the most obvious mistake"): a Shot played with no arrow ready (the game shows it in red)
+        // shoots nothing. Free ones too: the card is gone for the turn.
+        foreach (var x in s.Plays.Where(x => x.Owner == actor && x.ShotForNothing))
+            r.Events.Add(new MissedChance(actor, "emptyShot", new[] { x.CardKey, N(x.EnergySpent) }));
 
         // A growing card could have been played with the energy left, or instead of a useless card (v0.17.7).
         var spareEnergy = energy + useless.Select(x => x.EnergySpent).DefaultIfEmpty(0).Max();
@@ -789,7 +800,7 @@ public static class TurnReview
     private static bool UsefulLeft(TurnState s, TurnPlayer p, TurnCard c) =>
         !c.StatusOrCurse && c.PlayableExceptEnergy && !c.KeptOnPurpose && !c.Punished && !c.CostsX && !c.LacksStars &&
         (!c.GainsBlock || p.Block < p.Incoming) && (c.Kind != CardKind.Attack || (s.OpenEnemy && !s.NothingToKill && c.DealsDamage)) &&
-        (!c.NeedsPet || p.PetAlive);
+        (!c.NeedsPet || p.PetAlive) && !c.NoArrow;
 
     /// The useful card left in hand that only the saved energy would have paid (not already affordable).
     private static TurnCard? PaidBySaving(TurnState s, TurnPlayer p, int saved, HashSet<object> used, object? besides = null) =>

@@ -113,7 +113,7 @@ public sealed class PlayerStats
     /// "Gâché" misplays: wasted block card plays + useful free cards left in hand (v0.17.26; growing cards: Choix).
     /// v0.17.42: an attack wasted on an enemy a smaller attack or a follow-up (Trou noir) would have killed ("overkill").
     public double MissedWasted => WastedPlayCount + WastedKinds.Sum(k => MissedByKind.GetValueOrDefault(k));
-    public static readonly string[] WastedKinds = { "freeCard", "starsWasted", "overkill", "overkillFollowUp", "stampede", "stampedeSwap", "noDraw", "potionUseless", "discardEthereal" };
+    public static readonly string[] WastedKinds = { "freeCard", "starsWasted", "overkill", "overkillFollowUp", "stampede", "stampedeSwap", "noDraw", "potionUseless", "discardEthereal", "emptyShot" };
     /// Misplays outside fights (v0.17.42): Max HP gained after a heal that was capped by the old Max HP.
     public double MissedOutside => MissedByKind.GetValueOrDefault("maxHpAfterHeal");
     /// Every missed opportunity counted once (trophies).

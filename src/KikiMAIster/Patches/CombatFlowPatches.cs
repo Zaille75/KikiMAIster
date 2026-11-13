@@ -94,6 +94,11 @@ public static class CombatFlowPatches
             return;
         }
         _currentRun = new WeakReference<IRunState>(runState);
+        Capture.Safe("game mode", () =>
+        {
+            GameModes.Current = GameModes.Of(runState);
+            ModLog.Info($"game mode {GameModes.Current}");
+        });
         _runKey = null;
         _runOver = false;
         Capture.Emit(new RunStarted());
@@ -377,6 +382,19 @@ public static class CombatFlowPatches
             BlockAlternatives.OnCardDiscarded(card);
             Capture.Emit(new CardEvent(Capture.ToActor(card.Owner), CardAction.Discarded));
         });
+    }
+
+    /// The Fool's arrows (beta v0.113.0 only): Hook.AfterArrowShot(combatState, owner, arrow, context, source), arrow null when
+    /// none was ready.
+    [HarmonyPatch]
+    public static class ArrowShot
+    {
+        public static bool Prepare() => GameBranch.IsV113;
+
+        public static System.Reflection.MethodBase TargetMethod() => typeof(Hook).GetMethods().Single(m => m.Name == "AfterArrowShot");
+
+        public static void Prefix(Player owner, object? arrow, CardModel? source) =>
+            Capture.Safe("AfterArrowShot", () => BlockAlternatives.OnArrowShot(owner, arrow != null, source));
     }
 
     [HarmonyPatch(typeof(Hook), nameof(Hook.AfterCardExhausted))]

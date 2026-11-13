@@ -609,6 +609,21 @@ public static class BlockAlternatives
         play.OtherThanDebuff = true;
     }
 
+    /// The Fool (beta v0.113.0, 1.2.0): a Shot card (damage "from an arrow") the game shows in red: no arrow is ready.
+    private static bool NoArrowReady(CardModel card) =>
+        GameBranch.IsV113 && card.Type == CardType.Attack && card.DynamicVars.TryGetValue("Damage", out var v) && v is DamageVar dv &&
+        ((int)dv.Props & 0x20) != 0 && card.ShouldGlowRed; // 0x20: ValueProp.FromArrow (v0.113.0)
+
+    /// The Fool (beta v0.113.0, 1.2.0): an arrow shot by the card in progress; with no arrow ready (all stuck in enemies) the
+    /// Shot does nothing. Couverture (Covering Fire) still gives block to allies on an empty shot: not empty then.
+    public static void OnArrowShot(Player owner, bool hadArrow, CardModel? source)
+    {
+        if (hadArrow || source == null || !InProgress.TryPeek(out var play) || play == null || play.Card != source || play.Player != owner) return;
+        if (owner.Creature.Powers.Any(p => p.GetType().Name == "CoveringFirePower")) return;
+        play.EmptyShot = true;
+        ModLog.Info($"empty shot: {Key(source)} by {owner.NetId} (no arrow ready)");
+    }
+
     /// A card discarded from the hand by the play in progress (Survivant, Préparatifs…). v0.18.9 (Zaille75): an effect only when
     /// something reacts to it: the card is Sly (Ruse: played when discarded) or a relic or power acts on discards (Tingsha,
     /// Bandages résistants). An Ethereal curse or status discarded is noted: it would have been exhausted at the end of the turn.
@@ -876,6 +891,7 @@ public static class BlockAlternatives
         LacksStars = LacksStars(c),
         KeptOnPurpose = KeptOnPurpose(c, combat),
         NeedsPet = c.Tags.Contains(CardTag.OstyAttack),
+        NoArrow = NoArrowReady(c),
         SacrificesPet = SacrificesPet.Contains(c.Id.Entry),
         GainsBlock = c.GainsBlock,
         Block = c.GainsBlock ? EstimateBlock(c) : 0,
@@ -1105,6 +1121,8 @@ public static class BlockAlternatives
     {
         var id = card.Id.Entry;
         if (UnknownHits.Contains(id)) return null;
+        // The Fool (1.2.0): a Shot with no arrow ready hits nothing (left out of the estimates).
+        if (NoArrowReady(card)) return null;
         if (card.DynamicVars.TryGetValue("CalculatedHits", out var calc) && calc is CalculatedVar cv) return Math.Max(1, (int)cv.Calculate(target));
         if (card is Dismantle) return target?.HasPower<VulnerablePower>() == true ? 2 : 1;
         // Beta v0.113.0: fixed hit counts moved from "Repeat" to "HitCount" (Repeat stays for other counts).

@@ -7,7 +7,8 @@ namespace KikiMAIster.UI;
 /// in the combat summary when a fight beats one.
 public static class FightRecordStore
 {
-    private static FightRecords? _book;
+    /// One book per stats mode (1.2.0): standard, blitz, dread.
+    private static readonly Dictionary<string, FightRecords> Books = new();
 
     /// The notice of each fight of this session that broke a record, by fight number.
     public static readonly Dictionary<int, string> Notes = new();
@@ -16,7 +17,7 @@ public static class FightRecordStore
     {
         get
         {
-            return DataDir.File("KikiMAIster.fights.cfg");
+            return DataDir.File($"KikiMAIster.fights{GameModes.Suffix(GameModes.Current)}.cfg");
         }
     }
 
@@ -24,13 +25,15 @@ public static class FightRecordStore
     {
         get
         {
-            if (_book != null) return _book;
-            _book = new FightRecords();
+            var mode = GameModes.StatsOf(GameModes.Current);
+            if (Books.TryGetValue(mode, out var book)) return book;
+            book = new FightRecords();
             Capture.Safe("FightRecordStore.Load", () =>
             {
-                if (FilePath != null && File.Exists(FilePath)) _book = FightRecords.Read(File.ReadAllText(FilePath));
+                if (FilePath != null && File.Exists(FilePath)) book = FightRecords.Read(File.ReadAllText(FilePath));
             });
-            return _book;
+            Books[mode] = book;
+            return book;
         }
     }
 

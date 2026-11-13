@@ -42,7 +42,7 @@ public static class RunSummary
         var names = Capture.Engine.Players.ToDictionary(kv => kv.Key, kv => kv.Value.Name);
         var characters = Capture.Engine.Players.ToDictionary(kv => kv.Key, kv => kv.Value.Character);
         _update = RecordStore.Add(run, names, characters, victory, Patches.CombatFlowPatches.Ascension);
-        CompositionStore.Add(characters, Patches.CombatFlowPatches.Ascension, victory);
+        CompositionStore.Add(characters, Patches.CombatFlowPatches.Ascension, victory, GameModes.Current);
         _showPending = true;
     }
 
@@ -317,7 +317,8 @@ public static class RunSummary
         var update = ended ? _update : null;
 
         var header = new HBoxContainer();
-        var title = Overlay.MakeLabel(Loc.T("run.title") + " · " +
+        var title = Overlay.MakeLabel(Loc.T("run.title") +
+            (GameModes.Separate(GameModes.Current) ? " " + GameModes.Name(GameModes.Current) : "") + " · " +
             (ended ? Loc.T(_victory ? "summary.victory" : "summary.defeat") : Loc.T("summary.inProgress")), Overlay.Accent);
         title.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         header.AddChild(title);
@@ -399,43 +400,41 @@ public static class ChifumiStore
 /// The record book, saved in the data folder (DataDir; not a .json file, as before v1.0.1 it sat in mods/, where every .json is read as a manifest).
 public static class RecordStore
 {
-    private static RecordBook? _book;
+    /// One book per stats mode (1.2.0): standard, blitz, dread.
+    private static readonly Dictionary<string, RecordBook> Books = new();
 
-    private static string? FilePath
-    {
-        get
-        {
-            return DataDir.File("KikiMAIster.records.cfg");
-        }
-    }
+    private static string? FilePath => DataDir.File($"KikiMAIster.records{GameModes.Suffix(GameModes.Current)}.cfg");
 
+    /// The records of the current run's mode.
     public static RecordBook Book
     {
         get
         {
-            if (_book != null) return _book;
-            _book = new RecordBook();
+            var mode = GameModes.StatsOf(GameModes.Current);
+            if (Books.TryGetValue(mode, out var loaded)) return loaded;
+            var book = new RecordBook();
             Capture.Safe("RecordStore.Load", () =>
             {
-                if (FilePath != null && File.Exists(FilePath)) _book = RecordBook.Read(File.ReadAllText(FilePath));
+                if (FilePath != null && File.Exists(FilePath)) book = RecordBook.Read(File.ReadAllText(FilePath));
                 // Once (v0.18.9, Zaille75): the misplay rules changed, so the "Distrait" records start over.
                 if (!ModConfig.Current.MissedRecordsCleared)
                 {
-                    _book.Clear("trophy.missed");
-                    if (FilePath != null && File.Exists(FilePath)) File.WriteAllText(FilePath, _book.Write());
+                    book.Clear("trophy.missed");
+                    if (FilePath != null && File.Exists(FilePath)) File.WriteAllText(FilePath, book.Write());
                     ModConfig.Current.MissedRecordsCleared = true;
                     ModConfig.Current.Save();
                     ModLog.Info("Distrait records cleared (misplay rules changed)");
                 }
                 // Once (v0.17.1): "Maître des malus" counted À l'attaque !, which is no debuff: its records start over.
                 if (ModConfig.Current.DebuffRecordsCleared) return;
-                _book.Clear("trophy.debuffs");
-                if (FilePath != null && File.Exists(FilePath)) File.WriteAllText(FilePath, _book.Write());
+                book.Clear("trophy.debuffs");
+                if (FilePath != null && File.Exists(FilePath)) File.WriteAllText(FilePath, book.Write());
                 ModConfig.Current.DebuffRecordsCleared = true;
                 ModConfig.Current.Save();
                 ModLog.Info("Maître des malus records cleared (À l'attaque ! is no longer a debuff)");
             });
-            return _book;
+            Books[mode] = book;
+            return book;
         }
     }
 

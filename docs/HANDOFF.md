@@ -30,16 +30,17 @@ Steam page / untapped / SteamDB block automated fetches.
   (Étincelle vitale); Un pour tous now also boosts autoplayed 0-cost cards (rule unchanged); Hook.AfterDeath gained a
   card parameter (patch binds by name); new campfire options (EVOLVE for Byrdpip, RESTORE for the Wuppy relic) go
   through `IsEnabled`; `GameMode` enum: Custom gone, Dread / Blitz added (the mod only names Standard).
-- **Questions for Zaille75 (open):**
-  1. Blitz / Dread runs: count them in compositions (F8), records, trophies, or keep Standard only? (F8 today: Standard
-     only.) In Blitz gold is useless: hide the Or section there?
-  2. Wuppy (new event relic, a pet that takes damage **before** block, `WuppysLoyaltyPower.ModifyPreBlockDamageTarget`):
-     credit the damage it takes like Titos (PV évités for its owner)? Block kept because Wuppy took the hit is then not "gâché".
-  3. Paré au combat (now 15(20) Block + Attacks in hand cost 1 less): count it as a block card with a side effect (never
-     "gâché" when an attack was in hand) or as pure block?
-  4. The Fool: arrows (`ArrowCmd`: shots need an arrow, Rain Shot does nothing without one), melodies (`MelodyCmd`),
-     tarot cards. Misplay estimates assume an attack always hits: wait for a first Fool log before adding rules?
-- **To test in game (beta):** log line `game branch beta`, no "patch … not applied"; damage / kills credited (summary
+- **Zaille75's answers (2026-11-13), done:** (1) Blitz / Dread: their own stats (`GameModes`, per-mode files for
+  records, fight records, compositions; F8 "Mode" row); (2) Wuppy like Titos (already: it is a real pet,
+  `PlayerCmd.AddPet`; nothing Osty-specific in the damage path); (4) the Fool's most obvious mistake: Shot with no arrow
+  ready ("emptyShot", `TurnPlay.EmptyShot` from `Hook.AfterArrowShot` with a null arrow; `TurnCard.NoArrow` /
+  `BlockAlternatives.NoArrowReady` keep such Shots out of suggestions and estimates). Tests 192.
+- **Still open:** (3) Paré au combat (15(20) Block + Attacks in hand cost 1 less until played): pure block (can be gâché)
+  or block with a side effect (never gâché when an attack was in hand)? Today: pure block. Hide Or in Blitz (gold is
+  useless there)? Not asked yet. Two pets for one owner (Tisse-Mort with Wuppy) share the per-owner pet bookkeeping.
+- **Fool ideas not done (need a log):** shooting before attacks that would have freed an arrow (3 hits on the impaled
+  enemy bring it back); melodies (Wah / Cho / Ki: first card of each tag per turn); tarot cards.
+- **To test in game (beta):** log lines `game mode blitz|dread|standard`, `empty shot: …`; F8 "Mode" row; `game branch beta`, no "patch … not applied"; damage / kills credited (summary
   not empty); a multi-hit attack (Coup double…) in a "weak attack" / lethal estimate; a Fool run; main branch: `game
   branch main`.
 

@@ -185,6 +185,8 @@ public static class CompositionWindow
         _contextSignature = Signature(context);
         _openedInLobby = InLobby && !Overlay.InRun;
         _players = context.Players > 0 ? context.Players : _players > 0 ? _players : 2;
+        // The current run's mode (1.2.0), Standard in the lobby before any run.
+        CompositionStore.Mode = Overlay.InRun ? GameModes.StatsOf(GameModes.Current) : GameModes.Standard;
         _ascension = context.Ascension ?? CompositionStore.Data.MostPlayedAscension();
         Pick();
         Rebuild();
@@ -308,6 +310,29 @@ public static class CompositionWindow
                 _content.AddChild(Overlay.MakeLabel(Loc.T("compo.noHistory"), Overlay.Muted));
         }
 
+        // Game mode (1.2.0): Blitz and Dread have their own stats; shown once a run of them exists (or this run is one).
+        var modes = CompositionStore.ModesPlayed().ToList();
+        if (!modes.Contains(CompositionStore.Mode)) modes.Add(CompositionStore.Mode);
+        if (modes.Count > 1)
+        {
+            var modeRow = new HBoxContainer();
+            modeRow.AddChild(Overlay.MakeLabel(Loc.T("compo.mode"), Overlay.Text));
+            foreach (var mode in GameModes.WithStats.Where(modes.Contains))
+            {
+                var b = Overlay.MakeButton(GameModes.Name(mode));
+                b.AddThemeColorOverride("font_color", mode == CompositionStore.Mode ? Overlay.Accent : Overlay.Muted);
+                b.Pressed += () => Capture.Safe("CompositionWindow.Mode", () =>
+                {
+                    CompositionStore.Mode = mode;
+                    _ascension = null;
+                    Pick();
+                    _rebuildPending = true;
+                });
+                modeRow.AddChild(b);
+            }
+            _content.AddChild(modeRow);
+        }
+
         var count = new HBoxContainer();
         count.AddChild(Overlay.MakeLabel(Loc.T("compo.players"), Overlay.Text));
         foreach (var n in new[] { 1, 2, 3, 4 })
@@ -331,7 +356,8 @@ public static class CompositionWindow
         var levels = new HBoxContainer();
         levels.AddChild(Overlay.MakeLabel(Loc.T("compo.ascension"), Overlay.Text));
         var played = data.Ascensions().ToList();
-        if (Overlay.InRun && !played.Contains(Patches.CombatFlowPatches.Ascension)) played.Add(Patches.CombatFlowPatches.Ascension);
+        if (Overlay.InRun && GameModes.StatsOf(GameModes.Current) == CompositionStore.Mode && !played.Contains(Patches.CombatFlowPatches.Ascension))
+            played.Add(Patches.CombatFlowPatches.Ascension);
         if (_ascension is { } chosen && !played.Contains(chosen)) played.Add(chosen);
         foreach (var level in new int?[] { null }.Concat(played.OrderByDescending(a => a).Select(a => (int?)a)))
         {
@@ -552,9 +578,26 @@ public static class CompositionWindow
 /// Composition tallies, saved in the data folder (DataDir; not a .json file, as before v1.0.1 it sat in mods/, where every .json is read as a manifest).
 public static class CompositionStore
 {
-    private static Compositions? _data;
-    /// The finished runs of the game's history (and of this session), with their players: "this group" stats.
-    private static readonly List<Compositions.Run> Runs = new();
+    /// Per stats mode (1.2.0, Zaille75: Blitz and Dread have their own stats): standard, blitz, dread.
+    private static readonly Dictionary<string, Compositions> Datas = new();
+    /// The finished runs of the game's history (and of this session), with their players: "this group" stats, per mode.
+    private static readonly Dictionary<string, List<Compositions.Run>> AllRuns = new();
+    private static bool _loaded;
+
+    /// The mode shown by the window: "standard", "blitz" or "dread".
+    public static string Mode { get; set; } = GameModes.Standard;
+
+    private static List<Compositions.Run> Runs => RunsOf(Mode);
+
+    private static List<Compositions.Run> RunsOf(string mode) =>
+        AllRuns.TryGetValue(mode, out var runs) ? runs : AllRuns[mode] = new List<Compositions.Run>();
+
+    /// Modes with at least one run (the standard one always).
+    public static IEnumerable<string> ModesPlayed()
+    {
+        _ = Data;
+        return GameModes.WithStats.Where(m => m == GameModes.Standard || RunsOf(m).Count > 0 || DataOf(m).Ascensions().Any());
+    }
 
     /// The game's run history could be read (else "this group" has no data).
     public static bool HistoryRead { get; private set; }
@@ -581,47 +624,53 @@ public static class CompositionStore
         return Compositions.OfGroup(Runs, players);
     }
 
-    private static string? FilePath
-    {
-        get
-        {
-            return DataDir.File("KikiMAIster.compositions.cfg");
-        }
-    }
+    private static string? FilePath(string mode) => DataDir.File($"KikiMAIster.compositions{GameModes.Suffix(mode)}.cfg");
+
+    private static Compositions DataOf(string mode) => Datas.TryGetValue(mode, out var d) ? d : Datas[mode] = new Compositions();
 
     /// Rebuilt from the game's run history once per game session (the first time it is needed), then kept up to date
     /// by the runs that end during the session. The saved file is only a fallback when the history cannot be read.
+    /// The tallies of the mode shown (Mode).
     public static Compositions Data
     {
         get
         {
-            if (_data != null) return _data;
-            _data = new Compositions();
-            Capture.Safe("CompositionStore.Load", () =>
-            {
-                if (FilePath != null && File.Exists(FilePath)) _data = Compositions.Read(File.ReadAllText(FilePath));
-            });
-            Capture.Safe("CompositionStore.History", () =>
-            {
-                if (FromHistory() is not { } history) return;
-                _data = Compositions.Of(history);
-                Runs.Clear();
-                Runs.AddRange(history);
-                HistoryRead = true;
-                if (FilePath != null) File.WriteAllText(FilePath, _data.Write());
-            });
-            return _data;
+            if (!_loaded) Load();
+            return DataOf(Mode);
         }
     }
 
-    /// Every finished standard run of the game's history (this profile): its players' characters, ascension and result.
-    /// Daily and custom runs, and abandoned runs, are left out. Null when the history cannot be read.
-    private static List<Compositions.Run>? FromHistory()
+    private static void Load()
+    {
+        _loaded = true;
+        foreach (var mode in GameModes.WithStats)
+            Capture.Safe("CompositionStore.Load", () =>
+            {
+                if (FilePath(mode) is { } path && File.Exists(path)) Datas[mode] = Compositions.Read(File.ReadAllText(path));
+            });
+        Capture.Safe("CompositionStore.History", () =>
+        {
+            if (FromHistory() is not { } history) return;
+            foreach (var mode in GameModes.WithStats)
+            {
+                var runs = history.GetValueOrDefault(mode) ?? new List<Compositions.Run>();
+                Datas[mode] = Compositions.Of(runs);
+                RunsOf(mode).Clear();
+                RunsOf(mode).AddRange(runs);
+                if (FilePath(mode) is { } path && (runs.Count > 0 || File.Exists(path))) File.WriteAllText(path, Datas[mode].Write());
+            }
+            HistoryRead = true;
+        });
+    }
+
+    /// Every finished standard, Blitz or Dread run of the game's history (this profile), per mode: its players' characters,
+    /// ascension and result. Daily and custom runs, and abandoned runs, are left out. Null when the history cannot be read.
+    private static Dictionary<string, List<Compositions.Run>>? FromHistory()
     {
         var save = SaveManager.Instance;
         if (save == null) return null;
         var watch = System.Diagnostics.Stopwatch.StartNew();
-        var result = new List<Compositions.Run>();
+        var result = new Dictionary<string, List<Compositions.Run>>();
         int read = 0, counted = 0, failed = 0;
         foreach (var name in save.GetAllRunHistoryNames())
         {
@@ -634,8 +683,9 @@ public static class CompositionStore
                     failed++;
                     continue;
                 }
-                if (h.GameMode != GameMode.Standard || h.WasAbandoned || h.Players.Count == 0) continue;
-                result.Add(new Compositions.Run(h.Players.Select(p => p.Id).ToList(), h.Players.Select(p => p.Character.Entry).ToList(), h.Ascension, h.Win));
+                var mode = GameModes.Of(h);
+                if (!GameModes.WithStats.Contains(mode) || h.WasAbandoned || h.Players.Count == 0) continue;
+                (result.TryGetValue(mode, out var list) ? list : result[mode] = new List<Compositions.Run>()).Add(new Compositions.Run(h.Players.Select(p => p.Id).ToList(), h.Players.Select(p => p.Character.Entry).ToList(), h.Ascension, h.Win));
                 counted++;
             }
             catch (Exception e)
@@ -644,17 +694,22 @@ public static class CompositionStore
                 ModLog.Error($"run history {name}", e);
             }
         }
-        ModLog.Info($"compositions from the run history: {counted} runs counted out of {read} ({failed} unreadable) in {watch.ElapsedMilliseconds} ms");
+        ModLog.Info($"compositions from the run history: {counted} runs counted out of {read} ({failed} unreadable) in {watch.ElapsedMilliseconds} ms" +
+                    $" ({string.Join(", ", result.Select(kv => $"{kv.Key} {kv.Value.Count}"))})");
         return read > 0 && failed < read ? result : null;
     }
 
     /// A finished run (victory or defeat) counts one game for its composition.
-    public static void Add(IReadOnlyDictionary<ulong, string> players, int ascension, bool victory) => Capture.Safe("CompositionStore.Save", () =>
+    /// Daily and custom runs are not counted (as in the history).
+    public static void Add(IReadOnlyDictionary<ulong, string> players, int ascension, bool victory, string runMode) => Capture.Safe("CompositionStore.Save", () =>
     {
+        if (!GameModes.WithStats.Contains(runMode)) return;
+        if (!_loaded) Load();
         var list = players.Values.ToList();
-        Data.Add(list, ascension, victory);
-        Runs.Add(new Compositions.Run(players.Keys.ToList(), list, ascension, victory));
-        if (FilePath != null) File.WriteAllText(FilePath, Data.Write());
-        ModLog.Info($"composition A{ascension} {Compositions.KeyOf(list)}: {(victory ? "victory" : "defeat")} recorded");
+        var data = DataOf(runMode);
+        data.Add(list, ascension, victory);
+        RunsOf(runMode).Add(new Compositions.Run(players.Keys.ToList(), list, ascension, victory));
+        if (FilePath(runMode) is { } path) File.WriteAllText(path, data.Write());
+        ModLog.Info($"composition {runMode} A{ascension} {Compositions.KeyOf(list)}: {(victory ? "victory" : "defeat")} recorded");
     });
 }
