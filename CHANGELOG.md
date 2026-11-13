@@ -3,12 +3,14 @@
 Summary by version line. The detailed notes of every version are in [docs/specs/02-ui.md](docs/specs/02-ui.md)
 (interface) and [docs/specs/01-metrics.md](docs/specs/01-metrics.md) (rules).
 
-## 1.2.0 (unreleased)
+## 1.2.0 (2026-11-13) — first quick update for the beta v0.113.0, more to come
 Game update: works with the beta v0.113.0 (the Fool, Blitz, Dread) and the main branch v0.111.0. Damage and kills are
 tracked again on the new beta; multi-hit attacks count all their hits again in the misplay estimates (the game renamed
 their hit count). Paré au combat is no longer treated as an energy-only card. Blitz and Dread have their own records,
 fight records and compositions (F8: new "Mode" row). The Fool: a Shot played with no arrow ready is a new mistake, and such
-a Shot is never suggested as a card to play. Wuppy counts like Titos.
+a Shot is never suggested as a card to play. Wuppy counts like Titos, and a Tisse-Mort with both keeps each pet's stats
+apart. Paré au combat is never "gâché" (its cost cut is a side effect); keeping it when it would have paid for more attacks
+is a new "Choix" mistake. Blitz: no Or section and no gold trophies. New trophy Pie voleuse (most relics).
 
 ## 1.1.1 (2026-11-06)
 Misplays: new "Vulnérable gardé" (an attack giving Vulnérable, like Tope là, kept while plain attacks were played);

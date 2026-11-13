@@ -3,7 +3,7 @@ using Xunit;
 
 namespace KikiMAIster.Core.Tests;
 
-/// 1.2.0 (game update beta v0.113.0): the Fool's Shots with no arrow ready.
+/// 1.2.0 (game update beta v0.113.0): the Fool's Shots with no arrow ready, Paré au combat kept.
 public class Update1_2_0Tests
 {
     private static readonly Actor A = Actor.Player(1, 1);
@@ -57,5 +57,59 @@ public class Update1_2_0Tests
         Assert.Empty(Missed(TurnReview.Resolve(State(player)), "energy"));
         var withArrow = new TurnPlayer { Actor = A, Energy = 1, Hand = { Card("FOOLISH_SHOT", damage: 15) } };
         Assert.Single(Missed(TurnReview.Resolve(State(withArrow)), "energy"));
+    }
+
+    private TurnPlay Attack(string key, int energy, object? inHand = null) => new()
+    {
+        Id = ++_nextId, Owner = A, CardRef = new object(), CardKey = $"Card:{key}", Kind = CardKind.Attack, EnergySpent = energy,
+        HandAtPlay = inHand == null ? new List<object>() : new List<object> { inHand }
+    };
+
+    /// 3 energy: Paré au combat (3) kept, two 1-cost Frappes played; a third Frappe and a 2-cost Coup de tonnerre left.
+    /// With it first: 0 left for Frappes at 0 → the two played + the third, Coup de tonnerre at 1 not paid: one more attack.
+    [Fact]
+    public void ExpectAFight_Kept_WhenItPaidForMoreAttacks()
+    {
+        var cut = new TurnCard { Ref = new object(), Key = "Card:EXPECT_A_FIGHT", Kind = CardKind.Skill, Cost = 3, GainsBlock = true };
+        var player = new TurnPlayer
+        {
+            Actor = A, Energy = 1, AttackDiscount = cut,
+            Hand = { cut, Card("STRIKE_IRONCLAD", cost: 1, damage: 6), Card("THUNDERCLAP", cost: 2, damage: 4) }
+        };
+        var r = TurnReview.Resolve(State(player, Attack("STRIKE_IRONCLAD", 1, cut.Ref), Attack("STRIKE_IRONCLAD", 1, cut.Ref)));
+        Assert.Equal(new[] { "Card:EXPECT_A_FIGHT", "1" }, Missed(r, "attackDiscount").Single().Args);
+        // Drawn after the attacks: they could not have been cheaper, and 1 energy does not pay for it.
+        var late = TurnReview.Resolve(State(player, Attack("STRIKE_IRONCLAD", 1), Attack("STRIKE_IRONCLAD", 1)));
+        Assert.Empty(Missed(late, "attackDiscount"));
+    }
+}
+
+/// 1.2.0: a Tisse-Mort with Titos and Wuppy (two pets), the Pie voleuse trophy.
+public class Pets1_2_0Tests : TestBase
+{
+    [Fact]
+    public void TwoPets_WuppyDying_KeepsTitosHpGivenByAnAlly()
+    {
+        var titos = Actor.Pet(IdA, 10);
+        var wuppy = Actor.Pet(IdA, 12);
+        Engine.Handle(new PetHpGiven(A, 5, A, titos));
+        Engine.Handle(new PetHpGiven(B, 5, A, titos)); // B gave Titos 5 HP
+        EnemyHits(wuppy, 0, 6, killed: true);           // Wuppy dies: its HP were A's own
+        Assert.Equal(6, Combat(IdA).AbsorbedByPet);
+        Assert.Equal(0, Combat(IdB).PetAbsorbedForAllies);
+        EnemyHits(titos, 0, 4);                          // Titos: half of it is B's help
+        Assert.Equal(2, Combat(IdB).PetAbsorbedForAllies);
+        Assert.Equal(8, Combat(IdA).AbsorbedByPet);
+        Assert.Equal(1, Combat(IdA).PetDeaths);
+    }
+
+    [Fact]
+    public void Magpie_MostRelicsAtTheEnd()
+    {
+        Engine.Handle(new CombatEnded(true));
+        Engine.Handle(new RunHistoryRead(A, 0, 0, new Dictionary<string, double>(), Economy: new RunEconomy(0, 0, 0, 0, 0, 0, 0, 0, 0, 7)));
+        Engine.Handle(new RunHistoryRead(B, 0, 0, new Dictionary<string, double>(), Economy: new RunEconomy(0, 0, 0, 0, 0, 0, 0, 0, 0, 9)));
+        var run = new Dictionary<ulong, PlayerStats> { [IdA] = Engine.Get(Scope.Run, IdA), [IdB] = Engine.Get(Scope.Run, IdB) };
+        Assert.Equal(new[] { (IdB, 9.0) }, Trophies.Winners(Trophies.All.Single(c => c.Key == "trophy.relics"), run));
     }
 }

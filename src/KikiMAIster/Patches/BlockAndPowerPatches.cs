@@ -79,7 +79,7 @@ public static class BlockAndPowerPatches
                 StatPart(call?.Source.Kind == SourceKind.Orb && call.Giver != null ? call.Giver.Creature : receiver, amount, call?.Source)));
             // Sacrifice: its block comes from the pet's max HP (allies who gave those HP enabled it).
             if (call?.Source is { Kind: SourceKind.Card } src && src.Id == ModelDb.GetId<Sacrifice>().Entry)
-                Capture.Emit(new PetHpBlock(Capture.ToActor(receiver)));
+                Capture.Emit(new PetHpBlock(Capture.ToActor(receiver), receiver.Player?.Osty is { } osty ? Capture.ToActor(osty) : default));
             // Oubli (temporary Dexterity from an ally, v0.17.38): the Dexterity they gave added to a card's block.
             if (call?.Source.Kind == SourceKind.Card && receiver.IsPlayer)
                 Capture.Safe("block enabled", () => EnabledByAllyDexterity(receiver, amount));
@@ -381,8 +381,9 @@ public static class BlockAndPowerPatches
                 // The heal that is part of a summon is already counted by History.Summoned.
                 if (!Capture.IsInsideCall(typeof(OstyCmd)))
                     Capture.Emit(new PetHpGiven(healer.Kind == ActorKind.Player ? healer : Actor.Player(target.PlayerId, 0), healed,
-                        Actor.Player(target.PlayerId, 0)));
-                if (creature.PetOwner is { } petOwner) BlockAlternatives.OnPetHpRaised(petOwner, healed);
+                        Actor.Player(target.PlayerId, 0), target));
+                // Déchaînement grows with Titos's HP only (1.2.0: not Wuppy's).
+                if (creature.PetOwner is { } petOwner && petOwner.Osty == creature) BlockAlternatives.OnPetHpRaised(petOwner, healed);
                 return;
             }
             // What healed (v0.17.39): the potion being drunk, else the relic, card or power calling.
@@ -400,7 +401,9 @@ public static class BlockAndPowerPatches
             BlockAlternatives.OnEffect();
             // A card that summons for every player (co-op) is credited to whoever played it, not to each pet owner.
             var giver = Capture.CurrentActingPlayer ?? player;
-            Capture.Emit(new PetHpGiven(Capture.ToActor(giver), amount, Capture.ToActor(player)));
+            // History.Summoned is Titos's (OstyCmd): the pet is the player's Osty (1.2.0: Wuppy can be there too).
+            Capture.Emit(new PetHpGiven(Capture.ToActor(giver), amount, Capture.ToActor(player),
+                player.Osty is { } osty ? Capture.ToActor(osty) : default));
             BlockAlternatives.OnPetHpRaised(player, amount);
         });
     }

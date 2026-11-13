@@ -99,6 +99,8 @@ public class TurnPlay
     /// A Surin (Lames fantomatiques, v1.1.1).
     public bool Shiv { get; init; }
     public int EnergySpent { get; init; }
+    /// An X-cost card (1.2.0: Paré au combat does not lower it).
+    public bool CostsX { get; init; }
     /// Stars paid for this card (v0.17.34).
     public int StarsSpent { get; init; }
     public bool Ethereal { get; init; }
@@ -200,6 +202,8 @@ public sealed class TurnPlayer
     public int OrichalcumBlock { get; init; }
     public List<TurnRelic> Relics { get; init; } = new();
     public List<TurnCard> Hand { get; init; } = new();
+    /// Paré au combat (beta v0.113.0) left in hand: "Attacks in your Hand cost 1 less Energy until played" (1.2.0).
+    public TurnCard? AttackDiscount { get; init; }
     /// La grande manœuvre's power is already on the player.
     public bool GambitActive { get; init; }
     public bool AlliesAlive { get; init; }
@@ -629,6 +633,31 @@ public static class TurnReview
             ? energy : 0;
 
         if (energySurplus > 0) r.Events.Add(new HelpGiven(actor, "energySurplus", energySurplus));
+
+        // Paré au combat kept (1.2.0, Zaille75): played first, it made every attack in hand 1 cheaper. With the energy the
+        // attacks played since it was in hand cost plus the energy left, it would have paid for itself and more attacks
+        // (those played, cheaper, then the ones left in hand, cheapest first). Choix: "attackDiscount" (card, attacks more).
+        if (p.AttackDiscount is { PlayableExceptEnergy: true, CostsX: false } cut && !s.NothingToKill && !s.EnemyAsleep)
+        {
+            var played = s.Plays.Where(x => x.Owner == actor && x.Kind == CardKind.Attack && !x.CostsX && x.HandAtPlay.Contains(cut.Ref)).ToList();
+            var left = played.Sum(x => x.EnergySpent) + energy - cut.Cost;
+            if (left >= 0)
+            {
+                var costs = played.Select(x => Math.Max(0, x.EnergySpent - 1))
+                    .Concat(hand.Where(c => c != cut && c.Kind == CardKind.Attack && c.PlayableExceptEnergy && !c.CostsX && !c.CostsStars &&
+                                            !c.KeptOnPurpose && !Punished(c) && CanHit(c) && PetReady(c))
+                        .Select(c => Math.Max(0, c.Cost - 1)))
+                    .OrderBy(c => c);
+                var attacks = 0;
+                foreach (var cost in costs)
+                {
+                    if (cost > left) break;
+                    left -= cost;
+                    attacks++;
+                }
+                if (attacks > played.Count) r.Events.Add(new MissedChance(actor, "attackDiscount", new[] { cut.Key, N(attacks - played.Count) }));
+            }
+        }
 
         // Energy spent for nothing (v0.17.37), even with nothing else to play (v0.18.7, Zaille75: a stat, not a mistake);
         // Pael's Tears: that energy would have been left.

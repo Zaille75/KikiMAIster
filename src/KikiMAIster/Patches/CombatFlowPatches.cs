@@ -97,6 +97,7 @@ public static class CombatFlowPatches
         Capture.Safe("game mode", () =>
         {
             GameModes.Current = GameModes.Of(runState);
+            Trophies.NoGold = GameModes.Current == GameModes.Blitz;
             ModLog.Info($"game mode {GameModes.Current}");
         });
         _runKey = null;

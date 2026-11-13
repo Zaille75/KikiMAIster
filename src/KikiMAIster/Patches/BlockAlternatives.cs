@@ -609,6 +609,9 @@ public static class BlockAlternatives
         play.OtherThanDebuff = true;
     }
 
+    /// Paré au combat on the beta v0.113.0 (an "Energy" variable: Attacks in hand cost 1 less); main v0.111.0: block per Strength.
+    private static bool IsAttackDiscount(CardModel card) => card is ExpectAFight && card.DynamicVars.TryGetValue("Energy", out _);
+
     /// The Fool (beta v0.113.0, 1.2.0): a Shot card (damage "from an arrow") the game shows in red: no arrow is ready.
     private static bool NoArrowReady(CardModel card) =>
         GameBranch.IsV113 && card.Type == CardType.Attack && card.DynamicVars.TryGetValue("Damage", out var v) && v is DamageVar dv &&
@@ -706,13 +709,15 @@ public static class BlockAlternatives
             Kind = KindOf(cardPlay.Card.Type),
             Shiv = cardPlay.Card.Tags.Contains(CardTag.Shiv),
             EnergySpent = cardPlay.Resources.EnergySpent,
+            CostsX = cardPlay.Card.EnergyCost.CostsX,
             StarsSpent = cardPlay.Resources.StarsSpent,
             Ethereal = cardPlay.Card.Keywords.Contains(CardKeyword.Ethereal),
             // Genetic Algorithm / The Scythe grow each time they are played: a side effect no hook reports.
             // Sacrifice kills the player's own pet (validated by Zaille75: never wasted).
-            HadOtherEffect = IsGrowing(cardPlay.Card) || cardPlay.Card is Sacrifice,
-            HadNonDamageEffect = IsGrowing(cardPlay.Card),
-            OtherThanDebuff = IsGrowing(cardPlay.Card),
+            // Paré au combat (v0.113.0) makes the attacks in hand cheaper: never gâché (1.2.0, Zaille75).
+            HadOtherEffect = IsGrowing(cardPlay.Card) || cardPlay.Card is Sacrifice || IsAttackDiscount(cardPlay.Card),
+            HadNonDamageEffect = IsGrowing(cardPlay.Card) || IsAttackDiscount(cardPlay.Card),
+            OtherThanDebuff = IsGrowing(cardPlay.Card) || IsAttackDiscount(cardPlay.Card),
             UsefulCardsInHand = hand.Where(c => c != cardPlay.Card && IsUseful(c)).Select(c => new SeenCard(c, Key(c))).ToList(),
             HandAtPlay = hand.Where(c => c != cardPlay.Card).ToList<object>()
         };
@@ -866,6 +871,7 @@ public static class BlockAlternatives
             OrichalcumBlock = orichalcum == null ? 0 : (int)orichalcum.DynamicVars.Block.BaseValue,
             Relics = player.Relics.Select(RelicView).OfType<TurnRelic>().ToList(),
             Hand = st.Hand.Cards.Select(c => CardView(c, combat, creature)).ToList(),
+            AttackDiscount = st.Hand.Cards.FirstOrDefault(IsAttackDiscount) is { } cut ? CardView(cut, combat, creature) : null,
             GambitActive = creature.GetPower<TheGambitPower>() != null,
             AlliesAlive = combat.Players.Any(p => p != player && p.Creature.IsAlive),
             PetAlive = !player.IsOstyMissing,

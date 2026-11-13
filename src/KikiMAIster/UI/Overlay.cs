@@ -92,7 +92,9 @@ public static class Overlay
         // This run's rock-paper-scissors (v0.17.45: moved from Coop; the records are in the trophies window).
         new("chifumi", ChifumiRow, () => Visible("chifumi", ChifumiColumns), s => s.ChifumiWon * 100 - s.ChifumiPlayed, CoopOnly: true, RunOnly: true),
         new("rest", RestRow, () => _restColumns.Count > 0 ? _restColumns : new[] { "col.noRest" }, s => s.RestSiteChoices.Values.Sum(), RunOnly: true),
-        new("gold", GoldRow, () => Visible("gold", new[] { "col.goldGained", "col.goldSpent", "col.goldLost", "col.goldNow", "col.cursesGained", "col.cursesRemoved" }), s => s.GoldGained, RunOnly: true),
+        // Hidden in Blitz (1.2.0, Zaille75: gold is useless there).
+        new("gold", GoldRow, () => GameModes.Current == GameModes.Blitz ? Array.Empty<string>() :
+            Visible("gold", new[] { "col.goldGained", "col.goldSpent", "col.goldLost", "col.goldNow", "col.cursesGained", "col.cursesRemoved" }), s => s.GoldGained, RunOnly: true),
         new("energy", EnergyRow, () => Visible("energy", EnergyColumns), s => s.EnergyGained - s.EnergySurplus - s.EnergyUseless),
         // Cards last (v0.18.5, Zaille75).
         new("other", OtherRow, () => Visible("other", OtherColumns), s => s.CardsPlayed),

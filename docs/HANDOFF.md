@@ -35,9 +35,12 @@ Steam page / untapped / SteamDB block automated fetches.
   `PlayerCmd.AddPet`; nothing Osty-specific in the damage path); (4) the Fool's most obvious mistake: Shot with no arrow
   ready ("emptyShot", `TurnPlay.EmptyShot` from `Hook.AfterArrowShot` with a null arrow; `TurnCard.NoArrow` /
   `BlockAlternatives.NoArrowReady` keep such Shots out of suggestions and estimates). Tests 192.
-- **Still open:** (3) Paré au combat (15(20) Block + Attacks in hand cost 1 less until played): pure block (can be gâché)
-  or block with a side effect (never gâché when an attack was in hand)? Today: pure block. Hide Or in Blitz (gold is
-  useless there)? Not asked yet. Two pets for one owner (Tisse-Mort with Wuppy) share the per-owner pet bookkeeping.
+- **Second batch (2026-11-13), done:** Or section + gold trophies hidden in Blitz (`Trophies.NoGold`, `Category.Gold`);
+  trophy Pie voleuse / Magpie (`trophy.relics`, `RunEconomy.Relics` = `Player.Relics.Count`); two pets per owner
+  (StatsEngine pet maps keyed by `Actor.Pet(owner, creature)`, `PetKey` adopts the unidentified `(owner, 0)` entries;
+  `PetHpGiven.Pet` / `PetHpBlock.Pet`; Déchaînement order only for Titos); Paré au combat never gâché
+  (`IsAttackDiscount` → HadOtherEffect) and "attackDiscount" (Choix, `TurnPlayer.AttackDiscount`, `TurnPlay.CostsX`).
+  Tests 195. Workshop description: 1.2.0 is a first quick update that will evolve quickly.
 - **Fool ideas not done (need a log):** shooting before attacks that would have freed an arrow (3 hits on the impaled
   enemy bring it back); melodies (Wah / Cho / Ki: first card of each tag per turn); tarot cards.
 - **To test in game (beta):** log lines `game mode blitz|dread|standard`, `empty shot: …`; F8 "Mode" row; `game branch beta`, no "patch … not applied"; damage / kills credited (summary

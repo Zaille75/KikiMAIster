@@ -41,8 +41,10 @@ public sealed class StatsEngine
     }
     /// Block cards for allies kept in hand at the end of the turn, and the HP each ally lost to enemies since.
     private readonly Dictionary<ulong, (string Card, int Block, bool All, Dictionary<ulong, double> Lost)> _allyBlockKept = new();
-    /// Each player's pet HP by who gave them (Legion of Bone gives pets to allies): owner → giver → HP.
-    private readonly Dictionary<ulong, Dictionary<ulong, double>> _petHp = new();
+    /// Each pet's HP by who gave them (Legion of Bone gives pets to allies): pet → giver → HP. Pets are keyed by owner and
+    /// creature (1.2.0: a Tisse-Mort can have Titos and Wuppy at once); Actor.Pet(owner, 0) = a pet not identified yet
+    /// (adopted by the owner's pet hit next, see PetKey).
+    private readonly Dictionary<Actor, Dictionary<ulong, double>> _petHp = new();
     private readonly Dictionary<int, (int Round, BlockChoice Choice)> _choices = new();
     /// Card plays in progress per player (a card can play other cards), and the damage of the outermost play so far.
     private readonly Dictionary<ulong, int> _playDepth = new();
@@ -51,8 +53,8 @@ public sealed class StatsEngine
     private readonly Dictionary<ulong, List<DebuffEffect>> _pendingDefense = new();
     /// HP of a player's pet saved by debuffs (v0.17.4): only real once the pet died and its owner then loses HP in the
     /// same fight. Owner → saved effects not yet credited; owners whose pet died since.
-    private readonly Dictionary<ulong, List<PetSave>> _petSaved = new();
-    private readonly HashSet<ulong> _petDied = new();
+    private readonly Dictionary<Actor, List<PetSave>> _petSaved = new();
+    private readonly HashSet<Actor> _petDied = new();
     /// Damage an enemy's Strength added to the hit about to land on a player, from a player's relic (Soufre…, v0.17.45): who
     /// owns the relic, which relic, and how much; resolved by that hit.
     private readonly Dictionary<ulong, List<(ulong Owner, string Relic, double Amount)>> _pendingHarm = new();
@@ -72,7 +74,31 @@ public sealed class StatsEngine
     /// Players who started this round at 1 HP and were not healed since ("Ce n'est qu'une égratinure", v0.18.6).
     private readonly HashSet<ulong> _atOneHp = new();
     /// The same saved pet HP, for the pet's current life only (attacks that grow with the pet's HP: Déchaînement).
-    private readonly Dictionary<ulong, List<PetSave>> _petSavedAlive = new();
+    private readonly Dictionary<Actor, List<PetSave>> _petSavedAlive = new();
+
+    /// The key of a pet (1.2.0). A pet actor with its creature: that pet, which also adopts what was recorded for the owner's
+    /// unidentified pet. Otherwise (the owner only): the unidentified pet, or the owner's only known pet.
+    private Actor PetKey(Actor pet, ulong owner)
+    {
+        var unknown = Actor.Pet(owner, 0);
+        if (pet.Kind == ActorKind.Pet && pet.CreatureId != 0)
+        {
+            var key = Actor.Pet(owner, pet.CreatureId);
+            Adopt(_petHp, unknown, key);
+            Adopt(_petSaved, unknown, key);
+            Adopt(_petSavedAlive, unknown, key);
+            if (_petDied.Remove(unknown)) _petDied.Add(key);
+            return key;
+        }
+        var known = _petHp.Keys.Concat(_petSaved.Keys).Concat(_petSavedAlive.Keys).Where(k => k.PlayerId == owner && k.CreatureId != 0)
+            .Distinct().ToList();
+        return known.Count == 1 && !_petHp.ContainsKey(unknown) ? known[0] : unknown;
+    }
+
+    private static void Adopt<T>(Dictionary<Actor, T> map, Actor from, Actor to)
+    {
+        if (map.Remove(from, out var value) && !map.ContainsKey(to)) map[to] = value;
+    }
 
     /// Pet HP saved by a debuff (Debuff: who was responsible, resolved at the hit) or by block (v0.17.8: Giver = who gave
     /// that block, the owner included).
@@ -81,12 +107,12 @@ public sealed class StatsEngine
         public PetSave Part(double amount) => this with { Amount = amount, Debuff = Debuff == null ? null : Debuff with { Amount = amount } };
     }
 
-    private void AddPetSaves(ulong owner, IEnumerable<PetSave> saves)
+    private void AddPetSaves(Actor pet, IEnumerable<PetSave> saves)
     {
         var list = saves.ToList();
-        if (!_petSaved.TryGetValue(owner, out var kept)) _petSaved[owner] = kept = new();
+        if (!_petSaved.TryGetValue(pet, out var kept)) _petSaved[pet] = kept = new();
         kept.AddRange(list);
-        if (!_petSavedAlive.TryGetValue(owner, out var alive)) _petSavedAlive[owner] = alive = new();
+        if (!_petSavedAlive.TryGetValue(pet, out var alive)) _petSavedAlive[pet] = alive = new();
         alive.AddRange(list);
     }
 
@@ -167,7 +193,8 @@ public sealed class StatsEngine
             {
                 Each(p.Giver.PlayerId, s => s.PetHpGiven += p.Amount);
                 var owner = p.Owner.IsPlayerSide && p.Owner.PlayerId != 0 ? p.Owner.PlayerId : p.Giver.PlayerId;
-                if (!_petHp.TryGetValue(owner, out var by)) _petHp[owner] = by = new();
+                var pet = PetKey(p.Pet, owner);
+                if (!_petHp.TryGetValue(pet, out var by)) _petHp[pet] = by = new();
                 by[p.Giver.PlayerId] = by.GetValueOrDefault(p.Giver.PlayerId) + p.Amount;
                 break;
             }
@@ -176,7 +203,7 @@ public sealed class StatsEngine
                 OnDebuffEffect(x);
                 break;
             case PetHpAttack a when a.Pet.IsPlayerSide && a.Pet.PlayerId != 0: OnPetHpAttack(a); break;
-            case PetHpBlock b when b.Receiver.Kind == ActorKind.Player: OnPetHpBlock(b.Receiver.PlayerId); break;
+            case PetHpBlock b when b.Receiver.Kind == ActorKind.Player: OnPetHpBlock(b.Receiver.PlayerId, b.Pet); break;
             case StrengthBorrowed b: OnStrengthBorrowed(b); break;
             case StrengthUsed u: OnStrengthUsed(u); break;
             case DamageModifier m when m.Dealer.IsPlayerSide && m.Dealer.PlayerId != 0 && m.Amount > 0: OnDamageModifier(m); break;
@@ -326,6 +353,7 @@ public sealed class StatsEngine
                     s.CursesGained = eco.CursesGained;
                     s.CursesRemoved = eco.CursesRemoved;
                     s.Purchases = eco.Purchases;
+                    s.Relics = eco.Relics;
                 }
                 s.RestSiteChoices.Clear();
                 foreach (var (k, v) in h.RestSiteChoices) s.RestSiteChoices[k] = v;
@@ -603,26 +631,28 @@ public sealed class StatsEngine
     private void OnDamageToPlayerSide(DamageDealt d)
     {
         var owner = d.Target.PlayerId;
+        var isPet = d.Target.Kind == ActorKind.Pet;
+        var pet = isPet ? PetKey(d.Target, owner) : default;
         // The owner killing their own pet (Sacrifice, v0.17.38): its HP stopped nothing. Only a pet death; what it had saved
         // (debuffs, block) is thrown away with it.
-        if (d.Target.Kind == ActorKind.Pet && d.Dealer.Kind == ActorKind.Player && d.Dealer.PlayerId == owner)
+        if (isPet && d.Dealer.Kind == ActorKind.Player && d.Dealer.PlayerId == owner)
         {
             if (d.Killed)
             {
                 Each(owner, s => s.PetDeaths++);
-                _petHp.Remove(owner);
-                _petSaved.Remove(owner);
-                _petSavedAlive.Remove(owner);
+                _petHp.Remove(pet);
+                _petSaved.Remove(pet);
+                _petSavedAlive.Remove(pet);
             }
             return;
         }
-        ResolveDefense(owner, d.Blocked, d.Hp, d.Target.Kind == ActorKind.Pet);
-        if (d.Target.Kind == ActorKind.Pet && d.Killed)
+        ResolveDefense(owner, d.Blocked, d.Hp, isPet ? pet : null);
+        if (isPet && d.Killed)
         {
-            _petDied.Add(owner);
-            _petSavedAlive.Remove(owner);
+            _petDied.Add(pet);
+            _petSavedAlive.Remove(pet);
         }
-        else if (d.Target.Kind == ActorKind.Player && d.Dealer.IsEnemy && d.Hp > 0 && _petDied.Contains(owner)) ReleasePetSaved(owner, d.Hp);
+        else if (d.Target.Kind == ActorKind.Player && d.Dealer.IsEnemy && d.Hp > 0 && _petDied.Any(k => k.PlayerId == owner)) ReleasePetSaved(owner, d.Hp);
 
         // Pets use their owner's block (the game blocks pet damage with the owner's block).
         if (d.Blocked > 0)
@@ -639,9 +669,9 @@ public sealed class StatsEngine
                     });
                 // Block on a hit aimed at the pet saved the pet's HP: it counts like a debuff's saving (v0.17.8), once the
                 // pet died and its owner loses HP, and for attacks that grow with the pet's HP.
-                if (d.Target.Kind == ActorKind.Pet)
+                if (isPet)
                 {
-                    AddPetSaves(owner, new[] { new PetSave(layer.GiverId, taken, Source: layer.Source) });
+                    AddPetSaves(pet, new[] { new PetSave(layer.GiverId, taken, Source: layer.Source) });
                     return;
                 }
                 Each(layer.GiverId, s =>
@@ -657,14 +687,14 @@ public sealed class StatsEngine
             });
             Each(owner, s => s.DamageBlocked += d.Blocked);
             // A pet killed by this hit: its life's savings (just added) are gone for its HP-based attacks.
-            if (d.Target.Kind == ActorKind.Pet && d.Killed) _petSavedAlive.Remove(owner);
+            if (isPet && d.Killed) _petSavedAlive.Remove(pet);
         }
 
         if (d.Target.Kind == ActorKind.Pet)
         {
             // Damage a pet takes instead of its owner is protection, not damage taken (Q5). The part from HP an ally
             // gave the pet is that ally's help (spec §D2).
-            var by = _petHp.GetValueOrDefault(owner);
+            var by = _petHp.GetValueOrDefault(pet);
             var total = by?.Values.Sum() ?? 0;
             double own = d.Hp;
             if (by != null && total > 0)
@@ -683,7 +713,7 @@ public sealed class StatsEngine
                 s.AbsorbedByPet += own;
                 if (d.Killed) s.PetDeaths++;
             });
-            if (d.Killed) _petHp.Remove(owner);
+            if (d.Killed) _petHp.Remove(pet);
             return;
         }
 
@@ -985,7 +1015,7 @@ public sealed class StatsEngine
 
     /// Damage avoided by debuffs counts only for the HP it really saved (v0.17.3, spec §B2): what would have gone
     /// through the block without them. It is known when the hit lands: Blocked + Hp is the hit with the debuffs.
-    private void ResolveDefense(ulong owner, double blocked, double hp, bool pet = false)
+    private void ResolveDefense(ulong owner, double blocked, double hp, Actor? pet = null)
     {
         if (!_pendingDefense.Remove(owner, out var effects)) return;
         var avoided = effects.Sum(e => e.Amount);
@@ -995,11 +1025,11 @@ public sealed class StatsEngine
         var saved = Math.Clamp(hpWithout - hp, 0, avoided);
         if (saved <= 0) return;
         var scaled = effects.Select(e => e with { Amount = e.Amount * saved / avoided }).ToList();
-        if (pet)
+        if (pet is { } petKey)
         {
             // The pet's HP: kept until the pet dies and its owner loses HP (ReleasePetSaved), and while the pet lives,
             // for attacks that grow with its HP (OnPetHpAttack). Who was responsible is decided now.
-            AddPetSaves(owner, scaled.SelectMany(Resolved).Select(e => new PetSave(e.Applier.PlayerId, e.Amount, e)));
+            AddPetSaves(petKey, scaled.SelectMany(Resolved).Select(e => new PetSave(e.Applier.PlayerId, e.Amount, e)));
             return;
         }
         foreach (var e in scaled) CreditDebuffEffect(e);
@@ -1007,17 +1037,21 @@ public sealed class StatsEngine
 
     /// The pet died earlier in this fight and its owner just lost HP: without the pet HP the debuffs saved, the pet would
     /// have died sooner and the owner would have lost that much more. Credits up to the HP lost, oldest first.
+    /// 1.2.0: every dead pet of the owner (Titos and Wuppy), in order of their keys.
     private void ReleasePetSaved(ulong owner, double hpLost)
     {
-        if (!_petSaved.TryGetValue(owner, out var kept)) return;
-        while (hpLost > 0 && kept.Count > 0)
+        foreach (var pet in _petDied.Where(k => k.PlayerId == owner).OrderBy(k => k.CreatureId).ToList())
         {
-            var e = kept[0];
-            var part = Math.Min(e.Amount, hpLost);
-            CreditPetSave(owner, e.Part(part));
-            hpLost -= part;
-            if (part >= e.Amount) kept.RemoveAt(0);
-            else kept[0] = e.Part(e.Amount - part);
+            if (!_petSaved.TryGetValue(pet, out var kept)) continue;
+            while (hpLost > 0 && kept.Count > 0)
+            {
+                var e = kept[0];
+                var part = Math.Min(e.Amount, hpLost);
+                CreditPetSave(owner, e.Part(part));
+                hpLost -= part;
+                if (part >= e.Amount) kept.RemoveAt(0);
+                else kept[0] = e.Part(e.Amount - part);
+            }
         }
     }
 
@@ -1027,7 +1061,8 @@ public sealed class StatsEngine
     private void OnPetHpAttack(PetHpAttack a)
     {
         var owner = a.Pet.PlayerId;
-        var given = _petHp.GetValueOrDefault(owner);
+        var pet = PetKey(a.Pet, owner);
+        var given = _petHp.GetValueOrDefault(pet);
         var givenTotal = given?.Values.Sum() ?? 0;
         void Enable(ulong id, double amount, string source)
         {
@@ -1041,7 +1076,7 @@ public sealed class StatsEngine
         }
         if (a.FromCurrentHp > 0 && a.PetHp > 0)
         {
-            var saves = _petSavedAlive.GetValueOrDefault(owner) ?? new List<PetSave>();
+            var saves = _petSavedAlive.GetValueOrDefault(pet) ?? new List<PetSave>();
             var savedTotal = saves.Sum(e => e.Amount);
             var scale = savedTotal > a.PetHp ? a.PetHp / savedTotal : 1;
             foreach (var e in saves) Enable(e.Giver, a.FromCurrentHp * e.Amount * scale / a.PetHp, e.Debuff?.PowerId ?? "Block");
@@ -1054,11 +1089,12 @@ public sealed class StatsEngine
     }
 
     /// Sacrifice: block = 3 × the pet's max HP. The allies who gave the pet HP enabled their share of it; the pet is gone.
-    private void OnPetHpBlock(ulong owner)
+    private void OnPetHpBlock(ulong owner, Actor petActor)
     {
-        var given = _petHp.GetValueOrDefault(owner);
+        var pet = PetKey(petActor, owner);
+        var given = _petHp.GetValueOrDefault(pet);
         var total = given?.Values.Sum() ?? 0;
-        _petHp.Remove(owner);
+        _petHp.Remove(pet);
         if (given == null || total <= 0 || Ledger(owner).Last is not { } layer) return;
         var shares = given.Where(kv => kv.Key != owner && kv.Value > 0).ToDictionary(kv => kv.Key, kv => kv.Value / total);
         if (shares.Count == 0) return;
@@ -1080,7 +1116,9 @@ public sealed class StatsEngine
     /// Avoided damage with no hit after it (the hit was cancelled): only what the block would not have stopped.
     private void FlushDefense()
     {
-        foreach (var owner in _pendingDefense.Keys.ToList()) ResolveDefense(owner, 0, 0, _pendingDefense[owner].Any(e => e.Beneficiary.Kind == ActorKind.Pet));
+        foreach (var owner in _pendingDefense.Keys.ToList())
+            ResolveDefense(owner, 0, 0, _pendingDefense[owner].FirstOrDefault(e => e.Beneficiary.Kind == ActorKind.Pet) is { } e
+                ? PetKey(e.Beneficiary, owner) : null);
     }
 
     /// Extra damage (Vulnerable) or damage avoided (Weak, Strength down) credited to whoever is responsible for

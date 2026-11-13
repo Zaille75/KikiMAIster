@@ -342,7 +342,7 @@ public static class RunSummary
 
         var level = Patches.CombatFlowPatches.Ascension;
         var coop = run.Count > 1;
-        bool Shown(Trophies.Category c) => !(c.CoopOnly && run.Count < 2) && !(ended && c.NeedsVictory && !_victory);
+        bool Shown(Trophies.Category c) => c.Active && !(c.CoopOnly && run.Count < 2) && !(ended && c.NeedsVictory && !_victory);
         string? soloCharacter = coop ? null : run.Keys.Select(id => engine.Players.GetValueOrDefault(id)?.Character).FirstOrDefault() ?? "";
         var grid = NewGrid(soloCharacter);
         foreach (var c in Trophies.All.Where(c => !c.Fun && Shown(c))) AddTrophy(grid, c, run, engine, update, ended);

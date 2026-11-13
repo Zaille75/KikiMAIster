@@ -68,8 +68,9 @@ public sealed record BlockGained(Actor Receiver, Actor Giver, int Amount, Source
 
 /// HP given to a pet (summon, max HP gain, heal). Giver: the player who gave it. Separate from block:
 /// never wasted or useless.
-/// Owner: the player whose pet got the HP (None = the giver's own pet).
-public sealed record PetHpGiven(Actor Giver, double Amount, Actor Owner = default) : StatEvent;
+/// Owner: the player whose pet got the HP (None = the giver's own pet). Pet (1.2.0): the pet itself when known (an owner
+/// can have two pets: Titos and Wuppy).
+public sealed record PetHpGiven(Actor Giver, double Amount, Actor Owner = default, Actor Pet = default) : StatEvent;
 
 /// HP loss reduced by a relic or power (Tungsten Rod, Intangible, Buffer…) on a player or pet. SourceId: the
 /// model that reduced it ("Relic:TUNGSTEN_ROD"…).
@@ -138,7 +139,8 @@ public sealed record PetHpAttack(Actor Pet, double FromCurrentHp, double FromMax
 
 /// The block just gained by Receiver was computed from its pet's max HP (Sacrifice: 3 × max HP, v0.17.6): the allies
 /// who gave the pet HP enabled that block, in the same proportions.
-public sealed record PetHpBlock(Actor Receiver) : StatEvent;
+/// Pet (1.2.0): the pet whose max HP made the block, when known.
+public sealed record PetHpBlock(Actor Receiver, Actor Pet = default) : StatEvent;
 
 /// A player gave Strength to another player (Blaze…): those points count for the giver for the rest of the combat.
 public sealed record StrengthGiven(Actor Player, Actor Giver, double Amount) : StatEvent;
@@ -216,8 +218,9 @@ public sealed record RunHistoryRead(Actor Player, double MaxHpGained, double Max
 
 /// Gold and curses over the run so far, from the game's map history (v0.17.36). Lost: lost + stolen. Peak: most gold held
 /// at the end of a floor. Now: gold held at the end of the last floor. Purchases: relics, potions and colorless cards bought.
+/// Relics (1.2.0): relics held now.
 public sealed record RunEconomy(double GoldGained, double GoldSpent, double GoldLost, double GoldStolen, double GoldPeak, double GoldNow,
-    double CursesGained, double CursesRemoved, double Purchases);
+    double CursesGained, double CursesRemoved, double Purchases, double Relics = 0);
 
 /// HP lost or healed by an event just before the fight it starts (heal 22 then fight…, v0.17.36): the player's HP when the
 /// fight starts minus their HP at the end of the previous floor. Key: the floor, counted once (fight reloaded…).

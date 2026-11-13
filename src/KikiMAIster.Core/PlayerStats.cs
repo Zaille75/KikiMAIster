@@ -107,7 +107,7 @@ public sealed class PlayerStats
     /// Worse choices: weak attacks + smaller block, Pen Nib on a weak attack, block below Orichalcum, growing card not played.
     public double MissedChoices => WeakAttacks + ChoiceKinds.Sum(k => MissedByKind.GetValueOrDefault(k));
     public static readonly string[] ChoiceKinds =
-        { "smallBlock", "penNib", "orichalcum", "order", "orderBlock", "orderSlow", "orderTurn", "handFull", "capCheaper", "drawFirst", "blockOnHit", "growth", "tent", "orderPotion", "restBoss", "orderDark", "stars", "shell", "vulnLeft" };
+        { "smallBlock", "penNib", "orichalcum", "order", "orderBlock", "orderSlow", "orderTurn", "handFull", "capCheaper", "drawFirst", "blockOnHit", "growth", "tent", "orderPotion", "restBoss", "orderDark", "stars", "shell", "vulnLeft", "attackDiscount" };
     /// Block card plays whose block was wasted (gâché, rule F3), counted once per play (saved with the run).
     public double WastedPlayCount { get; set; }
     /// "Gâché" misplays: wasted block card plays + useful free cards left in hand (v0.17.26; growing cards: Choix).
@@ -195,6 +195,8 @@ public sealed class PlayerStats
     public double GoldStolen { get; set; }
     public double GoldPeak { get; set; }
     public double GoldNow { get; set; }
+    /// Relics held (1.2.0, run scope, from the run history reads): trophy Pie voleuse.
+    public double Relics { get; set; }
     public double CursesGained { get; set; }
     public double CursesRemoved { get; set; }
     public double Purchases { get; set; }

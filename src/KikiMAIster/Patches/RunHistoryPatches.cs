@@ -102,6 +102,7 @@ public static class RunHistoryPatches
             }
         var signature = string.Join(';', totals.OrderBy(kv => kv.Key).Select(kv =>
             $"{kv.Key}:{kv.Value.Gained}:{kv.Value.Lost}:{Sig(kv.Value.HpLost)}:{Sig(kv.Value.Healed)}:{Sig(kv.Value.Picks)}:{string.Join(',', kv.Value.Eco)}:{string.Join(',', kv.Value.Choices.OrderBy(r => r.Key, StringComparer.Ordinal).Select(r => $"{r.Key}={r.Value}"))}"));
+        signature += "|relics:" + string.Join(',', run.Players.Select(p => p.Relics.Count));
         if (signature == _signature) return;
         _signature = signature;
         foreach (var p in run.Players)
@@ -111,7 +112,7 @@ public static class RunHistoryPatches
             // The event's own text shows dictionaries as type names: the HP figures, readable (v0.17.38).
             ModLog.Info($"run history {p.NetId}: HP lost outside [{Sig(t.HpLost)}], healed outside [{Sig(t.Healed)}]");
             Capture.Emit(new RunHistoryRead(Capture.ToActor(p), t.Gained, t.Lost, t.Choices, t.HpLost, t.Healed,
-                new RunEconomy(e[0], e[1], e[2] + e[3], e[3], e[4], e[5], e[6], e[7], e[8]), t.Picks));
+                new RunEconomy(e[0], e[1], e[2] + e[3], e[3], e[4], e[5], e[6], e[7], e[8], p.Relics.Count), t.Picks));
         }
     }
 

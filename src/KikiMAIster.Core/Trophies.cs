@@ -11,12 +11,18 @@ public static class Trophies
     /// VictoryOnly: only counted (and shown) for a victory, like every LowerIsBetter category.
     /// Eligible: who can win it (null = everyone).
     /// Participation (v0.17.45): won by every player who won no main trophy of the run (v0.18.9: fun ones left out); never a record.
+    /// Gold (1.2.0): a gold trophy, not awarded nor recorded in Blitz (gold is useless there, Zaille75).
     public sealed record Category(string Key, Func<PlayerStats, double> Value, bool LowerIsBetter = false, bool CoopOnly = false,
-        bool Fun = false, bool VictoryOnly = false, Func<PlayerStats, bool>? Eligible = null, bool Participation = false)
+        bool Fun = false, bool VictoryOnly = false, Func<PlayerStats, bool>? Eligible = null, bool Participation = false, bool Gold = false)
     {
         public bool CanWin(PlayerStats s) => Eligible?.Invoke(s) ?? true;
         public bool NeedsVictory => LowerIsBetter || VictoryOnly;
+        /// Awarded in the current run (not a gold trophy in Blitz).
+        public bool Active => !(Gold && NoGold);
     }
+
+    /// The run being played is a Blitz run (1.2.0): gold trophies are left out. Set by the mod at run start.
+    public static bool NoGold { get; set; }
 
     public static readonly Category[] All =
     {
@@ -46,9 +52,11 @@ public static class Trophies
         new("trophy.deaths", s => s.Deaths, CoopOnly: true, Fun: true),
         new("trophy.maxHpLost", s => s.MaxHpLost, Fun: true, VictoryOnly: true),
         // Gold and curses (v0.17.36).
-        new("trophy.goldGained", s => s.GoldGained),
-        new("trophy.goldSpent", s => s.GoldSpent, Fun: true),
-        new("trophy.goldLeft", s => s.GoldNow, Fun: true),
+        new("trophy.goldGained", s => s.GoldGained, Gold: true),
+        new("trophy.goldSpent", s => s.GoldSpent, Fun: true, Gold: true),
+        new("trophy.goldLeft", s => s.GoldNow, Fun: true, Gold: true),
+        // Relics held at the end of the run (1.2.0, Zaille75).
+        new("trophy.relics", s => s.Relics),
         new("trophy.curses", s => s.CursesGained, Fun: true),
         // Chifumi (v0.17.45): the most fights won, the most lost.
         new("trophy.chifumiWon", s => s.ChifumiWon, CoopOnly: true),
@@ -70,7 +78,7 @@ public static class Trophies
         if (c.Participation)
         {
             // v0.18.9 (Zaille75): only the main trophies count, not the fun ones.
-            var won = All.Where(o => !o.Participation && !o.Fun && !(o.CoopOnly && run.Count < 2) && (victory || !o.NeedsVictory))
+            var won = All.Where(o => !o.Participation && !o.Fun && o.Active && !(o.CoopOnly && run.Count < 2) && (victory || !o.NeedsVictory))
                 .SelectMany(o => Winners(o, run)).Select(w => w.Id).ToHashSet();
             return run.Keys.Where(id => !won.Contains(id)).OrderBy(id => id).Select(id => (id, 1.0)).ToList();
         }
@@ -135,7 +143,7 @@ public sealed class RecordBook
             var mode = Mode(coop, level);
             foreach (var c in Trophies.All)
             {
-                if (c.Participation || (c.NeedsVictory && !victory)) continue;
+                if (c.Participation || !c.Active || (c.NeedsVictory && !victory)) continue;
                 if (c.CoopOnly && run.Count < 2) continue;
                 foreach (var (id, s) in run)
                 {
