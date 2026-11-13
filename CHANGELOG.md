@@ -3,7 +3,7 @@
 Summary by version line. The detailed notes of every version are in [docs/specs/02-ui.md](docs/specs/02-ui.md)
 (interface) and [docs/specs/01-metrics.md](docs/specs/01-metrics.md) (rules).
 
-## 1.2.1 (draft, not released) — the Fool's arrows
+## 1.2.1 (2026-11-14) — the Fool's arrows
 The Fool's arrow cards, from the game code. Fixes: a Shot with no arrow ready is no longer a "free card" (Quick Shot), a
 block alternative, a Stars / Carapace alternative or the "stronger attack"; Nail with no arrow in any enemy and Recall /
 Uproot / Wrest with none of the player's arrows in an enemy do nothing and are never suggested; lethal checks and Paré au

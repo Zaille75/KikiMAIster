@@ -16,11 +16,11 @@ IDS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "published_ids.js
 ITEMS = {
     "beta": ("KikiMAIster - Solo and Co-op stats",  # renamed on Steam by Zaille75 (2026-11-06)
              "Works on both game branches: beta v0.113.0 (the Fool, Blitz, Dread) and default v0.111.0. "
-             "Version 1.2.0 is a first quick update so you can play the new beta with the mod right away: "
-             "it will evolve quickly in the coming days (the Fool's mechanics, Blitz and Dread).",
-             "Marche sur les deux branches du jeu : bêta v0.113.0 (le Fou, Blitz, Dread) et par défaut v0.111.0. "
-             "La version 1.2.0 est une première mise à jour rapide pour jouer tout de suite à la nouvelle bêta avec le mod : "
-             "elle va évoluer vite dans les prochains jours (mécaniques du Fou, Blitz et Dread)."),
+             "Version 1.2.1 knows the Fool's arrows (no more false mistakes with Shots, new arrow mistakes, co-op arrows); "
+             "more Fool mechanics will follow (melodies, tarot cards).",
+             "Marche sur les deux branches du jeu : bêta v0.113.0 (l'Insensé, Blitz, Dread) et par défaut v0.111.0. "
+             "La version 1.2.1 connaît les flèches de l'Insensé (plus de fausses erreurs avec les Tirs, nouvelles erreurs de flèches, "
+             "flèches en coop) ; d'autres mécaniques de l'Insensé suivront (mélodies, cartes de tarot)."),
 }
 
 
