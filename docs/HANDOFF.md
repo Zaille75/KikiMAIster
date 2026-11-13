@@ -1,15 +1,39 @@
-# Handoff — state of the project (2026-10-31, v1.0.0)
+# Handoff — state of the project (2026-11-14, v1.2.1)
 
 > **Start here in a new conversation**, then `CLAUDE.md`, `docs/specs/01-metrics.md` (rules) and `docs/specs/02-ui.md`
 > (interface). The history of every version is in `CHANGELOG.md` and the specs' "vX.Y.Z" notes; the git history has the
 > older handoff sections (v0.7 → v0.17).
 >
-> **State:** **1.2.1 released on GitHub (2026-11-14, tag `v1.2.1`); Workshop package in `dist/workshop/`, upload by Zaille75. Not tested in game.** **1.2.0 released on GitHub (2026-11-13, tag `v1.2.0`, by WTT27; first quick update for beta v0.113.0 / main v0.111.0, see below). Workshop package in `dist/workshop/`, upload by Zaille75. Not tested in game.** **1.1.1 released on GitHub (2026-11-06, tag `v1.1.1`, by WTT27); Workshop package ready in `dist/workshop/`, upload by Zaille75. Not tested in game yet.** Before: **1.1.0 released** on GitHub (tag on `c769770`, published by WTT27) and the Steam Workshop (2026-11-03):
-> one DLL for both game branches, one Workshop item "KikiMAIster - Solo and Co-op stats" (3832591950, renamed by Zaille75 2026-11-06). Short solo test by Zaille75 on both
-> branches OK (`logs/2026-11-03_v1.1.0_*_solo.log`); beta solo run with campfires and F8 OK too (Tente miniature
-> campfire path and co-op "Ce groupe" not exercised). Zaille75 has several game profiles: a new one has an empty history. Nothing since v0.18.5 is tested in game yet. When Zaille75
-> sends a new inbox (`logs/inbox/<date_time>/`): **review and summarize every report first, wait for his go, then implement
-> the whole batch** (memory rules).
+> **State (2026-11-14):** **1.2.1 released** on GitHub (tag `v1.2.1`, by WTT27) and the Steam Workshop (uploaded by
+> Zaille75, item 3832591950 "KikiMAIster - Solo and Co-op stats"). `main` = released code, no open branch
+> (`feature/fool-arrows` merged). 1.2.1 is **not tested in game yet**: Zaille75's two games of 2026-11-13 were played with
+> 1.2.0 (their 12 reports are all handled in 1.2.1). One DLL for beta v0.113.0 and main v0.111.0 (and old main v0.107.1).
+> When Zaille75 sends a new inbox (`logs/inbox/<date_time>/`): **review and summarize every report first, wait for his go,
+> then implement the whole batch** (memory rules). Each send now also brings `KikiMAIster.names.txt` (game names in French):
+> copy it to `lib/beta/names.txt` when the game version changed.
+
+## Next session — what to do
+1. **Wait for Zaille75's next inbox** (games with 1.2.1). Check in the logs: no internal error; `empty shot: …` lines;
+   the new misses `notImpaled`, `impaleFirst` (also with an ally's Shot, card shown "(Serlfa)"), `shootFirst`, `buffUnused`
+   (Estocade), `makerFirst` (Abondance & co.), `coveringFireLate`; wrong-order losses for Fermeté Cho, Flèches sifflantes,
+   Visée, Flèches barbelées; **no** "energy left / free card" for Rappel / Empoignade / Déraciner without the player's own
+   arrow, nor for a red Shot; no wasted-block alternative that is a red Shot; Galvanisé cards not suggested; panel no longer
+   closes hover texts (rebuilds when the mouse leaves); l'Insensé yellow; run title "… · A<n>".
+2. **Fool ideas not done** (ask Zaille75 before doing them): melodies (Wah / Cho / Ki: first card of each tag per turn);
+   tarot cards; Récupération héroïque on the wrong target (an enemy at 1 hit from freeing an arrow); a payoff card (Coup
+   d'arc, Bond Ki, Marteau Wah, Clouer) on a target without an arrow while another enemy had one; Estocade on a weak Shot;
+   Tir répété at 0 energy; Feu de couverture created by Abondance after Shots (today only "makerFirst").
+3. **Optional:** drop the old main v0.107.1 support (`GameBranch.Name` "main-old", PatchCheck by hand).
+4. **Known limits of the arrow rules** (estimates stay minimums): a Shot that kills gives its arrow back (ignored in the
+   lethal checks); Visée's bonus is not scaled by Vulnérable / Tête chercheuse; an ally's arrows ready are not known
+   (an ally's later successful Shot is taken as "it had one").
+- **Talking to Zaille75:** French in-game names (table `lib/beta/names.txt`, e.g. Clouer = Nail, Estocade = Quietus,
+  Fermeté Cho = Cho Firm, Flèches sifflantes = Whistling Arrows, Le Pape = The Hierophant, Tête chercheuse = Honing,
+  Flèches barbelées = Serrated Arrows, Visée = Aim). He plays co-op with "Serlfa" (both l'Insensé in the last games).
+- **Release steps** (Zaille75 runs the publishing himself): bump `KikiMAIster.csproj` + `KikiMAIster.json`, date the
+  CHANGELOG, `./build.sh release`, `python3 tools/workshop/make.py "<change note>"` (update its `ITEMS` text), notes in
+  `dist/release/notes-<v>.md`; give him the `git tag … && gh release create …` command (run with `!` here) and the
+  PowerShell Workshop command (copy `dist/workshop/*` to `C:\KikiMAIster-workshop`, run `Publier.bat`).
 
 ## 1.2.0 — game update beta v0.113.0 / main v0.111.0 (2026-11-13, released on GitHub, merged in main, not tested in game)
 Beta v0.113.0 (12 Nov, "biggest beta patch": the Fool, Blitz, Dread, ~140 cards changed); the main branch moved to v0.111.0
@@ -52,12 +76,9 @@ Steam page / untapped / SteamDB block automated fetches.
   played with 1.2.0): arrows in co-op (`AlliesHandAtPlay`), Visée on Glissant kept (`Arrows.AimOnSlippery`), "makerFirst"
   (`TurnReview.CardMakers`), "coveringFireLate" (`TurnPlay.AllyBlockPerShot`), Galvanisé kept on purpose, FOOL color, A level
   in the run title, no panel rebuild under the mouse (`Overlay.MouseOverPanels`). Tests 211.
-- **Fool ideas not done:** melodies (Wah / Cho / Ki: first card of each tag per turn); tarot cards; Récupération héroïque on the
-  wrong target (an enemy at 1 hit from freeing an arrow); a payoff card on a target without an arrow while another enemy had
-  one; Estocade on a weak Shot; Tir répété at 0 energy.
-- **To test in game (beta):** log lines `game mode blitz|dread|standard`, `empty shot: …`; F8 "Mode" row; `game branch beta`, no "patch … not applied"; damage / kills credited (summary
-  not empty); a multi-hit attack (Coup double…) in a "weak attack" / lethal estimate; a Fool run; main branch: `game
-  branch main`.
+- **Fool ideas not done:** see "Next session" above.
+- **Seen in game (2026-11-13, 1.2.0, beta co-op):** no internal error, damage / kills credited, Blitz not played yet;
+  still to see: F8 "Mode" row with a Blitz / Dread run, main branch `game branch main`.
 
 ## 1.1.1 — GitHub reports of 2026-11-05 (2026-11-06, released on GitHub, not tested in game)
 First two public F9 reports (issues #1, #2, by Zaille75 as WTT27; zips added as comments, files in `logs/feedback-2026-11-05/`).
