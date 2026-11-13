@@ -4,14 +4,14 @@
 > (interface). The history of every version is in `CHANGELOG.md` and the specs' "vX.Y.Z" notes; the git history has the
 > older handoff sections (v0.7 → v0.17).
 >
-> **State:** **1.2.0 in progress on `feature/beta-v0.113` (game update beta v0.113.0 / main v0.111.0, see below).** **1.1.1 released on GitHub (2026-11-06, tag `v1.1.1`, by WTT27); Workshop package ready in `dist/workshop/`, upload by Zaille75. Not tested in game yet.** Before: **1.1.0 released** on GitHub (tag on `c769770`, published by WTT27) and the Steam Workshop (2026-11-03):
+> **State:** **1.2.0 released on GitHub (2026-11-13, tag `v1.2.0`, by WTT27; first quick update for beta v0.113.0 / main v0.111.0, see below). Workshop package in `dist/workshop/`, upload by Zaille75. Not tested in game.** **1.1.1 released on GitHub (2026-11-06, tag `v1.1.1`, by WTT27); Workshop package ready in `dist/workshop/`, upload by Zaille75. Not tested in game yet.** Before: **1.1.0 released** on GitHub (tag on `c769770`, published by WTT27) and the Steam Workshop (2026-11-03):
 > one DLL for both game branches, one Workshop item "KikiMAIster - Solo and Co-op stats" (3832591950, renamed by Zaille75 2026-11-06). Short solo test by Zaille75 on both
 > branches OK (`logs/2026-11-03_v1.1.0_*_solo.log`); beta solo run with campfires and F8 OK too (Tente miniature
 > campfire path and co-op "Ce groupe" not exercised). Zaille75 has several game profiles: a new one has an empty history. Nothing since v0.18.5 is tested in game yet. When Zaille75
 > sends a new inbox (`logs/inbox/<date_time>/`): **review and summarize every report first, wait for his go, then implement
 > the whole batch** (memory rules).
 
-## 1.2.0 — game update beta v0.113.0 / main v0.111.0 (2026-11-13, branch `feature/beta-v0.113`, not tested in game)
+## 1.2.0 — game update beta v0.113.0 / main v0.111.0 (2026-11-13, released on GitHub, merged in main, not tested in game)
 Beta v0.113.0 (12 Nov, "biggest beta patch": the Fool, Blitz, Dread, ~140 cards changed); the main branch moved to v0.111.0
 the same day (= our former `lib/beta`). Patch notes: Steam news API (`ISteamNews/GetNewsForApp`, appid 2868840): the
 Steam page / untapped / SteamDB block automated fetches.
