@@ -12,7 +12,10 @@ combat count no more Shots than the arrows ready. New mistakes: Nail / Recall / 
 whose arrow stayed stuck while 3 earlier hits would have freed it (Choix), Quietus with no shot after it (Gâché); wrong
 order for Cho Firm / Whistling Arrows after a Shot, Aim spent on a weaker Shot, attacks before the impaling Shot with
 Serrated Arrows. An empty Shot that completed a relic count (Kunai…) is not a mistake. Hobbling Shot counts for "Vulnérable
-gardé".
+gardé". From the 2026-11-13 games: arrows in co-op (an ally's Shot counts for "impale first" and Serrated
+Arrows), a Shot is kept on purpose with Visée against Glissant, card makers (Abondance…) should be played first ("makerFirst"),
+Feu de couverture after a Shot ("coveringFireLate"), a Galvanisé card is kept on purpose (it costs HP), l'Insensé is yellow,
+the end-of-run title shows the ascension, and the panel no longer closes the hover text at every card played.
 
 ## 1.2.0 (2026-11-13) — first quick update for the beta v0.113.0, more to come
 Game update: works with the beta v0.113.0 (the Fool, Blitz, Dread) and the main branch v0.111.0. Damage and kills are

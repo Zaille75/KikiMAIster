@@ -185,6 +185,8 @@ public class TurnPlay
     public double AimFactor { get; set; } = 1;
     public bool NotImpaled { get; set; }
     public int KindCount { get; set; }
+    /// Feu de couverture: the block it gives each ally per shot (1.2.1).
+    public int AllyBlockPerShot { get; set; }
     /// Set by the rules: a Shot stuck an arrow in its target later in the turn ("impaleFirst" instead of "notImpaled").
     public bool ImpaledLater { get; set; }
     public HashSet<object> HandWhenFull { get; } = new(ReferenceEqualityComparer.Instance);
@@ -315,6 +317,8 @@ public static class TurnReview
             StampedeSwap(s, p, r);
             DrawBeforeMaking(s, p, r);
             VulnerableLeft(s, p, r);
+            MakersFirst(s, p, r);
+            CoveringFireLate(s, p, r);
         }
         var used = new HashSet<object>(ReferenceEqualityComparer.Instance);
         var withAlternative = BlockAlternatives(s, used, r);
@@ -461,9 +465,11 @@ public static class TurnReview
         {
             var shot = s.Plays[i];
             if (!shot.ShotArrow || shot.Target is not { } enemy || shot.KilledTarget) continue;
-            // The player's cards played before it while it was in hand and an arrow was ready: it could have come first.
-            var before = s.Plays.Take(i).Where(x => x.Owner == shot.Owner && x.ArrowsReady > 0 &&
-                                                    x.HandAtPlay.Any(h => ReferenceEquals(h, shot.CardRef))).ToList();
+            // Cards played before it while it was in hand (and an arrow was ready): it could have come first. 1.2.1 (Zaille75):
+            // an ally's cards too, when the Shot was in the shooter's hand then (the payoffs count any player's arrow).
+            var before = s.Plays.Take(i).Where(x => x.Owner == shot.Owner
+                ? x.ArrowsReady > 0 && x.HandAtPlay.Any(h => ReferenceEquals(h, shot.CardRef))
+                : x.AlliesHandAtPlay.Contains(shot.CardRef)).ToList();
             int HitsOn(TurnPlay x) => x.Hits.Count(h => ReferenceEquals(h.Target, enemy));
             foreach (var x in before.Where(x => !x.ArrowIn.Contains(enemy)))
             {
@@ -471,15 +477,16 @@ public static class TurnReview
                 {
                     x.ImpaledLater = true;
                     r.Log.Add($"impale first: {x.CardKey} before {shot.CardKey}");
-                    r.Events.Add(new MissedChance(x.Owner, "impaleFirst", new[] { x.CardKey, shot.CardKey }));
+                    r.Events.Add(new MissedChance(x.Owner, "impaleFirst", new[] { x.CardKey, Owned(shot.CardKey, shot.Owner, x.Owner) }));
                 }
                 if (x.SerratedBonus > 0 && x.Kind == CardKind.Attack && HitsOn(x) > 0 && serrated.Add((x, enemy)))
-                    s.OrderLosses.Add(new OrderLoss(x, shot.CardKey, "order", enemy,
+                    s.OrderLosses.Add(new OrderLoss(x, Owned(shot.CardKey, shot.Owner, x.Owner), "order", enemy,
                         x.Hits.Where(h => ReferenceEquals(h.Target, enemy)).Sum(h => h.Raw) * x.SerratedBonus));
             }
             // Shoot first: the arrow is still in the enemy at the end of the turn.
             if (shot.OwnArrowIn.Contains(enemy) || s.Player(shot.Owner) is not { } owner || !owner.OwnArrowIn.Contains(enemy)) continue;
-            var hitters = before.Where(x => x.Kind == CardKind.Attack && !x.OwnArrowIn.Contains(enemy) && HitsOn(x) > 0).ToList();
+            // Only the owner's hits free the arrow.
+            var hitters = before.Where(x => x.Owner == shot.Owner && x.Kind == CardKind.Attack && !x.OwnArrowIn.Contains(enemy) && HitsOn(x) > 0).ToList();
             var hits = hitters.Sum(HitsOn);
             if (hits < HitsToFreeArrow) continue;
             r.Log.Add($"shoot first: {shot.CardKey} after {hits} hits on its target");
@@ -503,6 +510,55 @@ public static class TurnReview
                                                x.AimFactor > late.AimFactor && late.HandAtPlay.Any(h => ReferenceEquals(h, x.CardRef)))
                     .OrderByDescending(x => x.AimFactor).FirstOrDefault() is { } better)
                 s.OrderLosses.Add(new OrderLoss(late, better.CardKey, "order", better.Target, late.AimAtStart * (better.AimFactor - late.AimFactor)));
+        }
+    }
+
+    /// Cards that put a random or chosen card into the hand (Abondance, Bruit blanc, Découverte, Lame infernale, Cieux couverts…):
+    /// seeing that card first lets the player plan the turn with it.
+    private static readonly HashSet<string> CardMakers = new()
+    {
+        "ABUNDANCE", "WHITE_NOISE", "DISCOVERY", "DISTRACTION", "INFERNAL_BLADE", "SPLASH", "BLOT_OUT_THE_SKY", "JACK_OF_ALL_TRADES",
+        "BUNDLE_OF_JOY", "THE_HIEROPHANT", "MANIFEST_AUTHORITY", "QUASAR"
+    };
+
+    private const int MaxHandSize = 10;
+
+    /// 1.2.1 (Zaille75: "statistically always better to play Abondance+ first, or every similar card"): a card maker played after
+    /// other cards of the player that it was in hand for, when the energy allowed it first and the hand was not full. Cards that
+    /// drew or gave energy may come first. Choix, "makerFirst": the maker, the cards played before it.
+    private static void MakersFirst(TurnState s, TurnPlayer p, TurnResult r)
+    {
+        for (var i = 0; i < s.Plays.Count; i++)
+        {
+            var maker = s.Plays[i];
+            if (maker.Owner != p.Actor || !CardMakers.Contains(CardId(maker.CardKey))) continue;
+            var earlier = s.Plays.Take(i).Where(x => x.Owner == p.Actor && x.HandAtPlay.Any(h => ReferenceEquals(h, maker.CardRef)) &&
+                                                     x.CardsDrawn == 0 && x.EnergyGiven == 0 && !CardMakers.Contains(CardId(x.CardKey))).ToList();
+            if (earlier.Count == 0) continue;
+            var first = earlier[0];
+            if (first.EnergyBefore < maker.EnergySpent + first.EnergySpent || first.HandAtPlay.Count + 1 >= MaxHandSize) continue;
+            r.Log.Add($"maker first: {maker.CardKey} after {string.Join(' ', earlier.Select(x => x.CardKey))}");
+            r.Events.Add(new MissedChance(p.Actor, "makerFirst", new[] { maker.CardKey, string.Join('+', earlier.Select(x => x.CardKey).Distinct()) }));
+        }
+    }
+
+    /// 1.2.1 (Zaille75: "if I had had it in hand, a clear misplay"): Feu de couverture (Covering Fire) played after the player's
+    /// Shots it was in hand for: each of them would have given every ally its block. Lost = for each ally alive, the shots ×
+    /// the block, capped by the block that ally was missing at the end of the turn. Choix, "coveringFireLate".
+    private static void CoveringFireLate(TurnState s, TurnPlayer p, TurnResult r)
+    {
+        for (var i = 0; i < s.Plays.Count; i++)
+        {
+            var cf = s.Plays[i];
+            if (cf.Owner != p.Actor || cf.AllyBlockPerShot <= 0) continue;
+            var shots = s.Plays.Take(i).Where(x => x.Owner == p.Actor && (x.ShotArrow || x.EmptyShot) &&
+                                                   x.HandAtPlay.Any(h => ReferenceEquals(h, cf.CardRef))).ToList();
+            if (shots.Count == 0) continue;
+            var lost = s.Players.Where(a => a.Actor != p.Actor && a.Alive)
+                .Sum(a => Math.Min(shots.Count * cf.AllyBlockPerShot, Math.Max(0, a.Incoming - a.Block)));
+            if (lost < 1) continue;
+            r.Events.Add(new MissedChance(p.Actor, "coveringFireLate",
+                new[] { cf.CardKey, string.Join('+', shots.Select(x => x.CardKey).Distinct()), N(lost) }));
         }
     }
 

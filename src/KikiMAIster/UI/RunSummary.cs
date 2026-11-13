@@ -319,7 +319,9 @@ public static class RunSummary
         var header = new HBoxContainer();
         var title = Overlay.MakeLabel(Loc.T("run.title") +
             (GameModes.Separate(GameModes.Current) ? " " + GameModes.Name(GameModes.Current) : "") + " · " +
-            (ended ? Loc.T(_victory ? "summary.victory" : "summary.defeat") : Loc.T("summary.inProgress")), Overlay.Accent);
+            (ended ? Loc.T(_victory ? "summary.victory" : "summary.defeat") : Loc.T("summary.inProgress")) +
+            // 1.2.1 (Zaille75): the ascension the records are for, in the title.
+            $" · A{Patches.CombatFlowPatches.Ascension.ToString(CultureInfo.InvariantCulture)}", Overlay.Accent);
         title.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         header.AddChild(title);
         // The fun trophies have their own section, shown or not (v0.17.45).

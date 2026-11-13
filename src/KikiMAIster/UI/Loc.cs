@@ -156,6 +156,8 @@ public static class Loc
         ["why.notImpaled"] = ("{0} on a target with no arrow: it did nothing ({1} energy for nothing)", "{0} sur une cible sans flèche : elle n'a rien fait ({1} énergie pour rien)"),
         ["why.impaleFirst"] = ("{0} before {1}: the target had no arrow yet", "{0} avant {1} : la cible n'avait pas encore de flèche"),
         ["why.shootFirst"] = ("{0} after {1}: {2} hits would have freed the arrow", "{0} après {1} : {2} coups auraient libéré la flèche"),
+        ["why.makerFirst"] = ("{0} after {1}: played first, its card could have been planned for", "{0} après {1} : jouée d'abord, sa carte pouvait être prévue"),
+        ["why.coveringFireLate"] = ("{0} after {1}: {2} block lost for the allies", "{0} après {1} : {2} armure perdue pour les alliés"),
         ["why.buffUnused"] = ("{0} played with no shot after it: lost ({1} energy for nothing)", "{0} joué sans tir après : perdu ({1} énergie pour rien)"),
         ["why.discardEthereal"] = ("{0} for nothing discarded {1}, which would have been exhausted at the end of the turn", "{0} pour rien a défaussé {1}, qui aurait été épuisée en fin de tour"),
         ["why.lostDamage"] = ("{0} damage lost", "{0} dégâts perdus"),

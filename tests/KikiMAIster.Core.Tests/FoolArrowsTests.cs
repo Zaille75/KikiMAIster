@@ -249,4 +249,86 @@ public class FoolArrowsTests
         Assert.Equal(new[] { "Card:EXPECT_A_FIGHT", "2" }, Missed(TurnReview.Resolve(State(Player(2))), "attackDiscount").Single().Args);
         Assert.Equal(new[] { "Card:EXPECT_A_FIGHT", "1" }, Missed(TurnReview.Resolve(State(Player(1))), "attackDiscount").Single().Args);
     }
+
+}
+
+/// 1.2.1 (inbox of 2026-11-13): co-op arrows, card makers first, Feu de couverture late.
+public class FoolCoopTests
+{
+    private static readonly Actor A = Actor.Player(1, 1);
+    private static readonly Actor B = Actor.Player(2, 1);
+    private static readonly object Enemy = new();
+    private int _id;
+
+    private TurnPlay Play(Actor owner, string id, int energy = 1, CardKind kind = CardKind.Attack, object? target = null, int energyBefore = 3,
+        params object[] inHand)
+    {
+        var p = new TurnPlay
+        {
+            Id = ++_id, Owner = owner, CardRef = new object(), CardKey = $"Card:{id}", Kind = kind, EnergySpent = energy, Target = target,
+            HandAtPlay = inHand.ToList(), EnergyBefore = energyBefore
+        };
+        if (target != null && kind == CardKind.Attack) p.Hits.Add(new EnemyHit(target, 8, -1));
+        return p;
+    }
+
+    private static List<MissedChance> Missed(TurnResult r, string kind) => r.Events.OfType<MissedChance>().Where(m => m.Kind == kind).ToList();
+
+    private static TurnState State(IEnumerable<TurnPlayer> players, params TurnPlay[] plays)
+    {
+        var s = new TurnState { Players = players.ToList(), Plays = plays.ToList() };
+        s.EnemiesLeft[Enemy] = 50;
+        return s;
+    }
+
+    [Fact]
+    public void AllysShotImpaledTheTargetAfterMyBowSmack_AndMySerratedAttack()
+    {
+        var allyShotCard = new object();
+        var smack = Play(A, "BOW_SMACK", target: Enemy);
+        smack.AlliesHandAtPlay.Add(allyShotCard);
+        smack.SerratedBonus = 0.5;
+        var shot = new TurnPlay
+        {
+            Id = ++_id, Owner = B, CardRef = allyShotCard, CardKey = "Card:FOOLISH_SHOT", Kind = CardKind.Attack, EnergySpent = 1, Target = Enemy,
+            ShotArrow = true, ArrowsReady = 1
+        };
+        var r = TurnReview.Resolve(State(new[] { new TurnPlayer { Actor = A }, new TurnPlayer { Actor = B } }, smack, shot));
+        var miss = Missed(r, "impaleFirst").Single();
+        Assert.Equal(A, miss.Player);
+        Assert.Equal(new[] { "Card:BOW_SMACK", "Card:FOOLISH_SHOT|2" }, miss.Args);
+        Assert.Equal(new[] { "Card:BOW_SMACK", "4", "0", "Card:FOOLISH_SHOT|2" }, Missed(r, "orderTurn").Single().Args);
+    }
+
+    [Fact]
+    public void Abundance_PlayedAfterOtherCards()
+    {
+        var abundanceCard = new object();
+        var strike = Play(A, "STRIKE", target: Enemy, energyBefore: 3, inHand: abundanceCard);
+        var abundance = new TurnPlay
+        {
+            Id = ++_id, Owner = A, CardRef = abundanceCard, CardKey = "Card:ABUNDANCE^", Kind = CardKind.Skill, EnergySpent = 0, EnergyBefore = 2
+        };
+        var r = TurnReview.Resolve(State(new[] { new TurnPlayer { Actor = A } }, strike, abundance));
+        Assert.Equal(new[] { "Card:ABUNDANCE^", "Card:STRIKE" }, Missed(r, "makerFirst").Single().Args);
+        // A card that drew may come first.
+        strike.CardsDrawn = 2;
+        Assert.Empty(Missed(TurnReview.Resolve(State(new[] { new TurnPlayer { Actor = A } }, strike, abundance)), "makerFirst"));
+    }
+
+    [Fact]
+    public void CoveringFire_PlayedAfterAShot_LostTheAllysBlock()
+    {
+        var cfCard = new object();
+        var shot = Play(A, "FOOLISH_SHOT", target: Enemy, inHand: cfCard);
+        shot.ShotArrow = true;
+        var cf = new TurnPlay
+        {
+            Id = ++_id, Owner = A, CardRef = cfCard, CardKey = "Card:COVERING_FIRE^", Kind = CardKind.Power, EnergySpent = 0, AllyBlockPerShot = 11
+        };
+        var players = new[] { new TurnPlayer { Actor = A }, new TurnPlayer { Actor = B, Block = 5, Incoming = 12 } };
+        Assert.Equal(new[] { "Card:COVERING_FIRE^", "Card:FOOLISH_SHOT", "7" }, Missed(TurnReview.Resolve(State(players, shot, cf)), "coveringFireLate").Single().Args);
+        var covered = new[] { new TurnPlayer { Actor = A }, new TurnPlayer { Actor = B, Block = 12, Incoming = 12 } };
+        Assert.Empty(Missed(TurnReview.Resolve(State(covered, shot, cf)), "coveringFireLate"));
+    }
 }

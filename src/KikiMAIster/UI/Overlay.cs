@@ -271,6 +271,15 @@ public static class Overlay
         }
     }
 
+    /// The mouse is over the panel or one of its detached windows.
+    private static bool MouseOverPanels()
+    {
+        if (_panel == null) return false;
+        var mouse = _panel.GetGlobalMousePosition();
+        bool Over(Control c) => GodotObject.IsInstanceValid(c) && c.Visible && new Rect2(c.GlobalPosition, c.Size * c.Scale).HasPoint(mouse);
+        return Over(_panel) || DetachedWindows.Values.Any(w => Over(w.Panel));
+    }
+
     /// Forces a rebuild on the next refresh (settings or language changed).
     internal static void Invalidate()
     {
@@ -446,6 +455,9 @@ public static class Overlay
         // Rebuild only when something changed (cheap check on the displayed numbers).
         var signature = Signature(stats) + $"|{_combatsBack}/{combats.Count}";
         if (signature == _lastSignature) return;
+        // 1.2.1 (Zaille75): no rebuild while the mouse is over the panel (it closed the hover text at every card played);
+        // it rebuilds once the mouse leaves. Changes asked by the player (Invalidate) still show right away.
+        if (_lastSignature != "" && MouseOverPanels()) return;
         _lastSignature = signature;
 
         // Remove old rows right away (QueueFree alone keeps them until the end of the frame), then let the
@@ -1218,6 +1230,7 @@ public static class Overlay
         "DEFECT" => new Color(0.35f, 0.6f, 0.95f),
         "NECROBINDER" => new Color(0.7f, 0.45f, 0.9f),
         "REGENT" => new Color(0.95f, 0.65f, 0.25f),
+        "FOOL" => new Color(0.95f, 0.88f, 0.35f), // 1.2.1 (Zaille75): yellowish
         _ => new Color(0.75f, 0.75f, 0.75f)
     };
 

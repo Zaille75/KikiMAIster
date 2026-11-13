@@ -1250,7 +1250,8 @@ public static class BlockAlternatives
         card.ShouldRetainThisTurn || card.CurrentStarCost > 0 || card.HasStarCostX || card.Keywords.Contains(CardKeyword.Exhaust) ||
         ConsumesHand.Contains(card.Id.Entry) || EnergyOnly.Contains(card.Id.Entry) || SacrificesPet.Contains(card.Id.Entry) ||
         CostsHp.Contains(card.Id.Entry) || EvokesOrbs.Contains(card.Id.Entry) || !Hook.ShouldFlush(combat, card.Owner) ||
-        DoesNothingNow(card) || DiscardsForNothing(card);
+        DoesNothingNow(card) || DiscardsForNothing(card) || card.Affliction is Galvanized ||
+        (GameBranch.IsV113 && Arrows.AimOnSlippery(card));
 
     /// Impatience draws only without an attack in hand (v0.18.9, Zaille75): with one, it does nothing.
     private static bool DoesNothingNow(CardModel card) =>
@@ -1374,6 +1375,12 @@ public static class BlockAlternatives
             return false;
         }
 
+        /// 1.2.1 (Zaille75: "I didn't want to waste my Visée on Glissant"): a Shot while the player has Aim and every enemy it
+        /// could hit has Glissant (1 damage per hit): keeping it is a choice.
+        public static bool AimOnSlippery(CardModel card) =>
+            IsShot(card) && card.CombatState is { } combat && card.Owner.Creature.GetPowerAmount<AimPower>() > 0 &&
+            combat.HittableEnemies.Count > 0 && combat.HittableEnemies.All(e => e.HasPower<SlipperyPower>());
+
         public static bool NoDamageOn(CardModel card, Creature target) => NeedAnyArrow.Contains(card.Id.Entry) && !HasArrow(target);
 
         /// Arrow state when a card play starts (arrows ready, enemies with arrows, Serrated Arrows, Aim) and whether the card
@@ -1403,6 +1410,7 @@ public static class BlockAlternatives
                 };
             }
             var id = card.Id.Entry;
+            if (id == "COVERING_FIRE" && card.DynamicVars.TryGetValue("CoveringFirePower", out var cover)) play.AllyBlockPerShot = cover.IntValue;
             play.NotImpaled = target is { IsEnemy: true } &&
                               (NeedAnyArrow.Contains(id) && !HasArrow(target) || NeedOwnArrow.Contains(id) && !HasOwnArrow(target, player));
         }

@@ -48,7 +48,10 @@ Steam page / untapped / SteamDB block automated fetches.
   ArrowsReady / OwnArrowIn / UnusedBuffs`; `TurnCard.NoArrow` now = "does nothing now" (red Shot, Nail / Recall / Uproot /
   Wrest without a target), `TurnCard.Shot`; `Lethal.Find(maxShots)`. Core: `TurnReview.ArrowOrder` ("impaleFirst",
   "shootFirst", Serrated / Cho Firm / Whistling / Aim order losses), `DidNothing` ("emptyShot" / "notImpaled", relic
-  exception), `BuffsUnused` ("buffUnused", Quietus). Tests 208. PatchCheck: beta 81, main 95, old main 99.
+  exception), `BuffsUnused` ("buffUnused", Quietus). Inbox 2026-11-13 (12 reports, `logs/inbox/2026-11-13_23-43-05`,
+  played with 1.2.0): arrows in co-op (`AlliesHandAtPlay`), Visée on Glissant kept (`Arrows.AimOnSlippery`), "makerFirst"
+  (`TurnReview.CardMakers`), "coveringFireLate" (`TurnPlay.AllyBlockPerShot`), Galvanisé kept on purpose, FOOL color, A level
+  in the run title, no panel rebuild under the mouse (`Overlay.MouseOverPanels`). Tests 211.
 - **Fool ideas not done:** melodies (Wah / Cho / Ki: first card of each tag per turn); tarot cards; Epic Retrieval on the
   wrong target (an enemy at 1 hit from freeing an arrow); a payoff card on a target without an arrow while another enemy had
   one; Quietus on a weak Shot; Repeat Shot at 0 energy.
