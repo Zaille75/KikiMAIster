@@ -143,6 +143,15 @@ had the same mod id, so the game loaded the first one in its list whatever the b
   `CardPlay.Card.Owner` (main); `CreatureCmd.LoseBlock` gives the remover on the beta only (main: the player whose card
   is being played); campfire leaving: the beta's "leave / skipped" messages, the main branch's `NRestSiteRoom._ExitTree`;
   cards / powers that only exist on the beta (Un pour tous, Âme sœur / Soulbound) are left out on the main branch.
+- **1.2.0 (2026-11-13): beta v0.113.0, main v0.111.0.** The main branch moved to the former beta (v0.111.0) and the
+  beta to v0.113.0. `GameBranch.IsBeta` (`CardPlay.Player`) is now true on both branches; `GameBranch.IsV113`
+  (`Hook.ShouldTakeExtraTurn` has 3 parameters) tells them apart, and `GameBranch.Name` is "beta" (v0.113.0), "main"
+  (v0.111.0) or "main-old" (v0.107.1, still supported, checked with `lib/default-v0.107.1`). v0.113.0 differences:
+  `Hook.ShouldTakeExtraTurn` gives the model in an out parameter (`GameApi.ShouldTakeExtraTurn`); the damage funnel is
+  `CreatureCmd.Damage(…, IEnumerable<DamageTargetData>, …, ModifyDamageHookType)` (`DamageCommandV113`); the kill funnel
+  takes the card (`CreatureCmd.Kill(creatures, cardSource, force)`, `KillCommandV113`); fixed hit counts are in a
+  "HitCount" variable instead of "Repeat" (`BlockAlternatives.HitCount` reads both).
+  `lib/beta/` = v0.113.0, `lib/default/` = v0.111.0 (both decompiled in the same folder layout, for diffs).
 - **Build check:** PatchCheck runs on the same DLL with `lib/beta` and with `lib/default`: every active patch matches one
   method, every reflection target exists, and every game type / member the DLL names exists in that game build unless
   only `[BranchOnly]` methods use it. The build fails otherwise.

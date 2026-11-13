@@ -18,8 +18,13 @@ public static class GameBranch
     /// CardPlay.Player only exists on the beta branch (v0.111.0; the main branch v0.107.1 has none).
     public static readonly bool IsBeta = typeof(CardPlay).GetProperty("Player") != null;
 
-    /// "beta" or "main", for the log and F9 reports.
-    public static string Name => IsBeta ? "beta" : "main";
+    /// Beta v0.113.0 (2026-11-12): Hook.ShouldTakeExtraTurn tells which model gives the extra turn. The main branch moved to
+    /// v0.111.0 the same day, so IsBeta is true on both branches now; IsV113 tells them apart (v1.2.0).
+    public static readonly bool IsV113 =
+        typeof(Hook).GetMethods().Any(m => m.Name == nameof(Hook.ShouldTakeExtraTurn) && m.GetParameters().Length == 3);
+
+    /// "beta" or "main", for the log and F9 reports ("main-old": main branch before v0.111.0).
+    public static string Name => IsV113 ? "beta" : IsBeta ? "main" : "main-old";
 }
 
 /// Marks code that names game types or members of one branch only: call it only after a GameBranch.IsBeta check
@@ -70,6 +75,19 @@ public static class GameApi
         CardModel? card, CardPlay? play) => GameBranch.IsBeta
         ? BetaMultiplicative(m, target, amount, props, dealer, card, play)
         : (MainMultiplicative ?? throw new MissingMethodException("AbstractModel.ModifyDamageMultiplicative (main branch)"))(m, target, amount, props, dealer, card);
+
+    private delegate bool OldExtraTurn(ICombatState combatState, Player player);
+    private static readonly OldExtraTurn? OldShouldTakeExtraTurn = GameBranch.IsV113 ? null :
+        typeof(Hook).GetMethods(Any).SingleOrDefault(m => m.Name == nameof(Hook.ShouldTakeExtraTurn) && m.GetParameters().Length == 2) is { } old
+            ? (OldExtraTurn)Delegate.CreateDelegate(typeof(OldExtraTurn), old) : null;
+
+    /// Hook.ShouldTakeExtraTurn: v0.113.0 adds an out parameter (the model giving the turn).
+    public static bool ShouldTakeExtraTurn(ICombatState combat, Player player) => GameBranch.IsV113
+        ? V113ShouldTakeExtraTurn(combat, player)
+        : (OldShouldTakeExtraTurn ?? throw new MissingMethodException("Hook.ShouldTakeExtraTurn (before v0.113.0)"))(combat, player);
+
+    [BranchOnly, MethodImpl(MethodImplOptions.NoInlining)]
+    private static bool V113ShouldTakeExtraTurn(ICombatState combat, Player player) => Hook.ShouldTakeExtraTurn(combat, player, out _);
 
     /// Who plays the card: CardPlay.Player (beta), the card's owner (main).
     public static Player PlayerOf(CardPlay play) => GameBranch.IsBeta ? BetaPlayer(play) : play.Card.Owner;

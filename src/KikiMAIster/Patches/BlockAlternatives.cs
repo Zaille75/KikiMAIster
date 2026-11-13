@@ -782,7 +782,7 @@ public static class BlockAlternatives
         foreach (var p in combat.Players.Where(p => p.Creature.IsAlive))
             Capture.Safe("extra turn", () =>
             {
-                if (Hook.ShouldTakeExtraTurn(combat, p)) ExtraTurn.Add(p);
+                if (GameApi.ShouldTakeExtraTurn(combat, p)) ExtraTurn.Add(p);
             });
         Capture.Safe("missed lethal", () => ResolveLethal(combat));
         Capture.Safe("turn review", () =>
@@ -1086,7 +1086,8 @@ public static class BlockAlternatives
         }
     }
 
-    /// Cards that always hit twice without saying it in a variable.
+    /// Cards that always hit twice without saying it in a variable (main branch v0.111.0; the beta v0.113.0 gives them a
+    /// "HitCount" variable).
     private static readonly HashSet<string> TwoHits = new() { "ASTRAL_PULSE", "MAUL", "DAGGER_SPRAY", "TWIN_STRIKE", "UPROAR", "RIP_AND_TEAR", "REFRACT", "THRASH" };
 
     /// Attacks whose "Repeat" counts something else than hits (Ice Lance: Frost orbs channeled; Heirloom Hammer: copies),
@@ -1095,7 +1096,8 @@ public static class BlockAlternatives
 
     /// Cards whose number of hits depends on things the mod does not compute (energy spent, cards in piles…).
     private static readonly HashSet<string> UnknownHits = new()
-        { "SPITE", "ERADICATE", "FLAK_CANNON", "FIEND_FIRE", "HEAVENLY_DRILL", "MAD_SCIENCE", "SKEWER", "STARDUST", "VOLLEY", "WHIRLWIND" };
+        { "SPITE", "ERADICATE", "FLAK_CANNON", "FIEND_FIRE", "HEAVENLY_DRILL", "MAD_SCIENCE", "SKEWER", "STARDUST", "VOLLEY", "WHIRLWIND",
+          "REPEAT_SHOT" };
 
     /// Number of hits of an attack on this target (card audit of every "hit count" in the game), null when unknown.
     /// "CalculatedHits" is the game's own count (En miettes: 1 + times the player lost HP this fight; Barrage…).
@@ -1104,9 +1106,11 @@ public static class BlockAlternatives
         var id = card.Id.Entry;
         if (UnknownHits.Contains(id)) return null;
         if (card.DynamicVars.TryGetValue("CalculatedHits", out var calc) && calc is CalculatedVar cv) return Math.Max(1, (int)cv.Calculate(target));
+        if (card is Dismantle) return target?.HasPower<VulnerablePower>() == true ? 2 : 1;
+        // Beta v0.113.0: fixed hit counts moved from "Repeat" to "HitCount" (Repeat stays for other counts).
+        if (card.DynamicVars.TryGetValue("HitCount", out var hits)) return Math.Max(1, hits.IntValue);
         if (TwoHits.Contains(id)) return 2;
         if (!RepeatNotHits.Contains(id) && card.DynamicVars.TryGetValue("Repeat", out var repeat)) return Math.Max(1, repeat.IntValue);
-        if (card is Dismantle) return target?.HasPower<VulnerablePower>() == true ? 2 : 1;
         return 1;
     }
 
@@ -1221,10 +1225,11 @@ public static class BlockAlternatives
         "BLOOD_WALL", "BLOODLETTING", "BRAND", "BREAKTHROUGH", "DEMONIC_SHIELD", "HEMOKINESIS", "OFFERING"
     };
 
-    /// Cards that only give energy (audit of every card, v0.17.45: Sursis…): they cannot use the energy left.
+    /// Cards that only give energy (audit of every card, v0.17.45: Sursis…): they cannot use the energy left. Paré au combat
+    /// left in 1.2.0 (block on both branches: per Strength on v0.111.0, Attacks cost 1 less on v0.113.0).
     private static readonly HashSet<string> EnergyOnly = new()
     {
-        "ALIGNMENT", "BELIEVE_IN_YOU", "BLOODLETTING", "BORROWED_TIME", "DOUBLE_ENERGY", "ENERGY_SURGE", "EXPECT_A_FIGHT",
+        "ALIGNMENT", "BELIEVE_IN_YOU", "BLOODLETTING", "BORROWED_TIME", "DOUBLE_ENERGY", "ENERGY_SURGE",
         "FORGOTTEN_RITUAL", "LUMINESCE", "PRODUCTION", "SUPERCRITICAL", "TACTICIAN", "TURBO", "WISP"
     };
 

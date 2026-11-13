@@ -4,12 +4,44 @@
 > (interface). The history of every version is in `CHANGELOG.md` and the specs' "vX.Y.Z" notes; the git history has the
 > older handoff sections (v0.7 → v0.17).
 >
-> **State:** **1.1.1 released on GitHub (2026-11-06, tag `v1.1.1`, by WTT27); Workshop package ready in `dist/workshop/`, upload by Zaille75. Not tested in game yet.** Before: **1.1.0 released** on GitHub (tag on `c769770`, published by WTT27) and the Steam Workshop (2026-11-03):
+> **State:** **1.2.0 in progress on `feature/beta-v0.113` (game update beta v0.113.0 / main v0.111.0, see below).** **1.1.1 released on GitHub (2026-11-06, tag `v1.1.1`, by WTT27); Workshop package ready in `dist/workshop/`, upload by Zaille75. Not tested in game yet.** Before: **1.1.0 released** on GitHub (tag on `c769770`, published by WTT27) and the Steam Workshop (2026-11-03):
 > one DLL for both game branches, one Workshop item "KikiMAIster - Solo and Co-op stats" (3832591950, renamed by Zaille75 2026-11-06). Short solo test by Zaille75 on both
 > branches OK (`logs/2026-11-03_v1.1.0_*_solo.log`); beta solo run with campfires and F8 OK too (Tente miniature
 > campfire path and co-op "Ce groupe" not exercised). Zaille75 has several game profiles: a new one has an empty history. Nothing since v0.18.5 is tested in game yet. When Zaille75
 > sends a new inbox (`logs/inbox/<date_time>/`): **review and summarize every report first, wait for his go, then implement
 > the whole batch** (memory rules).
+
+## 1.2.0 — game update beta v0.113.0 / main v0.111.0 (2026-11-13, branch `feature/beta-v0.113`, not tested in game)
+Beta v0.113.0 (12 Nov, "biggest beta patch": the Fool, Blitz, Dread, ~140 cards changed); the main branch moved to v0.111.0
+the same day (= our former `lib/beta`). Patch notes: Steam news API (`ISteamNews/GetNewsForApp`, appid 2868840): the
+Steam page / untapped / SteamDB block automated fetches.
+- **lib:** `lib/beta/` = v0.113.0 (from Zaille75, `lib/beta-v0.113.0/` raw copy), `lib/default/` = v0.111.0,
+  `lib/default-v0.107.1/` = old main (PatchCheck by hand: `dotnet run --project tools/PatchCheck -- lib/default-v0.107.1
+  build/mod/KikiMAIster.dll`). Both decompiled with `ilspycmd -p -o <dir>/decompiled <dir>/sts2.dll -r <dir>` (same layout:
+  `diff -rq lib/default/decompiled lib/beta/decompiled`). `lib/beta/names.txt` is still the v0.111.0 table: the Fool's
+  names come with the next `KikiMAIster.names.txt` from Zaille75's game.
+- **Fixed:** `GameBranch.IsV113`; `GameApi.ShouldTakeExtraTurn`; damage funnel `DamageCommandV113` and kill funnel
+  `KillCommandV113` (without them no damage / kill credit on v0.113.0); `HitCount` reads "HitCount" (v0.113.0 renamed
+  "Repeat" for Coup double, Ricochet, Sept étoiles…: they counted 1 hit), `REPEAT_SHOT` (X cost) unknown; Paré au combat
+  out of EnergyOnly. PatchCheck: beta 80, main 84, old main 88; tests 189.
+- **Checked, no change:** patched methods whose body changed (`PowerCmd.Apply`: player debuffs applied on the player's
+  own turn now tick normally, the mod reads amounts from the game; `RunManager.OnEnded` now guards a second end itself;
+  `GenerateRelicFight` got a relic index; `StampedePower` uses another RNG); Prisme infesté still makes cards Souillé
+  (Étincelle vitale); Un pour tous now also boosts autoplayed 0-cost cards (rule unchanged); Hook.AfterDeath gained a
+  card parameter (patch binds by name); new campfire options (EVOLVE for Byrdpip, RESTORE for the Wuppy relic) go
+  through `IsEnabled`; `GameMode` enum: Custom gone, Dread / Blitz added (the mod only names Standard).
+- **Questions for Zaille75 (open):**
+  1. Blitz / Dread runs: count them in compositions (F8), records, trophies, or keep Standard only? (F8 today: Standard
+     only.) In Blitz gold is useless: hide the Or section there?
+  2. Wuppy (new event relic, a pet that takes damage **before** block, `WuppysLoyaltyPower.ModifyPreBlockDamageTarget`):
+     credit the damage it takes like Titos (PV évités for its owner)? Block kept because Wuppy took the hit is then not "gâché".
+  3. Paré au combat (now 15(20) Block + Attacks in hand cost 1 less): count it as a block card with a side effect (never
+     "gâché" when an attack was in hand) or as pure block?
+  4. The Fool: arrows (`ArrowCmd`: shots need an arrow, Rain Shot does nothing without one), melodies (`MelodyCmd`),
+     tarot cards. Misplay estimates assume an attack always hits: wait for a first Fool log before adding rules?
+- **To test in game (beta):** log line `game branch beta`, no "patch … not applied"; damage / kills credited (summary
+  not empty); a multi-hit attack (Coup double…) in a "weak attack" / lethal estimate; a Fool run; main branch: `game
+  branch main`.
 
 ## 1.1.1 — GitHub reports of 2026-11-05 (2026-11-06, released on GitHub, not tested in game)
 First two public F9 reports (issues #1, #2, by Zaille75 as WTT27; zips added as comments, files in `logs/feedback-2026-11-05/`).

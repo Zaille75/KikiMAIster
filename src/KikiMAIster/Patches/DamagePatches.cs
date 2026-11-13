@@ -40,9 +40,12 @@ public static class DamagePatches
     }
 
     /// Every damage command funnels into this overload: remember who/what is dealing damage to each target.
+    /// Beta v0.113.0: the funnel takes DamageTargetData (target + hit effect) instead, see DamageCommandV113.
     [HarmonyPatch]
     public static class DamageCommand
     {
+        public static bool Prepare() => !GameBranch.IsV113;
+
         /// The beta adds a CardPlay at the end.
         public static System.Reflection.MethodBase TargetMethod() => AccessTools.Method(typeof(CreatureCmd), nameof(CreatureCmd.Damage),
             GameBranch.IsBeta
@@ -50,6 +53,9 @@ public static class DamagePatches
                 : new[] { typeof(PlayerChoiceContext), typeof(IEnumerable<Creature>), typeof(decimal), typeof(ValueProp), typeof(Creature), typeof(CardModel) });
 
         public static void Prefix(IEnumerable<Creature>? targets, Creature? dealer, CardModel? cardSource) =>
+            Record(targets, dealer, cardSource);
+
+        internal static void Record(IEnumerable<Creature>? targets, Creature? dealer, CardModel? cardSource) =>
             Capture.Safe("CreatureCmd.Damage", () =>
             {
                 if (targets == null) return;
@@ -81,12 +87,36 @@ public static class DamagePatches
             });
     }
 
+    /// Beta v0.113.0 damage funnel: CreatureCmd.Damage(context, IEnumerable<DamageTargetData>, amount, props, dealer, card,
+    /// play, hook type). AttackCommand calls it directly, the IEnumerable<Creature> overload forwards to it.
+    [HarmonyPatch]
+    public static class DamageCommandV113
+    {
+        public static bool Prepare() => GameBranch.IsV113;
+
+        public static System.Reflection.MethodBase TargetMethod() => typeof(CreatureCmd).GetMethods().Single(m =>
+            m.Name == nameof(CreatureCmd.Damage) && m.GetParameters() is { Length: > 1 } p &&
+            p[1].ParameterType.IsGenericType && p[1].ParameterType.GetGenericArguments()[0].Name == "DamageTargetData");
+
+        public static void Prefix(object? targetData, Creature? dealer, CardModel? cardSource) =>
+            DamageCommand.Record(targetData == null ? null : Targets(targetData), dealer, cardSource);
+
+        [BranchOnly, System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static List<Creature> Targets(object targetData) =>
+            ((IEnumerable<MegaCrit.Sts2.Core.Entities.Creatures.DamageTargetData>)targetData).Select(d => d.target).ToList();
+    }
+
     /// Kills that are not damage (Doom, executes…) also go through LoseHpInternal: give them a context
     /// so they are credited to the right power or card instead of the last damage call on that creature.
+    /// Beta v0.113.0: the funnel takes the card that kills (Éclats d'os, Sacrifice) too, see KillCommandV113.
     [HarmonyPatch(typeof(CreatureCmd), nameof(CreatureCmd.Kill), typeof(IReadOnlyCollection<Creature>), typeof(bool))]
     public static class KillCommand
     {
-        public static void Prefix(IReadOnlyCollection<Creature> creatures) => Capture.Safe("CreatureCmd.Kill", () =>
+        public static bool Prepare() => !GameBranch.IsV113;
+
+        public static void Prefix(IReadOnlyCollection<Creature> creatures) => Record(creatures);
+
+        internal static void Record(IReadOnlyCollection<Creature> creatures) => Capture.Safe("CreatureCmd.Kill", () =>
         {
             var model = Capture.CallingModelType();
             var dealer = model != null && typeof(CardModel).IsAssignableFrom(model) ? Capture.CurrentActingPlayer?.Creature : null;
@@ -94,6 +124,18 @@ public static class DamagePatches
             // A creature at 0 HP is dying from the damage just dealt: keep that damage's card and dealer.
             foreach (var c in creatures.Where(c => c.CurrentHp > 0)) LastCallOnTarget.AddOrUpdate(c, WithDot(call, c));
         });
+    }
+
+    /// Beta v0.113.0 kill funnel: CreatureCmd.Kill(creatures, cardSource, force).
+    [HarmonyPatch]
+    public static class KillCommandV113
+    {
+        public static bool Prepare() => GameBranch.IsV113;
+
+        public static System.Reflection.MethodBase TargetMethod() => AccessTools.Method(typeof(CreatureCmd), nameof(CreatureCmd.Kill),
+            new[] { typeof(IReadOnlyCollection<Creature>), typeof(CardModel), typeof(bool) });
+
+        public static void Prefix(IReadOnlyCollection<Creature> creatures) => KillCommand.Record(creatures);
     }
 
     /// HP loss reduced by relics/powers (Tungsten Rod, Intangible, Buffer…): credited as damage prevented to the

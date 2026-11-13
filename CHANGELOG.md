@@ -3,6 +3,11 @@
 Summary by version line. The detailed notes of every version are in [docs/specs/02-ui.md](docs/specs/02-ui.md)
 (interface) and [docs/specs/01-metrics.md](docs/specs/01-metrics.md) (rules).
 
+## 1.2.0 (unreleased)
+Game update: works with the beta v0.113.0 (the Fool, Blitz, Dread) and the main branch v0.111.0. Damage and kills are
+tracked again on the new beta; multi-hit attacks count all their hits again in the misplay estimates (the game renamed
+their hit count). Paré au combat is no longer treated as an energy-only card.
+
 ## 1.1.1 (2026-11-06)
 Misplays: new "Vulnérable gardé" (an attack giving Vulnérable, like Tope là, kept while plain attacks were played);
 wrong order against Ralenti and before Vulnérable take Létalité, Vigueur, Pointe de stylo… into account; upgraded cards
