@@ -3,6 +3,17 @@
 Summary by version line. The detailed notes of every version are in [docs/specs/02-ui.md](docs/specs/02-ui.md)
 (interface) and [docs/specs/01-metrics.md](docs/specs/01-metrics.md) (rules).
 
+## 1.2.1 (draft, not released) — the Fool's arrows
+The Fool's arrow cards, from the game code. Fixes: a Shot with no arrow ready is no longer a "free card" (Quick Shot), a
+block alternative, a Stars / Carapace alternative or the "stronger attack"; Nail with no arrow in any enemy and Recall /
+Uproot / Wrest with none of the player's arrows in an enemy do nothing and are never suggested; lethal checks and Paré au
+combat count no more Shots than the arrows ready. New mistakes: Nail / Recall / Uproot / Wrest on a target without an arrow
+(Gâché), a payoff card (Bow Smack, Ki Hop, Wah Hammer, Nail) played before the Shot that impaled its target (Choix), a Shot
+whose arrow stayed stuck while 3 earlier hits would have freed it (Choix), Quietus with no shot after it (Gâché); wrong
+order for Cho Firm / Whistling Arrows after a Shot, Aim spent on a weaker Shot, attacks before the impaling Shot with
+Serrated Arrows. An empty Shot that completed a relic count (Kunai…) is not a mistake. Hobbling Shot counts for "Vulnérable
+gardé".
+
 ## 1.2.0 (2026-11-13) — first quick update for the beta v0.113.0, more to come
 Game update: works with the beta v0.113.0 (the Fool, Blitz, Dread) and the main branch v0.111.0. Damage and kills are
 tracked again on the new beta; multi-hit attacks count all their hits again in the misplay estimates (the game renamed

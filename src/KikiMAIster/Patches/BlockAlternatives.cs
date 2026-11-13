@@ -613,15 +613,27 @@ public static class BlockAlternatives
     private static bool IsAttackDiscount(CardModel card) => card is ExpectAFight && card.DynamicVars.TryGetValue("Energy", out _);
 
     /// The Fool (beta v0.113.0, 1.2.0): a Shot card (damage "from an arrow") the game shows in red: no arrow is ready.
-    private static bool NoArrowReady(CardModel card) =>
-        GameBranch.IsV113 && card.Type == CardType.Attack && card.DynamicVars.TryGetValue("Damage", out var v) && v is DamageVar dv &&
-        ((int)dv.Props & 0x20) != 0 && card.ShouldGlowRed; // 0x20: ValueProp.FromArrow (v0.113.0)
+    private static bool NoArrowReady(CardModel card) => IsShot(card) && card.ShouldGlowRed;
+
+    /// One of the Fool's Shots (beta v0.113.0): an attack whose damage comes "from an arrow" (The Shot: a calculated damage).
+    private static bool IsShot(CardModel card) =>
+        GameBranch.IsV113 && card.Type == CardType.Attack && card.DynamicVars.Values.Any(v =>
+            ((int)(v switch { DamageVar dv => dv.Props, CalculatedDamageVar cv => cv.Props, _ => default(ValueProp) }) & 0x20) != 0); // 0x20: ValueProp.FromArrow
+
+    /// The Fool's cards that do nothing now (1.2.1): a Shot with no arrow ready, Nail with no arrow in any enemy, Recall /
+    /// Uproot / Wrest with none of the player's arrows in an enemy.
+    private static bool IdleNow(CardModel card) => NoArrowReady(card) || (GameBranch.IsV113 && Arrows.IdleNow(card));
 
     /// The Fool (beta v0.113.0, 1.2.0): an arrow shot by the card in progress; with no arrow ready (all stuck in enemies) the
     /// Shot does nothing. Couverture (Covering Fire) still gives block to allies on an empty shot: not empty then.
     public static void OnArrowShot(Player owner, bool hadArrow, CardModel? source)
     {
-        if (hadArrow || source == null || !InProgress.TryPeek(out var play) || play == null || play.Card != source || play.Player != owner) return;
+        if (source == null || !InProgress.TryPeek(out var play) || play == null || play.Card != source || play.Player != owner) return;
+        if (hadArrow)
+        {
+            play.ShotArrow = true;
+            return;
+        }
         if (owner.Creature.Powers.Any(p => p.GetType().Name == "CoveringFirePower")) return;
         play.EmptyShot = true;
         ModLog.Info($"empty shot: {Key(source)} by {owner.NetId} (no arrow ready)");
@@ -719,8 +731,10 @@ public static class BlockAlternatives
             HadNonDamageEffect = IsGrowing(cardPlay.Card) || IsAttackDiscount(cardPlay.Card),
             OtherThanDebuff = IsGrowing(cardPlay.Card) || IsAttackDiscount(cardPlay.Card),
             UsefulCardsInHand = hand.Where(c => c != cardPlay.Card && IsUseful(c)).Select(c => new SeenCard(c, Key(c))).ToList(),
-            HandAtPlay = hand.Where(c => c != cardPlay.Card).ToList<object>()
+            HandAtPlay = hand.Where(c => c != cardPlay.Card).ToList<object>(),
+            KindCount = counts[cardPlay.Card.Type]
         };
+        if (GameBranch.IsV113) Capture.Safe("arrows", () => Arrows.Fill(play, cardPlay));
         var energyBefore = (Capture.PlayerOf(cardPlay).PlayerCombatState?.Energy ?? 0) + cardPlay.Resources.EnergySpent;
         if (cardPlay.Card.Type == CardType.Attack && cardPlay.Target is { IsEnemy: true } target)
         {
@@ -877,6 +891,9 @@ public static class BlockAlternatives
             PetAlive = !player.IsOstyMissing,
             PetSacrificedThisTurn = PetSacrificed.Contains(player),
             LethalMissed = LethalCounted.Contains(player),
+            ArrowsReady = GameBranch.IsV113 ? Arrows.Ready(player) : int.MaxValue,
+            OwnArrowIn = GameBranch.IsV113 ? Arrows.OwnIn(player, combat) : new HashSet<object>(ReferenceEqualityComparer.Instance),
+            UnusedBuffs = GameBranch.IsV113 ? Arrows.UnusedBuffs(creature) : new HashSet<string>(),
             StampedeShort = StampedeShort.GetValueOrDefault(player),
             StampedeKey = $"Power:{ModelDb.GetId<StampedePower>().Entry}",
             StampedePlayed = (StampedeAll.GetValueOrDefault(player) ?? new()).Select(c => CardView(c, combat, creature)).ToList(),
@@ -897,7 +914,8 @@ public static class BlockAlternatives
         LacksStars = LacksStars(c),
         KeptOnPurpose = KeptOnPurpose(c, combat),
         NeedsPet = c.Tags.Contains(CardTag.OstyAttack),
-        NoArrow = NoArrowReady(c),
+        NoArrow = IdleNow(c),
+        Shot = IsShot(c),
         SacrificesPet = SacrificesPet.Contains(c.Id.Entry),
         GainsBlock = c.GainsBlock,
         Block = c.GainsBlock ? EstimateBlock(c) : 0,
@@ -917,8 +935,10 @@ public static class BlockAlternatives
         DamageOn = c.Type != CardType.Attack ? new Dictionary<object, int>() :
             combat.HittableEnemies.Where(e => HitCount(c, e) != null).ToDictionary(e => (object)e, e => EstimateDamage(c, e)),
         // v1.1.1: an attack putting Vulnérable on enemies (Tope là, Coup…; Science folle's effect is random).
+        // 1.2.1: Hobbling Shot (Weak and Vulnérable "Power").
         VulnerableStacks = c.Type == CardType.Attack && c is not MadScience && c.TargetType is TargetType.AnyEnemy or TargetType.AllEnemies &&
-                           c.DynamicVars.TryGetValue("VulnerablePower", out var vulnerable) ? vulnerable.IntValue : 0,
+                           (c.DynamicVars.TryGetValue("VulnerablePower", out var vulnerable) ||
+                            c.Id.Entry == "HOBBLING_SHOT" && c.DynamicVars.TryGetValue("Power", out vulnerable)) ? vulnerable.IntValue : 0,
         AllEnemies = c.TargetType == TargetType.AllEnemies
     };
 
@@ -1060,11 +1080,13 @@ public static class BlockAlternatives
             var attacks = hand.Where(c => c.Type == CardType.Attack && !c.EnergyCost.CostsX && PlayableExceptEnergy(c) && !LacksStars(c) &&
                                           c.TargetType is TargetType.AnyEnemy or TargetType.AllEnemies && Allowed(c))
                 .Select(c => new Lethal.Attack($"Card:{Capture.IdOf(c)}", Cost(c), c.TargetType == TargetType.AllEnemies,
-                    enemies.Select(e => EstimateDamage(c, e)).ToList()))
+                    enemies.Select(e => EstimateDamage(c, e)).ToList(), IsShot(c)))
                 .ToList();
             // Paresse: at most that many cards this turn.
             var maxPlays = player.Creature.GetPower<SlothPower>()?.Amount ?? int.MaxValue;
-            var found = Lethal.Find(attacks, energy, enemies.Select(e => e.CurrentHp + e.Block).ToList(), maxPlays);
+            // 1.2.1: no more Shots than the arrows ready.
+            var found = Lethal.Find(attacks, energy, enemies.Select(e => e.CurrentHp + e.Block).ToList(), maxPlays,
+                GameBranch.IsV113 ? Arrows.Ready(player) : int.MaxValue);
             return found == null ? null : (found.ToArray(), enemies);
         }
         catch (Exception e)
@@ -1149,6 +1171,8 @@ public static class BlockAlternatives
         else if (card.DynamicVars.TryGetValue("OstyDamage", out v)) dealer = owner.IsOstyAlive ? owner.Osty : null;
         else return 0;
         if (dealer == null) return 0;
+        // 1.2.1: Nail does nothing on an enemy with no arrow in it.
+        if (GameBranch.IsV113 && Arrows.NoDamageOn(card, target)) return 0;
         var props = v switch { DamageVar dv => dv.Props, OstyDamageVar ov => ov.Props, _ => ValueProp.Move };
         decimal damage;
         DebuffEffectPatches.Computing = true;
@@ -1313,5 +1337,74 @@ public static class BlockAlternatives
     {
         card.CanPlay(out var reason, out _);
         return (reason & ~(UnplayableReason.EnergyCostTooHigh | UnplayableReason.StarCostTooHigh)) == UnplayableReason.None;
+    }
+
+    /// The Fool's arrows (beta v0.113.0 only, 1.2.1): every game type here exists only there.
+    [BranchOnly]
+    private static class Arrows
+    {
+        /// Cards that need an arrow in their target: any player's (Nail) or the player's own (Recall, Uproot, Wrest).
+        private static readonly HashSet<string> NeedAnyArrow = new() { "NAIL" };
+        private static readonly HashSet<string> NeedOwnArrow = new() { "RECALL", "UPROOT", "WREST" };
+
+        private static bool HasArrow(Creature enemy) => enemy.HasPower<ImpaledPower>();
+
+        private static bool HasOwnArrow(Creature enemy, Player player) => MegaCrit.Sts2.Core.Commands.ArrowCmd.CreatureIsImpaledByPlayersArrow(enemy, player);
+
+        public static int Ready(Player player) => MegaCrit.Sts2.Core.Commands.ArrowCmd.GetAvailableArrowCount(player);
+
+        public static HashSet<object> OwnIn(Player player, ICombatState combat)
+        {
+            var set = new HashSet<object>(ReferenceEqualityComparer.Instance);
+            foreach (var e in combat.Enemies.Where(e => e.IsAlive && HasOwnArrow(e, player))) set.Add(e);
+            return set;
+        }
+
+        /// Quietus still on the player at the end of the turn: no arrow attack used it, it goes away.
+        public static HashSet<string> UnusedBuffs(Creature creature) =>
+            creature.HasPower<QuietusPower>() ? new HashSet<string> { $"Power:{ModelDb.GetId<QuietusPower>().Entry}" } : new HashSet<string>();
+
+        /// The card needs an arrow in its target and no hittable enemy has one.
+        public static bool IdleNow(CardModel card)
+        {
+            if (card.CombatState is not { } combat) return false;
+            var id = card.Id.Entry;
+            if (NeedAnyArrow.Contains(id)) return !combat.HittableEnemies.Any(HasArrow);
+            if (NeedOwnArrow.Contains(id)) return !combat.HittableEnemies.Any(e => HasOwnArrow(e, card.Owner));
+            return false;
+        }
+
+        public static bool NoDamageOn(CardModel card, Creature target) => NeedAnyArrow.Contains(card.Id.Entry) && !HasArrow(target);
+
+        /// Arrow state when a card play starts (arrows ready, enemies with arrows, Serrated Arrows, Aim) and whether the card
+        /// misses the arrow it needs in its target.
+        public static void Fill(Play play, CardPlay cardPlay)
+        {
+            var player = play.Player;
+            if (player.Creature.CombatState is not { } combat) return;
+            play.ArrowsReady = Ready(player);
+            foreach (var e in combat.Enemies.Where(e => e.IsAlive))
+            {
+                if (HasArrow(e)) play.ArrowIn.Add(e);
+                if (HasOwnArrow(e, player)) play.OwnArrowIn.Add(e);
+            }
+            play.SerratedBonus = (double)player.Creature.GetPowerAmount<SerratedArrowsPower>() / 100;
+            var card = cardPlay.Card;
+            var target = cardPlay.Target;
+            if (IsShot(card))
+            {
+                play.AimAtStart = (int)player.Creature.GetPowerAmount<AimPower>();
+                play.AimFactor = card switch
+                {
+                    HeavyShot => (double)card.DynamicVars["AimMultiplier"].BaseValue,
+                    RainShot => 1 + combat.HittableEnemies.Count(e => e != target),
+                    RepeatShot => cardPlay.Resources.EnergySpent,
+                    _ => HitCount(card, target) ?? 1
+                };
+            }
+            var id = card.Id.Entry;
+            play.NotImpaled = target is { IsEnemy: true } &&
+                              (NeedAnyArrow.Contains(id) && !HasArrow(target) || NeedOwnArrow.Contains(id) && !HasOwnArrow(target, player));
+        }
     }
 }

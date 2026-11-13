@@ -5,14 +5,17 @@ namespace KikiMAIster.Core;
 /// combos are ignored).
 public static class Lethal
 {
-    /// Damage: previewed damage of this attack against each enemy (same order as the needs).
-    public sealed record Attack(string Id, int Cost, bool AllEnemies, IReadOnlyList<int> Damage);
+    /// Damage: previewed damage of this attack against each enemy (same order as the needs). Shot: one of the Fool's Shots,
+    /// which needs an arrow ready (1.2.1).
+    public sealed record Attack(string Id, int Cost, bool AllEnemies, IReadOnlyList<int> Damage, bool Shot = false);
 
     private const int MaxCards = 12;
 
     /// Needs: HP + block of each enemy. Returns the attacks of a lethal combination (fewest energy), or null.
-    /// MaxPlays: the most cards the player may still play this turn (Paresse, v0.17.38).
-    public static IReadOnlyList<Attack>? Find(IReadOnlyList<Attack> attacks, int energy, IReadOnlyList<int> needs, int maxPlays = int.MaxValue)
+    /// MaxPlays: the most cards the player may still play this turn (Paresse, v0.17.38). MaxShots: the Fool's arrows ready
+    /// (1.2.1: a Shot that kills gives its arrow back, ignored, so the check stays a minimum).
+    public static IReadOnlyList<Attack>? Find(IReadOnlyList<Attack> attacks, int energy, IReadOnlyList<int> needs, int maxPlays = int.MaxValue,
+        int maxShots = int.MaxValue)
     {
         if (needs.Count == 0) return null;
         var cards = attacks.Where(a => a.Cost <= energy && a.Damage.Count == needs.Count && a.Damage.Any(d => d > 0))
@@ -22,7 +25,7 @@ public static class Lethal
         for (var mask = 1; mask < 1 << cards.Count; mask++)
         {
             var chosen = cards.Where((_, i) => (mask & (1 << i)) != 0).ToList();
-            if (chosen.Count > maxPlays) continue;
+            if (chosen.Count > maxPlays || chosen.Count(a => a.Shot) > maxShots) continue;
             var cost = chosen.Sum(a => a.Cost);
             if (cost > energy || cost >= bestCost) continue;
             if (!Kills(chosen, needs)) continue;

@@ -41,8 +41,17 @@ Steam page / untapped / SteamDB block automated fetches.
   `PetHpGiven.Pet` / `PetHpBlock.Pet`; Déchaînement order only for Titos); Paré au combat never gâché
   (`IsAttackDiscount` → HadOtherEffect) and "attackDiscount" (Choix, `TurnPlayer.AttackDiscount`, `TurnPlay.CostsX`).
   Tests 195. Workshop description: 1.2.0 is a first quick update that will evolve quickly.
-- **Fool ideas not done (need a log):** shooting before attacks that would have freed an arrow (3 hits on the impaled
-  enemy bring it back); melodies (Wah / Cho / Ki: first card of each tag per turn); tarot cards.
+- **1.2.1 draft, branch `feature/fool-arrows` (not merged, not released):** the Fool's arrow cards (spec 01-metrics
+  "The Fool's arrows"). Arrows never come back at turn start (only 3 powered hits of their owner on the enemy, its death,
+  Recall / Uproot / Wrest). Capture: `BlockAlternatives.Arrows` ([BranchOnly], v0.113 types) fills `TurnPlay.ShotArrow /
+  ArrowsReady / OwnArrowIn / ArrowIn / SerratedBonus / AimAtStart / AimFactor / NotImpaled / KindCount` and `TurnPlayer.
+  ArrowsReady / OwnArrowIn / UnusedBuffs`; `TurnCard.NoArrow` now = "does nothing now" (red Shot, Nail / Recall / Uproot /
+  Wrest without a target), `TurnCard.Shot`; `Lethal.Find(maxShots)`. Core: `TurnReview.ArrowOrder` ("impaleFirst",
+  "shootFirst", Serrated / Cho Firm / Whistling / Aim order losses), `DidNothing` ("emptyShot" / "notImpaled", relic
+  exception), `BuffsUnused` ("buffUnused", Quietus). Tests 208. PatchCheck: beta 81, main 95, old main 99.
+- **Fool ideas not done:** melodies (Wah / Cho / Ki: first card of each tag per turn); tarot cards; Epic Retrieval on the
+  wrong target (an enemy at 1 hit from freeing an arrow); a payoff card on a target without an arrow while another enemy had
+  one; Quietus on a weak Shot; Repeat Shot at 0 energy.
 - **To test in game (beta):** log lines `game mode blitz|dread|standard`, `empty shot: …`; F8 "Mode" row; `game branch beta`, no "patch … not applied"; damage / kills credited (summary
   not empty); a multi-hit attack (Coup double…) in a "weak attack" / lethal estimate; a Fool run; main branch: `game
   branch main`.

@@ -34,7 +34,10 @@ public sealed class TurnCard
     /// An attack made by the pet (Cliquetis…, v0.17.45): it does nothing while the pet is dead.
     public bool NeedsPet { get; init; }
     /// The Fool (1.2.0): a Shot with no arrow ready (the game shows it in red): playing it now would do nothing.
+    /// 1.2.1: also Nail while no enemy has an arrow in it, and Recall / Uproot / Wrest while none has one of the player's.
     public bool NoArrow { get; init; }
+    /// One of the Fool's Shots (damage "from an arrow"): it needs an arrow ready (1.2.1).
+    public bool Shot { get; init; }
     /// Playing it kills the player's own pet (Détonation osseuse, Sacrifice; v0.17.45).
     public bool SacrificesPet { get; init; }
     public bool GainsBlock { get; init; }
@@ -167,8 +170,23 @@ public class TurnPlay
     /// The Fool (1.2.0): a Shot card played with no arrow ready (all of them stuck in enemies): it shot nothing.
     public bool EmptyShot { get; set; }
 
-    /// An empty shot that did nothing else (no hit, no block, no other effect): energy and card spent for nothing.
-    public bool ShotForNothing => EmptyShot && Hits.Count == 0 && !HadNonDamageEffect && !GaveBlock;
+    /// The Fool (1.2.1). ShotArrow: it shot an arrow. ArrowsReady: the player's arrows ready when it started. OwnArrowIn /
+    /// ArrowIn: enemies with one of the player's arrows / any arrow in them when it started. SerratedBonus: Serrated Arrows'
+    /// bonus then (0.25 = +25%). AimAtStart: the player's Aim when this arrow attack started; AimFactor: how many times it
+    /// takes Aim (Heavy Shot 2, Rapid Shot per hit, Rain Shot 1 + each other enemy). NotImpaled: Nail / Recall / Uproot /
+    /// Wrest played on an enemy without the arrow it needs. KindCount: the cards of its kind the player had played this
+    /// turn with it (auto-plays included, as relics count them).
+    public bool ShotArrow { get; set; }
+    public int ArrowsReady { get; set; }
+    public HashSet<object> OwnArrowIn { get; set; } = new(ReferenceEqualityComparer.Instance);
+    public HashSet<object> ArrowIn { get; set; } = new(ReferenceEqualityComparer.Instance);
+    public double SerratedBonus { get; set; }
+    public int AimAtStart { get; set; }
+    public double AimFactor { get; set; } = 1;
+    public bool NotImpaled { get; set; }
+    public int KindCount { get; set; }
+    /// Set by the rules: a Shot stuck an arrow in its target later in the turn ("impaleFirst" instead of "notImpaled").
+    public bool ImpaledLater { get; set; }
     public HashSet<object> HandWhenFull { get; } = new(ReferenceEqualityComparer.Instance);
 
     /// The first enemy it hit, with all the raw damage it dealt to that enemy; null when it hit no enemy.
@@ -220,6 +238,11 @@ public sealed class TurnPlayer
     public List<TurnCard> StampedePlayed { get; init; } = new();
     /// A missed lethal of the turn's first hand was already counted for this player (v0.18.9).
     public bool LethalMissed { get; init; }
+    /// The Fool (1.2.1): arrows ready at the end of the turn (no limit for others), enemies with one of the player's arrows in
+    /// them, and the player's powers that end with the turn unused ("Power:QUIETUS_POWER").
+    public int ArrowsReady { get; init; } = int.MaxValue;
+    public HashSet<object> OwnArrowIn { get; init; } = new(ReferenceEqualityComparer.Instance);
+    public HashSet<string> UnusedBuffs { get; init; } = new();
 
     public TurnCard? InHand(object card) => Hand.FirstOrDefault(c => ReferenceEquals(c.Ref, card));
     public bool Affordable(TurnCard c) => !c.StatusOrCurse && c.PlayableExceptEnergy && (c.CostsX || c.Cost <= Energy);
@@ -276,6 +299,7 @@ public static class TurnReview
     {
         var r = new TurnResult();
         SlowAttackOrder(s);
+        ArrowOrder(s, r);
         ResolveOrder(s, r);
         WeakPlays(s, r);
         Overkills(s, r);
@@ -408,6 +432,80 @@ public static class TurnReview
         return swapped - played;
     }
 
+    /// "Card:CHO_FIRM^" → "CHO_FIRM".
+    private static string CardId(string key)
+    {
+        var id = key.StartsWith("Card:", StringComparison.Ordinal) ? key[5..] : key;
+        var up = id.IndexOf('^');
+        return up < 0 ? id : id[..up];
+    }
+
+    /// Cards that pay off an arrow in their target (any player's): Bow Smack, Ki Hop, Wah Hammer, Nail.
+    private static readonly HashSet<string> ImpalePayoffs = new() { "BOW_SMACK", "KI_HOP", "WAH_HAMMER", "NAIL" };
+
+    /// Arrows stuck in an enemy come back only after 3 powered hits of their owner on it.
+    private const int HitsToFreeArrow = 3;
+
+    /// The Fool's order mistakes (1.2.1, spec 01-metrics "The Fool's arrows"):
+    /// - "impaleFirst": Bow Smack / Ki Hop / Wah Hammer / Nail on an enemy with no arrow in it, then the player's Shot stuck one
+    ///   there while it was in hand and an arrow was ready; with Serrated Arrows, every earlier attack on that enemy lost its
+    ///   bonus (wrong order, damage);
+    /// - "shootFirst": the Shot's arrow is still stuck at the end of the turn while 3+ of the player's hits on that enemy came
+    ///   before it (Shot in hand, arrow ready): shot first, they freed the arrow;
+    /// - Cho Firm with no arrow left / Whistling Arrows after a Shot they were in hand for (wrong order, block);
+    /// - Aim spent by a Shot while one taking more of it was played after with no Aim left (wrong order, damage).
+    private static void ArrowOrder(TurnState s, TurnResult r)
+    {
+        var serrated = new HashSet<(TurnPlay, object)>();
+        for (var i = 0; i < s.Plays.Count; i++)
+        {
+            var shot = s.Plays[i];
+            if (!shot.ShotArrow || shot.Target is not { } enemy || shot.KilledTarget) continue;
+            // The player's cards played before it while it was in hand and an arrow was ready: it could have come first.
+            var before = s.Plays.Take(i).Where(x => x.Owner == shot.Owner && x.ArrowsReady > 0 &&
+                                                    x.HandAtPlay.Any(h => ReferenceEquals(h, shot.CardRef))).ToList();
+            int HitsOn(TurnPlay x) => x.Hits.Count(h => ReferenceEquals(h.Target, enemy));
+            foreach (var x in before.Where(x => !x.ArrowIn.Contains(enemy)))
+            {
+                if (ImpalePayoffs.Contains(CardId(x.CardKey)) && ReferenceEquals(x.Target, enemy) && !x.ImpaledLater)
+                {
+                    x.ImpaledLater = true;
+                    r.Log.Add($"impale first: {x.CardKey} before {shot.CardKey}");
+                    r.Events.Add(new MissedChance(x.Owner, "impaleFirst", new[] { x.CardKey, shot.CardKey }));
+                }
+                if (x.SerratedBonus > 0 && x.Kind == CardKind.Attack && HitsOn(x) > 0 && serrated.Add((x, enemy)))
+                    s.OrderLosses.Add(new OrderLoss(x, shot.CardKey, "order", enemy,
+                        x.Hits.Where(h => ReferenceEquals(h.Target, enemy)).Sum(h => h.Raw) * x.SerratedBonus));
+            }
+            // Shoot first: the arrow is still in the enemy at the end of the turn.
+            if (shot.OwnArrowIn.Contains(enemy) || s.Player(shot.Owner) is not { } owner || !owner.OwnArrowIn.Contains(enemy)) continue;
+            var hitters = before.Where(x => x.Kind == CardKind.Attack && !x.OwnArrowIn.Contains(enemy) && HitsOn(x) > 0).ToList();
+            var hits = hitters.Sum(HitsOn);
+            if (hits < HitsToFreeArrow) continue;
+            r.Log.Add($"shoot first: {shot.CardKey} after {hits} hits on its target");
+            r.Events.Add(new MissedChance(shot.Owner, "shootFirst",
+                new[] { shot.CardKey, string.Join('+', hitters.Select(x => x.CardKey).Distinct()), N(hits) }));
+        }
+
+        for (var i = 0; i < s.Plays.Count; i++)
+        {
+            var late = s.Plays[i];
+            // Cho Firm: twice its block with an arrow ready. Whistling Arrows: back in hand at each shot.
+            var id = CardId(late.CardKey);
+            var cho = id == "CHO_FIRM" && late.ArrowsReady == 0 && late.BlockGains == 1;
+            if ((cho || id == "WHISTLING_ARROWS") && late.GaveBlock && late.BlockGains > 0 &&
+                s.Plays.Take(i).LastOrDefault(x => x.Owner == late.Owner && x.ShotArrow && x.HandAtPlay.Any(h => ReferenceEquals(h, late.CardRef))) is { } shot &&
+                (!cho || shot.ArrowsReady == 1))
+                s.OrderLosses.Add(new OrderLoss(shot, late.CardKey, "orderBlock", null, (double)late.BlockAmount / late.BlockGains, late));
+            // Aim: the first arrow attack takes all of it.
+            if (late.ShotArrow && late.AimAtStart > 0 && late.Target != null &&
+                s.Plays.Skip(i + 1).Where(x => x.Owner == late.Owner && x.ShotArrow && x.AimAtStart == 0 && x.Target != null &&
+                                               x.AimFactor > late.AimFactor && late.HandAtPlay.Any(h => ReferenceEquals(h, x.CardRef)))
+                    .OrderByDescending(x => x.AimFactor).FirstOrDefault() is { } better)
+                s.OrderLosses.Add(new OrderLoss(late, better.CardKey, "order", better.Target, late.AimAtStart * (better.AimFactor - late.AimFactor)));
+        }
+    }
+
     /// The game's Vulnérable multiplier (relics that change it are left out of this estimate).
     private const double VulnerableFactor = 1.5;
 
@@ -534,14 +632,16 @@ public static class TurnReview
             var (bestDamage, bestMask) = (0, 0);
             for (var mask = 1; mask < 1 << attacks.Count; mask++)
             {
-                var (cost, damage) = (0, 0);
+                var (cost, damage, shots) = (0, 0, 0);
                 for (var i = 0; i < attacks.Count; i++)
                     if ((mask & (1 << i)) != 0)
                     {
                         cost += attacks[i].Cost;
                         damage += attacks[i].DamageOn[enemy];
+                        if (attacks[i].Shot) shots++;
                     }
-                if (cost <= budget && damage > bestDamage) (bestDamage, bestMask) = (damage, mask);
+                // 1.2.1: no more Shots than the arrows ready.
+                if (cost <= budget && shots <= p.ArrowsReady && damage > bestDamage) (bestDamage, bestMask) = (damage, mask);
             }
             if (bestDamage <= 0) continue;
             total += bestDamage;
@@ -565,7 +665,7 @@ public static class TurnReview
             if (s.Player(play.Owner) is not { } p) continue;
             // v0.18.9 (Zaille75): not an attack that also gave block (Vague de fer) or was played again (Écho).
             if (play.Stronger is { } better && !play.HadNonDamageEffect && !play.GaveBlock && !play.PlayedAgain &&
-                p.InHand(better.Card) is { KeptOnPurpose: false })
+                p.InHand(better.Card) is { KeptOnPurpose: false, NoArrow: false })
                 r.Events.Add(new WeakAttack(play.Owner, play.CardKey, better.Played, better.Key, better.Value));
             // Pen Nib doubled a weak attack: counted even if the stronger one was played later (it was not doubled).
             if (play.PenNibBetter is { } nib && !play.HadNonDamageEffect)
@@ -594,9 +694,22 @@ public static class TurnReview
                 uselessBlock.Add(x);
                 removed += x.BlockAmount;
             }
-        return mine.Where(x => uselessBlock.Contains(x) || (x.UselessDebuff && !x.GaveBlock) || x.ShotForNothing ||
-            (x.Kind == CardKind.Attack && x.ShellCapped > 0 && x.FirstHit == null && !x.HadNonDamageEffect)).ToList();
+        return mine.Where(x => uselessBlock.Contains(x) || (x.UselessDebuff && !x.GaveBlock) || DidNothing(p, x) ||
+            (x.Kind == CardKind.Attack && x.ShellCapped > 0 && x.FirstHit == null && !x.HadNonDamageEffect))
+            .Concat(BuffsUnused(s, p)).ToList();
     }
+
+    /// The Fool (1.2.0 / 1.2.1): a Shot played with no arrow ready, or Nail / Recall / Uproot / Wrest on a target without the
+    /// arrow it needs, that did nothing else. Not when it completed a relic count (Shuriken, Kunai… for attacks, Coupe-papier
+    /// for skills) or made one of the player's powers fire.
+    public static bool DidNothing(TurnPlayer p, TurnPlay x) =>
+        (x.EmptyShot || x.NotImpaled) && x.Hits.Count == 0 && !x.HadNonDamageEffect && !x.GaveBlock && x.PowersTriggered.Count == 0 &&
+        !p.Relics.Any(r => r.Every > 0 && x.KindCount > 0 && x.KindCount % r.Every == 0 &&
+                           (r.Trigger == RelicTrigger.Attacks && x.Kind == CardKind.Attack || r.Trigger == RelicTrigger.Skills && x.Kind == CardKind.Skill));
+
+    /// Cards whose power on the player ended the turn unused (Quietus with no arrow attack after it, 1.2.1).
+    private static IEnumerable<TurnPlay> BuffsUnused(TurnState s, TurnPlayer p) =>
+        s.Plays.Where(x => x.Owner == p.Actor && x.PowersGiven.Overlaps(p.UnusedBuffs));
 
     /// Per player: unused energy, growing card affordable, block card kept, Orichalcum beaten by a small block, relic
     /// triggers missed by one card.
@@ -643,10 +756,12 @@ public static class TurnReview
             var left = played.Sum(x => x.EnergySpent) + energy - cut.Cost;
             if (left >= 0)
             {
+                var usable = hand.Where(c => c != cut && c.Kind == CardKind.Attack && c.PlayableExceptEnergy && !c.CostsX && !c.CostsStars &&
+                                             !c.KeptOnPurpose && !Punished(c) && CanHit(c) && PetReady(c)).ToList();
+                // 1.2.1: no more Shots left in hand than the arrows ready.
+                var shots = usable.Where(c => c.Shot).OrderBy(c => c.Cost).Skip(Math.Max(0, p.ArrowsReady)).ToHashSet();
                 var costs = played.Select(x => Math.Max(0, x.EnergySpent - 1))
-                    .Concat(hand.Where(c => c != cut && c.Kind == CardKind.Attack && c.PlayableExceptEnergy && !c.CostsX && !c.CostsStars &&
-                                            !c.KeptOnPurpose && !Punished(c) && CanHit(c) && PetReady(c))
-                        .Select(c => Math.Max(0, c.Cost - 1)))
+                    .Concat(usable.Where(c => !shots.Contains(c)).Select(c => Math.Max(0, c.Cost - 1)))
                     .OrderBy(c => c);
                 var attacks = 0;
                 foreach (var cost in costs)
@@ -671,9 +786,13 @@ public static class TurnReview
         foreach (var x in useless.Where(x => x.DiscardedEthereal != null))
             r.Events.Add(new MissedChance(actor, "discardEthereal", new[] { x.CardKey, x.DiscardedEthereal! }));
         // The Fool (1.2.0, Zaille75: "the most obvious mistake"): a Shot played with no arrow ready (the game shows it in red)
-        // shoots nothing. Free ones too: the card is gone for the turn.
-        foreach (var x in s.Plays.Where(x => x.Owner == actor && x.ShotForNothing))
-            r.Events.Add(new MissedChance(actor, "emptyShot", new[] { x.CardKey, N(x.EnergySpent) }));
+        // shoots nothing. Free ones too: the card is gone for the turn. 1.2.1: Nail / Recall / Uproot / Wrest on a target
+        // without the arrow they need ("notImpaled"; "impaleFirst" instead when a Shot impaled it later), Quietus unused.
+        foreach (var x in s.Plays.Where(x => x.Owner == actor && DidNothing(p, x)))
+            if (x.EmptyShot) r.Events.Add(new MissedChance(actor, "emptyShot", new[] { x.CardKey, N(x.EnergySpent) }));
+            else if (!x.ImpaledLater) r.Events.Add(new MissedChance(actor, "notImpaled", new[] { x.CardKey, N(x.EnergySpent) }));
+        foreach (var x in BuffsUnused(s, p))
+            r.Events.Add(new MissedChance(actor, "buffUnused", new[] { x.CardKey, N(x.EnergySpent) }));
 
         // A growing card could have been played with the energy left, or instead of a useless card (v0.17.7).
         var spareEnergy = energy + useless.Select(x => x.EnergySpent).DefaultIfEmpty(0).Max();
@@ -764,7 +883,7 @@ public static class TurnReview
         // while it was in hand (v0.17.34).
         bool RageWouldHelp(TurnCard rage) =>
             s.Plays.Any(x => x.Owner == p.Actor && x.Kind == CardKind.Attack && x.HandAtPlay.Any(h => ReferenceEquals(h, rage.Ref)));
-        foreach (var c in p.Hand.Where(c => c.Free && c.Useful && !c.StatusOrCurse && c.PlayableExceptEnergy && !c.KeptOnPurpose &&
+        foreach (var c in p.Hand.Where(c => c.Free && c.Useful && !c.StatusOrCurse && c.PlayableExceptEnergy && !c.KeptOnPurpose && !c.NoArrow &&
                                             !c.Punished && !(c.Rage && !RageWouldHelp(c)) &&
                                             (c.Kind != CardKind.Attack || (c.DealsDamage && c.Thorns <= room && !s.EnemyAsleep))))
             r.Events.Add(new MissedChance(p.Actor, "freeCard", new[] { c.Key }));
@@ -783,7 +902,7 @@ public static class TurnReview
         {
             budget += attack.EnergySpent;
             // Any card left in hand that the energy pays (a block card only if the block was short; HP-costing cards included).
-            var instead = p.Hand.FirstOrDefault(c => !used.Contains(c.Ref) && !c.StatusOrCurse && c.PlayableExceptEnergy && !c.CostsX && !c.Punished &&
+            var instead = p.Hand.FirstOrDefault(c => !used.Contains(c.Ref) && !c.StatusOrCurse && c.PlayableExceptEnergy && !c.CostsX && !c.Punished && !c.NoArrow &&
                                                     c.Cost <= budget && c.Kind != CardKind.Attack && (!c.GainsBlock || p.Block < p.Incoming));
             if (instead == null) continue;
             used.Add(instead.Ref);
@@ -846,7 +965,7 @@ public static class TurnReview
         {
             var dealt = x.FirstHit!.Value.Damage;
             var cheaper = x.HandDamageOnTarget.Select(kv => (Card: p.InHand(kv.Key), Damage: kv.Value))
-                .Where(a => a.Card is { KeptOnPurpose: false, CostsX: false, Punished: false } c && !used.Contains(c.Ref) && c.Cost < x.EnergySpent && a.Damage >= dealt)
+                .Where(a => a.Card is { KeptOnPurpose: false, CostsX: false, Punished: false, NoArrow: false } c && !used.Contains(c.Ref) && c.Cost < x.EnergySpent && a.Damage >= dealt)
                 .OrderBy(a => a.Card!.Cost).Select(a => a.Card).FirstOrDefault();
             if (cheaper == null) continue;
             if (PaidBySaving(s, p, x.EnergySpent - cheaper.Cost, used, cheaper.Ref) is not { } instead) continue;
@@ -905,7 +1024,7 @@ public static class TurnReview
             // would still cover the Thorns damage.
             var alternative = p == null || play.HadOtherEffect || play.Ethereal ? null : play.UsefulCardsInHand
                 .Select(seen => p.InHand(seen.Card))
-                .FirstOrDefault(c => c != null && !used.Contains(c.Ref) && !c.KeptOnPurpose && c.Cost <= budget && c.PlayableInstead &&
+                .FirstOrDefault(c => c != null && !used.Contains(c.Ref) && !c.KeptOnPurpose && !c.NoArrow && c.Cost <= budget && c.PlayableInstead &&
                                      !c.Free && c.Thorns <= room && !c.Punished);
             if (alternative != null)
             {
@@ -928,7 +1047,7 @@ public static class TurnReview
     {
         var energy = p.Energy;
         bool Candidate(TurnCard c) => !used.Contains(c.Ref) && !c.StatusOrCurse && c.PlayableExceptEnergy && !c.CostsX && !c.CostsStars &&
-                                      !c.KeptOnPurpose && c.Cost <= energy;
+                                      !c.KeptOnPurpose && !c.NoArrow && c.Cost <= energy;
         foreach (var play in s.Plays.Where(x => x.Owner == p.Actor && x.StarsSpent > 0))
         {
             TurnCard? instead = null;
@@ -967,7 +1086,7 @@ public static class TurnReview
         {
             var budget = play.EnergySpent + p.Energy;
             var instead = play.HandAtPlay.Select(p.InHand).FirstOrDefault(c => c != null && !used.Contains(c.Ref) && !c.StatusOrCurse &&
-                c.PlayableExceptEnergy && !c.LacksStars && !c.KeptOnPurpose && !c.CostsX && c.Cost <= budget &&
+                c.PlayableExceptEnergy && !c.LacksStars && !c.KeptOnPurpose && !c.NoArrow && !c.CostsX && c.Cost <= budget &&
                 (c.GainsBlock ? blockShort
                     : c.Kind == CardKind.Attack ? s.OpenEnemy && c.DealsDamage && !c.Punished
                     : c.Useful));
