@@ -1,14 +1,14 @@
-# Handoff — state of the project (2026-11-14, v1.2.1)
+# Handoff — state of the project (2026-11-14, v1.2.2)
 
 > **Start here in a new conversation**, then `CLAUDE.md`, `docs/specs/01-metrics.md` (rules) and `docs/specs/02-ui.md`
 > (interface). The history of every version is in `CHANGELOG.md` and the specs' "vX.Y.Z" notes; the git history has the
 > older handoff sections (v0.7 → v0.17).
 >
-> **State (2026-11-14):** **1.2.1 released** on GitHub (tag `v1.2.1`, by WTT27) and the Steam Workshop (uploaded by
-> Zaille75, item 3832591950 "KikiMAIster - Solo and Co-op stats"). `main` = released code, no open branch
-> (`feature/fool-arrows` merged). 1.2.1 is **not tested in game yet**: Zaille75's two games of 2026-11-13 were played with
-> 1.2.0 (their 12 reports are all handled in 1.2.1). One DLL for beta v0.113.0 and main v0.111.0.
-> **1.2.2 (2026-11-14, merged in `main`, not tested in game):** old main v0.107.1 support dropped
+> **State (2026-11-14):** **1.2.2 released** on GitHub (tag `v1.2.2`, by WTT27) and the Steam Workshop (uploaded by
+> Zaille75, item 3832591950 "KikiMAIster - Solo and Co-op stats", checked with the Steam API `GetPublishedFileDetails`).
+> `main` = released code, no open branch (`feature/drop-old-main` merged; its remote copy can be deleted). 1.2.1 and 1.2.2
+> are **not tested in game yet**: Zaille75 will try both together. One DLL for beta v0.113.0 and main v0.111.0.
+> **1.2.2 (2026-11-14, released, not tested in game):** old main v0.107.1 support dropped
 > (`GameBranch.IsBeta`, the main-only patches, the `GameApi` damage delegates, beta-only reflection targets and the lobby
 > reflection removed). The Fool's melodies and more arrow mistakes (spec 01-metrics rows "The Fool's melodies" → "Tir répété at
 > 0 energy", 02-ui "1.2.2"): Core `FoolRules.cs` (partial `TurnReview`), capture `BlockAlternatives.Melodies` (`[BranchOnly]`) and
