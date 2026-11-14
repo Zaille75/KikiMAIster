@@ -223,6 +223,12 @@ public static class BlockAlternatives
         if (InProgress.TryPeek(out var play) && play != null && play.Player == player) play.EnergyGiven += (int)amount;
     }
 
+    /// A card created during the player's own card play (Abondance's choice…, 1.2.2): Feu de couverture made late.
+    public static void OnCardGenerated(CardModel card)
+    {
+        if (InProgress.TryPeek(out var play) && play != null && play.Player == card.Owner) play.Created.Add(card);
+    }
+
     /// Cards created into a player's hand: those beyond the hand's limit go to the discard pile (v0.18.6).
     public static void OnCardsCreated(Player owner, int count)
     {
@@ -281,9 +287,6 @@ public static class BlockAlternatives
     /// Wrong order (spec §E0): a boost (Vulnerable put on an enemy that had none, Strength, Dexterity, Focus, Calcification…)
     /// given by a card the player chose or a potion, after plays of the same turn it would have boosted (and while it was
     /// already in hand); or a Strength / Dexterity drop before plays it lowered.
-    [BranchOnly, System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    private static bool IsOneForAll(PowerModel power) => power is OneForAllPower;
-
     private static void CheckOrder(PowerModel power, decimal amount, bool stacked)
     {
         var caller = Capture.CallingModelType();
@@ -396,8 +399,8 @@ public static class BlockAlternatives
             case PhantomBladesPower when power.Owner == player.Creature:
                 PerHit(ThisTurn.Where(p => p.Player == player && p.Card.Tags.Contains(CardTag.Shiv)).Take(1).Intersect(attacks), (double)amount);
                 break;
-            // Un pour tous (beta only): each hit of an X-cost attack.
-            case PowerModel when GameBranch.IsBeta && IsOneForAll(power) && power.Owner == player.Creature:
+            // Un pour tous: each hit of an X-cost attack.
+            case OneForAllPower when power.Owner == player.Creature:
                 PerHit(attacks.Where(p => p.Card.EnergyCost.CostsX), (double)amount);
                 break;
             // Pistage: +50% on enemies with Weak.
@@ -688,6 +691,10 @@ public static class BlockAlternatives
         var hand = Capture.PlayerOf(cardPlay).PlayerCombatState?.Hand.Cards;
         if (cardPlay.IsAutoPlay || hand == null)
         {
+            // 1.2.2: a melody card auto-played from the hand by the player's card in progress (Chorale Cho).
+            if (cardPlay.IsAutoPlay && GameBranch.IsV113 && InProgress.TryPeek(out var parent) && parent != null &&
+                parent.Player == Capture.PlayerOf(cardPlay))
+                Capture.Safe("melodies (auto-play)", () => parent.AutoMelody.Add((cardPlay.Card, Melodies.TagsOf(cardPlay.Card))));
             InProgress.Push(null);
             return;
         }
@@ -734,7 +741,11 @@ public static class BlockAlternatives
             HandAtPlay = hand.Where(c => c != cardPlay.Card).ToList<object>(),
             KindCount = counts[cardPlay.Card.Type]
         };
-        if (GameBranch.IsV113) Capture.Safe("arrows", () => Arrows.Fill(play, cardPlay));
+        if (GameBranch.IsV113)
+        {
+            Capture.Safe("arrows", () => Arrows.Fill(play, cardPlay));
+            Capture.Safe("melodies", () => Melodies.Fill(play, cardPlay));
+        }
         var energyBefore = (Capture.PlayerOf(cardPlay).PlayerCombatState?.Energy ?? 0) + cardPlay.Resources.EnergySpent;
         if (cardPlay.Card.Type == CardType.Attack && cardPlay.Target is { IsEnemy: true } target)
         {
@@ -883,7 +894,8 @@ public static class BlockAlternatives
             PaelsTears = player.GetRelic<PaelsTears>() is { } tears ? $"Relic:{Capture.IdOf(tears)}" : null,
             Orichalcum = orichalcum == null ? null : $"Relic:{Capture.IdOf(orichalcum)}",
             OrichalcumBlock = orichalcum == null ? 0 : (int)orichalcum.DynamicVars.Block.BaseValue,
-            Relics = player.Relics.Select(RelicView).OfType<TurnRelic>().ToList(),
+            Relics = player.Relics.Select(RelicView).OfType<TurnRelic>()
+                .Concat(GameBranch.IsV113 ? Melodies.PowerTriggers(creature) : Enumerable.Empty<TurnRelic>()).ToList(),
             Hand = st.Hand.Cards.Select(c => CardView(c, combat, creature)).ToList(),
             AttackDiscount = st.Hand.Cards.FirstOrDefault(IsAttackDiscount) is { } cut ? CardView(cut, combat, creature) : null,
             GambitActive = creature.GetPower<TheGambitPower>() != null,
@@ -894,6 +906,7 @@ public static class BlockAlternatives
             ArrowsReady = GameBranch.IsV113 ? Arrows.Ready(player) : int.MaxValue,
             OwnArrowIn = GameBranch.IsV113 ? Arrows.OwnIn(player, combat) : new HashSet<object>(ReferenceEqualityComparer.Instance),
             UnusedBuffs = GameBranch.IsV113 ? Arrows.UnusedBuffs(creature) : new HashSet<string>(),
+            MelodyTags = GameBranch.IsV113 ? Melodies.PlayedThisTurn(player) : new HashSet<string>(),
             StampedeShort = StampedeShort.GetValueOrDefault(player),
             StampedeKey = $"Power:{ModelDb.GetId<StampedePower>().Entry}",
             StampedePlayed = (StampedeAll.GetValueOrDefault(player) ?? new()).Select(c => CardView(c, combat, creature)).ToList(),
@@ -939,7 +952,10 @@ public static class BlockAlternatives
         VulnerableStacks = c.Type == CardType.Attack && c is not MadScience && c.TargetType is TargetType.AnyEnemy or TargetType.AllEnemies &&
                            (c.DynamicVars.TryGetValue("VulnerablePower", out var vulnerable) ||
                             c.Id.Entry == "HOBBLING_SHOT" && c.DynamicVars.TryGetValue("Power", out vulnerable)) ? vulnerable.IntValue : 0,
-        AllEnemies = c.TargetType == TargetType.AllEnemies
+        AllEnemies = c.TargetType == TargetType.AllEnemies,
+        Melody = GameBranch.IsV113 ? Melodies.TagsOf(c) : new HashSet<string>(),
+        Ethereal = c.Keywords.Contains(CardKeyword.Ethereal),
+        Retains = c.Keywords.Contains(CardKeyword.Retain)
     };
 
     private static CardKind KindOf(CardType type) => type switch
@@ -964,7 +980,7 @@ public static class BlockAlternatives
             ScreamingFlagon => RelicTrigger.EmptyHand,
             _ => null
         };
-        if (trigger == null) return null;
+        if (trigger == null) return GameBranch.IsV113 ? Melodies.RelicView(relic) : null;
         var every = relic.DynamicVars.TryGetValue("Cards", out var v) ? v.IntValue : 3;
         return new TurnRelic($"Relic:{Capture.IdOf(relic)}", trigger.Value, every, GivesBlock: relic is OrnamentalFan);
     }
@@ -1178,7 +1194,7 @@ public static class BlockAlternatives
         DebuffEffectPatches.Computing = true;
         try
         {
-            damage = GameApi.ModifyDamage(owner.RunState, card.CombatState, target, dealer, v.BaseValue, props, card, null,
+            damage = Hook.ModifyDamage(owner.RunState, card.CombatState, target, dealer, v.BaseValue, props, card, null,
                 ModifyDamageHookType.All, CardPreviewMode.None, out _);
         }
         finally
@@ -1209,7 +1225,7 @@ public static class BlockAlternatives
                     foreach (var intent in enemy.Monster.NextMove.Intents.OfType<AttackIntent>())
                     {
                         if (intent.DamageCalc is not { } calc) continue;
-                        var hit = GameApi.ModifyDamage(combat.RunState, combat, creature, enemy, calc(), ValueProp.Move, null, null,
+                        var hit = Hook.ModifyDamage(combat.RunState, combat, creature, enemy, calc(), ValueProp.Move, null, null,
                             ModifyDamageHookType.All, CardPreviewMode.None, out _);
                         incoming += Math.Max(0, (int)hit) * Math.Max(1, intent.Repeats);
                     }
@@ -1361,9 +1377,15 @@ public static class BlockAlternatives
             return set;
         }
 
-        /// Quietus still on the player at the end of the turn: no arrow attack used it, it goes away.
-        public static HashSet<string> UnusedBuffs(Creature creature) =>
-            creature.HasPower<QuietusPower>() ? new HashSet<string> { $"Power:{ModelDb.GetId<QuietusPower>().Entry}" } : new HashSet<string>();
+        /// Quietus still on the player at the end of the turn: no arrow attack used it, it goes away. 1.2.2: Vers Ki too (the rules
+        /// check that no melody card came after it).
+        public static HashSet<string> UnusedBuffs(Creature creature)
+        {
+            var unused = new HashSet<string>();
+            if (creature.HasPower<QuietusPower>()) unused.Add($"Power:{ModelDb.GetId<QuietusPower>().Entry}");
+            if (creature.HasPower<KiVersePower>()) unused.Add($"Power:{ModelDb.GetId<KiVersePower>().Entry}");
+            return unused;
+        }
 
         /// The card needs an arrow in its target and no hittable enemy has one.
         public static bool IdleNow(CardModel card)
@@ -1409,10 +1431,83 @@ public static class BlockAlternatives
                     _ => HitCount(card, target) ?? 1
                 };
             }
+            // 1.2.2: Estocade on this arrow attack; Récupération héroïque's arrows to free; the payoffs' bonus; Tir répété's hit.
+            if (IsShot(card)) play.QuietusAtStart = (int)player.Creature.GetPowerAmount<QuietusPower>();
+            switch (card)
+            {
+                case EpicRetrieval:
+                    play.CardBonus = card.DynamicVars.Energy.IntValue;
+                    foreach (var e in combat.HittableEnemies)
+                        if (e.GetPowerInstances<ImpaledPower>().FirstOrDefault(p => p.Applier == player.Creature) is { } impaled)
+                            play.ArrowHitsLeft[e] = impaled.HitCounter;
+                    break;
+                case BowSmack:
+                    play.CardBonus = card.DynamicVars.Energy.IntValue;
+                    break;
+                case KiHop:
+                    play.CardBonus = card.DynamicVars.Cards.IntValue;
+                    break;
+                case RepeatShot when target is { IsEnemy: true }:
+                    play.HitDamage = EstimateDamage(card, target);
+                    break;
+            }
             var id = card.Id.Entry;
             if (id == "COVERING_FIRE" && card.DynamicVars.TryGetValue("CoveringFirePower", out var cover)) play.AllyBlockPerShot = cover.IntValue;
             play.NotImpaled = target is { IsEnemy: true } &&
                               (NeedAnyArrow.Contains(id) && !HasArrow(target) || NeedOwnArrow.Contains(id) && !HasOwnArrow(target, player));
+        }
+    }
+    /// The Fool's melodies (beta v0.113.0 only, 1.2.2): every game type here exists only there.
+    [BranchOnly]
+    private static class Melodies
+    {
+        public static HashSet<string> TagsOf(CardModel card)
+        {
+            var tags = new HashSet<string>();
+            if (card.Tags.Contains(CardTag.Wah)) tags.Add("WAH");
+            if (card.Tags.Contains(CardTag.Cho)) tags.Add("CHO");
+            if (card.Tags.Contains(CardTag.Ki)) tags.Add("KI");
+            return tags;
+        }
+
+        /// The tags the player played this turn (the game's count: finished plays, auto-plays included).
+        public static HashSet<string> PlayedThisTurn(Player player)
+        {
+            var tags = new HashSet<string>();
+            if (MegaCrit.Sts2.Core.Commands.MelodyCmd.PlayedWahThisTurn(player)) tags.Add("WAH");
+            if (MegaCrit.Sts2.Core.Commands.MelodyCmd.PlayedChoThisTurn(player)) tags.Add("CHO");
+            if (MegaCrit.Sts2.Core.Commands.MelodyCmd.PlayedKiThisTurn(player)) tags.Add("KI");
+            return tags;
+        }
+
+        /// The card's tags, the tags already played this turn, and its melody amount (Bouclier harmonique's block per melody, a
+        /// melody power's damage, block, draw or cards).
+        public static void Fill(Play play, CardPlay cardPlay)
+        {
+            var card = cardPlay.Card;
+            play.Melody = TagsOf(card);
+            play.MelodyBefore = PlayedThisTurn(play.Player);
+            play.VerseAtStart = (int)play.Player.Creature.GetPowerAmount<KiVersePower>();
+            play.MelodyUnit = card switch
+            {
+                HarmonicShield => (double)card.DynamicVars.CalculationExtra.BaseValue,
+                ViolentChord or SongPath or Motif or LostLute or Lullaby when card.DynamicVars.TryGetValue($"{card.GetType().Name}Power", out var v) =>
+                    (double)v.BaseValue,
+                _ => 0
+            };
+        }
+
+        /// Baguette de direction: −25% attack damage taken once the three tags are played (it protects: only when the block was short).
+        public static TurnRelic? RelicView(RelicModel relic) =>
+            relic is ConductorsBaton ? new TurnRelic($"Relic:{Capture.IdOf(relic)}", RelicTrigger.AllMelodies, 3, GivesBlock: true) : null;
+
+        /// Berceuse (block once the three tags are played) and Accordage (a free card next turn after a Ki) on the player.
+        public static IEnumerable<TurnRelic> PowerTriggers(Creature creature)
+        {
+            if (creature.GetPower<LullabyPower>() is { } lullaby)
+                yield return new TurnRelic($"Power:{Capture.IdOf(lullaby)}", RelicTrigger.AllMelodies, 3, GivesBlock: true);
+            if (creature.GetPower<TunePower>() is { } tune)
+                yield return new TurnRelic($"Power:{Capture.IdOf(tune)}", RelicTrigger.KiMelody, 1);
         }
     }
 }

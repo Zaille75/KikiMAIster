@@ -127,18 +127,17 @@ One DLL runs on both game branches (before 1.1.0: one build per branch, `#if GAM
 had the same mod id, so the game loaded the first one in its list whatever the branch.
 - The mod is compiled against `lib/beta/` only: `./build.sh` → `dist/KikiMAIster/`, release zip
   `dist/release/KikiMAIster-<version>.zip`.
-- `GameBranch.IsBeta` is read once at start-up from the game's own API (`CardPlay.Player` exists only on the beta);
-  `GameBranch.Name` ("beta" / "main") goes in the log's first line and in F9 reports.
+- `GameBranch.IsV113` is read once at start-up from the game's own API (`Hook.ShouldTakeExtraTurn` has 3 parameters on
+  the beta v0.113.0); `GameBranch.Name` ("beta" / "main") goes in the log's first line and in F9 reports. (Before 1.2.2:
+  `GameBranch.IsBeta`, `CardPlay.Player`, told v0.111.0 from the old main v0.107.1.)
 - Patches whose target differs: one patch class per branch with `Prepare()` returning the branch check (Harmony skips the
   other), or `TargetMethod()` picking the right method. Each patch class is applied on its own: one failing patch is
   logged and the others still apply.
-- Calls whose signature differs (`Hook.ModifyDamage`, `AbstractModel.ModifyDamageAdditive/Multiplicative`): `GameApi`
-  wrappers; the beta call sits in a method marked `[BranchOnly]`, the main branch's is a delegate made by reflection.
+- Calls whose signature differs (`Hook.ShouldTakeExtraTurn`): `GameApi` wrappers; the beta call sits in a method marked
+  `[BranchOnly]`, the main branch's is a delegate made by reflection.
 - Game types / members that exist on one branch only are named only inside methods marked `[BranchOnly]`, called only
-  after a `GameBranch.IsBeta` check (the runtime resolves a method's references when it first runs it). Lobby players
-  (`StartRunLobbyPlayer` beta / `LobbyPlayer` main) are read by reflection.
-- `ReflectionTargets` entries can be beta-only (skipped on the main branch).
-- Differences: turn end hook `Hook.BeforeTurnEnd` (main) / `Hook.BeforeSideTurnEnd` (beta); damage modifiers,
+  after a `GameBranch.IsV113` check (the runtime resolves a method's references when it first runs it).
+- Old main v0.107.1 differences (support dropped in 1.2.2, the code for them removed): turn end hook `Hook.BeforeTurnEnd` (main) / `Hook.BeforeSideTurnEnd` (beta); damage modifiers,
   `Hook.ModifyDamage` and `CreatureCmd.Damage` take a `CardPlay` on the beta only; `CardPlay.Player` (beta) /
   `CardPlay.Card.Owner` (main); `CreatureCmd.LoseBlock` gives the remover on the beta only (main: the player whose card
   is being played); campfire leaving: the beta's "leave / skipped" messages, the main branch's `NRestSiteRoom._ExitTree`;
@@ -146,7 +145,7 @@ had the same mod id, so the game loaded the first one in its list whatever the b
 - **1.2.0 (2026-11-13): beta v0.113.0, main v0.111.0.** The main branch moved to the former beta (v0.111.0) and the
   beta to v0.113.0. `GameBranch.IsBeta` (`CardPlay.Player`) is now true on both branches; `GameBranch.IsV113`
   (`Hook.ShouldTakeExtraTurn` has 3 parameters) tells them apart, and `GameBranch.Name` is "beta" (v0.113.0), "main"
-  (v0.111.0) or "main-old" (v0.107.1, still supported, checked with `lib/default-v0.107.1`). v0.113.0 differences:
+  (v0.111.0) ("main-old", v0.107.1, until 1.2.2). v0.113.0 differences:
   `Hook.ShouldTakeExtraTurn` gives the model in an out parameter (`GameApi.ShouldTakeExtraTurn`); the damage funnel is
   `CreatureCmd.Damage(…, IEnumerable<DamageTargetData>, …, ModifyDamageHookType)` (`DamageCommandV113`); the kill funnel
   takes the card (`CreatureCmd.Kill(creatures, cardSource, force)`, `KillCommandV113`); fixed hit counts are in a

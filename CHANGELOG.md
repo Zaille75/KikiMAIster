@@ -3,6 +3,19 @@
 Summary by version line. The detailed notes of every version are in [docs/specs/02-ui.md](docs/specs/02-ui.md)
 (interface) and [docs/specs/01-metrics.md](docs/specs/01-metrics.md) (rules).
 
+## 1.2.2 (2026-11-14) — the Fool's melodies
+The Fool's melodies (Wah / Cho / Ki), from the game code: a card that reads the melodies played before melody cards already in
+hand (Tir mélodieux, Frappe rythmée, Déflagration Wah: hits lost; Bouclier harmonique: block; Cadence régulière: draws; Coda,
+Branches Cho: energy; Repos Ki: retained hand), a melody power played after the first card of its tag (Accord violent, Voie de la
+musique, Motif, Luth perdu, Berceuse), Vers Ki with no melody card after it or on a weaker melody card than one played later, Chorale Cho's auto-played
+cards counted, Baguette de direction / Berceuse / Accordage one
+melody short. More arrow mistakes: Récupération héroïque that freed no arrow while another target, or another order, would have
+(3 energy), Coup d'arc / Bond Ki / Marteau Wah on a target without an arrow while another enemy had one, Estocade on a weaker Shot
+than one played later, Tir répété at 0 energy (or with less energy than it could have had) when the attacks played before it would
+have made it hit harder, and Feu de
+couverture created by Abondance after Shots (the allies' block lost). The old main branch (game v0.107.1) is no longer
+supported: the mod runs on the beta v0.113.0 and the main branch v0.111.0.
+
 ## 1.2.1 (2026-11-14) — the Fool's arrows
 The Fool's arrow cards, from the game code. Fixes: a Shot with no arrow ready is no longer a "free card" (Tir leste), a
 block alternative, a Stars / Carapace alternative or the "stronger attack"; Clouer with no arrow in any enemy and Rappel /

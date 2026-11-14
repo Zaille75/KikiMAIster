@@ -7,7 +7,16 @@
 > **State (2026-11-14):** **1.2.1 released** on GitHub (tag `v1.2.1`, by WTT27) and the Steam Workshop (uploaded by
 > Zaille75, item 3832591950 "KikiMAIster - Solo and Co-op stats"). `main` = released code, no open branch
 > (`feature/fool-arrows` merged). 1.2.1 is **not tested in game yet**: Zaille75's two games of 2026-11-13 were played with
-> 1.2.0 (their 12 reports are all handled in 1.2.1). One DLL for beta v0.113.0 and main v0.111.0 (and old main v0.107.1).
+> 1.2.0 (their 12 reports are all handled in 1.2.1). One DLL for beta v0.113.0 and main v0.111.0.
+> **1.2.2 (2026-11-14, merged in `main`, not tested in game):** old main v0.107.1 support dropped
+> (`GameBranch.IsBeta`, the main-only patches, the `GameApi` damage delegates, beta-only reflection targets and the lobby
+> reflection removed). The Fool's melodies and more arrow mistakes (spec 01-metrics rows "The Fool's melodies" → "Tir répété at
+> 0 energy", 02-ui "1.2.2"): Core `FoolRules.cs` (partial `TurnReview`), capture `BlockAlternatives.Melodies` (`[BranchOnly]`) and
+> new `Arrows.Fill` fields (`ArrowHitsLeft`, `CardBonus`, `QuietusAtStart`, `HitDamage`), `TurnPlay.Created`
+> (`OnCardGenerated`). New kinds: Choix "melodyFirst", "melodyLate", "retrievalTarget", "retrievalOrder", "payoffTarget",
+> "repeatShotEmpty", "repeatShotShort"; Gâché "verseUnused"; misses ending with a loss (`Overlay.LossKinds`, `why.lost*`); Vers
+> Ki on a weaker card (`VerseAtStart`), Chorale Cho's auto-plays (`AutoMelody`). PatchCheck beta 78, main 117; tests 233.
+> Zaille75 tests 1.2.1 + 1.2.2 together in game.
 > When Zaille75 sends a new inbox (`logs/inbox/<date_time>/`): **review and summarize every report first, wait for his go,
 > then implement the whole batch** (memory rules). Each send now also brings `KikiMAIster.names.txt` (game names in French):
 > copy it to `lib/beta/names.txt` when the game version changed.
@@ -19,12 +28,11 @@
    Visée, Flèches barbelées; **no** "energy left / free card" for Rappel / Empoignade / Déraciner without the player's own
    arrow, nor for a red Shot; no wasted-block alternative that is a red Shot; Galvanisé cards not suggested; panel no longer
    closes hover texts (rebuilds when the mouse leaves); l'Insensé yellow; run title "… · A<n>".
-2. **Fool ideas not done** (ask Zaille75 before doing them): melodies (Wah / Cho / Ki: first card of each tag per turn);
-   tarot cards; Récupération héroïque on the wrong target (an enemy at 1 hit from freeing an arrow); a payoff card (Coup
-   d'arc, Bond Ki, Marteau Wah, Clouer) on a target without an arrow while another enemy had one; Estocade on a weak Shot;
-   Tir répété at 0 energy; Feu de couverture created by Abondance after Shots (today only "makerFirst").
-3. **Optional:** drop the old main v0.107.1 support (`GameBranch.Name` "main-old", PatchCheck by hand).
-4. **Known limits of the arrow rules** (estimates stay minimums): a Shot that kills gives its arrow back (ignored in the
+2. **Fool ideas:** done in 1.2.2 (melodies, Récupération héroïque, payoff target, Estocade, Tir répété, Abondance's Feu de
+   couverture, Vers Ki on a weaker card, Chorale Cho's auto-plays). **Tarot cards** (Forme mythique): Zaille75 waits for
+   in-game play before deciding (all are 0-cost Exhaust tokens, so never a "free card" miss today). In the next inbox also
+   check the 1.2.2 miss kinds (above) and `melody first` / `melody late` / `retrieval` / `repeat shot` log lines.
+3. **Known limits of the arrow rules** (estimates stay minimums): a Shot that kills gives its arrow back (ignored in the
    lethal checks); Visée's bonus is not scaled by Vulnérable / Tête chercheuse; an ally's arrows ready are not known
    (an ally's later successful Shot is taken as "it had one").
 - **Talking to Zaille75:** French in-game names (table `lib/beta/names.txt`, e.g. Clouer = Nail, Estocade = Quietus,
@@ -40,8 +48,7 @@ Beta v0.113.0 (12 Nov, "biggest beta patch": the Fool, Blitz, Dread, ~140 cards 
 the same day (= our former `lib/beta`). Patch notes: Steam news API (`ISteamNews/GetNewsForApp`, appid 2868840): the
 Steam page / untapped / SteamDB block automated fetches.
 - **lib:** `lib/beta/` = v0.113.0 (from Zaille75, `lib/beta-v0.113.0/` raw copy), `lib/default/` = v0.111.0,
-  `lib/default-v0.107.1/` = old main (PatchCheck by hand: `dotnet run --project tools/PatchCheck -- lib/default-v0.107.1
-  build/mod/KikiMAIster.dll`). Both decompiled with `ilspycmd -p -o <dir>/decompiled <dir>/sts2.dll -r <dir>` (same layout:
+  `lib/default-v0.107.1/` = old main (no longer supported since 1.2.2). Both decompiled with `ilspycmd -p -o <dir>/decompiled <dir>/sts2.dll -r <dir>` (same layout:
   `diff -rq lib/default/decompiled lib/beta/decompiled`). `lib/beta/names.txt` is the v0.113.0 table (from Zaille75's game, 2026-11-14,
   the Fool's French names included; `Envoyer-a-Claude` now sends `KikiMAIster.names.txt` each time).
 - **Fixed:** `GameBranch.IsV113`; `GameApi.ShouldTakeExtraTurn`; damage funnel `DamageCommandV113` and kill funnel

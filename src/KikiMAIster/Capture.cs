@@ -109,7 +109,7 @@ public static class Capture
     public static Actor ToActor(Player? p) => p == null ? Actor.None : ToActor(p.Creature);
 
     /// The player playing a card (the main branch's CardPlay has no Player: the card's owner).
-    public static Player PlayerOf(CardPlay play) => GameApi.PlayerOf(play);
+    public static Player PlayerOf(CardPlay play) => play.Player;
 
     /// The player currently acting through a card or a potion, if any.
     public static Player? CurrentActingPlayer => CardPlayers.Count > 0 ? CardPlayers.Peek() : PotionUser;

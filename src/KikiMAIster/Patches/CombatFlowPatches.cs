@@ -207,9 +207,7 @@ public static class CombatFlowPatches
     [HarmonyPatch]
     public static class TurnEnd
     {
-        /// Hook.BeforeSideTurnEnd (beta), named BeforeTurnEnd on the main branch.
-        public static System.Reflection.MethodBase TargetMethod() =>
-            AccessTools.Method(typeof(Hook), GameBranch.IsBeta ? nameof(Hook.BeforeSideTurnEnd) : "BeforeTurnEnd");
+        public static System.Reflection.MethodBase TargetMethod() => AccessTools.Method(typeof(Hook), nameof(Hook.BeforeSideTurnEnd));
 
         public static void Prefix(ICombatState combatState, CombatSide side) => Capture.Safe("BeforeSideTurnEnd", () =>
         {
@@ -434,11 +432,12 @@ public static class CombatFlowPatches
                 return;
             }
             PlayLog.Note($"{card.Title} created for {PlayLog.Who(card.Owner)}");
+            BlockAlternatives.OnCardGenerated(card);
             // A card created in another player's piles (Blade Symphony passes no creator: the player acting made it).
             var giver = creator ?? Capture.CurrentActingPlayer;
             // Âme sœur: the Soul copied into the ally's draw pile is "created" by that ally; it is the Soulbound
             // applier's gift (v0.17.1).
-            if (GameBranch.IsBeta && SoulBinder(card) is { } binder) giver = binder; // Âme sœur: beta only
+            if (SoulBinder(card) is { } binder) giver = binder;
             if (giver != null && card.Owner != giver)
             {
                 DamagePatches.GiftedCards.AddOrUpdate(card, giver);
@@ -447,7 +446,6 @@ public static class CombatFlowPatches
         });
     }
 
-    [BranchOnly, MethodImpl(MethodImplOptions.NoInlining)]
     private static Player? SoulBinder(CardModel card) =>
         card is Soul && card.Owner.Creature.GetPower<SoulboundPower>() is { } soulbound && soulbound.Applier?.Player is { } binder &&
         binder != card.Owner && Traverse.Create(soulbound).Property(ReflectionTargets.SoulboundAddingSoul.Name).GetValue<bool>()

@@ -1053,6 +1053,9 @@ public static class Overlay
                 // Full hand: "Passe-passe main pleine : 2 carte(s) perdue(s), Défense pouvait être jouée avant".
                 : m.Kind == "handFull" && m.Args.Count > 2
                 ? string.Format(Loc.T("why.handFull"), Arg(m.Args[0]), m.Args[1], string.Join(", ", m.Args.Skip(2).Select(Arg)))
+                // 1.2.2: misses ending with what was lost: "Cadence régulière avant Toucher Wah : 1 carte(s) piochée(s) en moins".
+                : LossKinds.Contains(m.Kind) && m.Args.Count > 3
+                ? string.Format(Loc.T($"why.{m.Kind}"), Arg(m.Args[0]), Arg(m.Args[1]), string.Format(Loc.T($"why.lost{m.Args[2]}"), m.Args[3]))
                 // Miniature Tent: "Tente miniature : parti sans Repos, Forge".
                 : m.Kind == "tent" && m.Args.Count > 1
                 ? string.Format(Loc.T("why.tent"), GameNames.Of(m.Args[0]), string.Join(", ", m.Args.Skip(1).Select(GameNames.Of)))
@@ -1090,6 +1093,9 @@ public static class Overlay
         if (bar > 0) return $"{GameNames.Of(a[..bar])} ({AllyName(a[(bar + 1)..])})";
         return a.Contains(':') || a == "Unknown" ? GameNames.Of(a) : a;
     }
+
+    /// Misses whose last two arguments are what was lost (Damage, Block, Energy, Draws, Plays, Retain) and how much (1.2.2).
+    private static readonly HashSet<string> LossKinds = new() { "melodyFirst", "melodyLate", "retrievalTarget", "retrievalOrder", "payoffTarget" };
 
     /// Damage and block lost by a wrong order: "3 dégâts perdus", "2 armure perdue" or "3 dégâts et 2 armure perdus".
     private static string OrderLost(string damage, string block) =>

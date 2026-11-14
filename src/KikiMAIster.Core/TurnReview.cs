@@ -8,7 +8,8 @@ public enum CardKind { Attack, Skill, Power, Status, Curse, Other }
 public enum BlockTarget { Self, OneAlly, AllAllies }
 
 /// Relics that trigger on a number or a mix of cards played in a turn (spec §E0, relic triggers missed by one card).
-public enum RelicTrigger { Attacks, Skills, AllTypes, NthCardFree, EmptyHand }
+/// 1.2.2: AllMelodies (Baguette de direction, Berceuse: the three melody tags in a turn), KiMelody (Accordage: a Ki card played).
+public enum RelicTrigger { Attacks, Skills, AllTypes, NthCardFree, EmptyHand, AllMelodies, KiMelody }
 
 /// A card in a player's hand at the end of the turn, with what the game said about it (filled by the capture layer).
 /// Ref: the game's card object, used only to match it with the cards seen during the turn.
@@ -62,6 +63,10 @@ public sealed class TurnCard
     /// An attack putting that much Vulnérable on its target, or on every enemy (Tope là, Coup…; v1.1.1).
     public int VulnerableStacks { get; init; }
     public bool AllEnemies { get; init; }
+    /// The Fool's melody tags it carries ("WAH", "CHO", "KI"; 1.2.2), and Ethereal / Retain (Repos Ki's Main retenue).
+    public IReadOnlySet<string> Melody { get; init; } = new HashSet<string>();
+    public bool Ethereal { get; init; }
+    public bool Retains { get; init; }
 
     public bool StatusOrCurse => Kind is CardKind.Status or CardKind.Curse;
     /// Attacks, and skills / powers that give no block: an alternative to a block card.
@@ -191,6 +196,26 @@ public class TurnPlay
     public bool ImpaledLater { get; set; }
     public HashSet<object> HandWhenFull { get; } = new(ReferenceEqualityComparer.Instance);
 
+    /// The Fool's melodies (1.2.2). Melody: the tags the card carries ("WAH", "CHO", "KI"). MelodyBefore: the tags the player had
+    /// already played this turn when it started (from the game, auto-plays included). MelodyUnit: Bouclier harmonique's block per
+    /// melody, a melody power's amount (Accord violent's damage, Voie de la musique's block, Motif's draw…).
+    public HashSet<string> Melody { get; set; } = new();
+    public HashSet<string> MelodyBefore { get; set; } = new();
+    public double MelodyUnit { get; set; }
+    /// The Fool (1.2.2). ArrowHitsLeft: for Récupération héroïque, each enemy with one of the player's arrows and the player's hits
+    /// it still needs to free one. CardBonus: the card's bonus (Récupération héroïque / Coup d'arc energy, Bond Ki draw).
+    /// QuietusAtStart: Estocade's multiplier on this arrow attack (0: none). HitDamage: Tir répété's damage per hit on its target.
+    /// Created: the cards it created (Abondance's Feu de couverture…).
+    public Dictionary<object, int> ArrowHitsLeft { get; set; } = new(ReferenceEqualityComparer.Instance);
+    public int CardBonus { get; set; }
+    public int QuietusAtStart { get; set; }
+    public int HitDamage { get; set; }
+    public HashSet<object> Created { get; } = new(ReferenceEqualityComparer.Instance);
+    /// VerseAtStart: Vers Ki's power when it started (its melody card is played twice). AutoMelody: the cards it auto-played from the
+    /// hand (Chorale Cho) and their melody tags.
+    public int VerseAtStart { get; set; }
+    public List<(object Card, HashSet<string> Tags)> AutoMelody { get; } = new();
+
     /// The first enemy it hit, with all the raw damage it dealt to that enemy; null when it hit no enemy.
     public (object Target, int Damage)? FirstHit =>
         Hits.Count == 0 ? null : (Hits[0].Target, Hits.Where(h => ReferenceEquals(h.Target, Hits[0].Target)).Sum(h => h.Raw));
@@ -245,6 +270,8 @@ public sealed class TurnPlayer
     public int ArrowsReady { get; init; } = int.MaxValue;
     public HashSet<object> OwnArrowIn { get; init; } = new(ReferenceEqualityComparer.Instance);
     public HashSet<string> UnusedBuffs { get; init; } = new();
+    /// The Fool (1.2.2): the melody tags the player played this turn.
+    public HashSet<string> MelodyTags { get; init; } = new();
 
     public TurnCard? InHand(object card) => Hand.FirstOrDefault(c => ReferenceEquals(c.Ref, card));
     public bool Affordable(TurnCard c) => !c.StatusOrCurse && c.PlayableExceptEnergy && (c.CostsX || c.Cost <= Energy);
@@ -285,7 +312,7 @@ public sealed class TurnResult
 /// The misplay rules checked at the end of each players' turn (spec 01-metrics §E0 and §F): wrong order, weak attacks,
 /// energy left, block cards kept, relic triggers, free cards left, wasted block, Stars, Carapace endurcie. Pure: the
 /// capture layer fills a TurnState and emits what comes back (v0.17.41, moved out of the Harmony patches to be tested).
-public static class TurnReview
+public static partial class TurnReview
 {
     private static string N(int v) => v.ToString(CultureInfo.InvariantCulture);
 
@@ -302,6 +329,7 @@ public static class TurnReview
         var r = new TurnResult();
         SlowAttackOrder(s);
         ArrowOrder(s, r);
+        MelodyOrder(s, r);
         ResolveOrder(s, r);
         WeakPlays(s, r);
         Overkills(s, r);
@@ -319,6 +347,9 @@ public static class TurnReview
             VulnerableLeft(s, p, r);
             MakersFirst(s, p, r);
             CoveringFireLate(s, p, r);
+            Retrieval(s, p, r);
+            PayoffTarget(s, p, r);
+            RepeatShotEmpty(s, p, r);
         }
         var used = new HashSet<object>(ReferenceEqualityComparer.Instance);
         var withAlternative = BlockAlternatives(s, used, r);
@@ -510,6 +541,20 @@ public static class TurnReview
                                                x.AimFactor > late.AimFactor && late.HandAtPlay.Any(h => ReferenceEquals(h, x.CardRef)))
                     .OrderByDescending(x => x.AimFactor).FirstOrDefault() is { } better)
                 s.OrderLosses.Add(new OrderLoss(late, better.CardKey, "order", better.Target, late.AimAtStart * (better.AimFactor - late.AimFactor)));
+            // Estocade (1.2.2): the first arrow attack after it takes its multiplier. A Shot doing more (game estimates, the first one
+            // without Estocade) played later from the hand: wrong order. Not when the Shot with it killed its target.
+            if (late.ShotArrow && late.QuietusAtStart > 1 && late.Target is { } quietusTarget && !late.KilledTarget &&
+                late.DamageOn.TryGetValue(quietusTarget, out var withQuietus))
+            {
+                var own = (double)withQuietus / late.QuietusAtStart;
+                var stronger = s.Plays.Skip(i + 1)
+                    .Where(x => x.Owner == late.Owner && x.ShotArrow && x.QuietusAtStart == 0 && x.Target != null &&
+                                x.DamageOn.TryGetValue(x.Target, out var d) && d > own && late.HandAtPlay.Any(h => ReferenceEquals(h, x.CardRef)))
+                    .OrderByDescending(x => x.DamageOn[x.Target!]).FirstOrDefault();
+                if (stronger != null)
+                    s.OrderLosses.Add(new OrderLoss(late, stronger.CardKey, "order", stronger.Target,
+                        (late.QuietusAtStart - 1) * (stronger.DamageOn[stronger.Target!] - own)));
+            }
         }
     }
 
@@ -528,10 +573,12 @@ public static class TurnReview
     /// drew or gave energy may come first. Choix, "makerFirst": the maker, the cards played before it.
     private static void MakersFirst(TurnState s, TurnPlayer p, TurnResult r)
     {
+        // 1.2.2: a maker whose Feu de couverture lost the Shots played before it counts there instead (one miss).
+        var counted = CoveringFireMisses(s, p).Select(m => m.Maker).OfType<TurnPlay>().ToHashSet();
         for (var i = 0; i < s.Plays.Count; i++)
         {
             var maker = s.Plays[i];
-            if (maker.Owner != p.Actor || !CardMakers.Contains(CardId(maker.CardKey))) continue;
+            if (maker.Owner != p.Actor || !CardMakers.Contains(CardId(maker.CardKey)) || counted.Contains(maker)) continue;
             var earlier = s.Plays.Take(i).Where(x => x.Owner == p.Actor && x.HandAtPlay.Any(h => ReferenceEquals(h, maker.CardRef)) &&
                                                      x.CardsDrawn == 0 && x.EnergyGiven == 0 && !CardMakers.Contains(CardId(x.CardKey))).ToList();
             if (earlier.Count == 0) continue;
@@ -545,21 +592,12 @@ public static class TurnReview
     /// 1.2.1 (Zaille75: "if I had had it in hand, a clear misplay"): Feu de couverture (Covering Fire) played after the player's
     /// Shots it was in hand for: each of them would have given every ally its block. Lost = for each ally alive, the shots ×
     /// the block, capped by the block that ally was missing at the end of the turn. Choix, "coveringFireLate".
+    /// 1.2.2 (Zaille75): created by a card maker played after Shots it was in hand for, those Shots count too (the maker shown).
     private static void CoveringFireLate(TurnState s, TurnPlayer p, TurnResult r)
     {
-        for (var i = 0; i < s.Plays.Count; i++)
-        {
-            var cf = s.Plays[i];
-            if (cf.Owner != p.Actor || cf.AllyBlockPerShot <= 0) continue;
-            var shots = s.Plays.Take(i).Where(x => x.Owner == p.Actor && (x.ShotArrow || x.EmptyShot) &&
-                                                   x.HandAtPlay.Any(h => ReferenceEquals(h, cf.CardRef))).ToList();
-            if (shots.Count == 0) continue;
-            var lost = s.Players.Where(a => a.Actor != p.Actor && a.Alive)
-                .Sum(a => Math.Min(shots.Count * cf.AllyBlockPerShot, Math.Max(0, a.Incoming - a.Block)));
-            if (lost < 1) continue;
+        foreach (var (cf, maker, shots, lost) in CoveringFireMisses(s, p))
             r.Events.Add(new MissedChance(p.Actor, "coveringFireLate",
-                new[] { cf.CardKey, string.Join('+', shots.Select(x => x.CardKey).Distinct()), N(lost) }));
-        }
+                new[] { (maker ?? cf).CardKey, string.Join('+', shots.Select(x => x.CardKey).Distinct()), N(lost) }));
     }
 
     /// The game's Vulnérable multiplier (relics that change it are left out of this estimate).
@@ -763,9 +801,12 @@ public static class TurnReview
         !p.Relics.Any(r => r.Every > 0 && x.KindCount > 0 && x.KindCount % r.Every == 0 &&
                            (r.Trigger == RelicTrigger.Attacks && x.Kind == CardKind.Attack || r.Trigger == RelicTrigger.Skills && x.Kind == CardKind.Skill));
 
-    /// Cards whose power on the player ended the turn unused (Quietus with no arrow attack after it, 1.2.1).
+    /// Cards whose power on the player ended the turn unused (Quietus with no arrow attack after it, 1.2.1; Vers Ki with no melody
+    /// card after it, 1.2.2: partly used, Vers Ki+'s power is still there).
     private static IEnumerable<TurnPlay> BuffsUnused(TurnState s, TurnPlayer p) =>
-        s.Plays.Where(x => x.Owner == p.Actor && x.PowersGiven.Overlaps(p.UnusedBuffs));
+        s.Plays.Where(x => x.Owner == p.Actor && x.PowersGiven.Overlaps(p.UnusedBuffs) &&
+                           !(x.PowersGiven.Contains(KiVersePower) && s.Plays.SkipWhile(y => y != x).Skip(1)
+                               .Any(y => y.Owner == p.Actor && (y.Melody.Count > 0 || y.AutoMelody.Any(a => a.Tags.Count > 0)))));
 
     /// Per player: unused energy, growing card affordable, block card kept, Orichalcum beaten by a small block, relic
     /// triggers missed by one card.
@@ -848,7 +889,7 @@ public static class TurnReview
             if (x.EmptyShot) r.Events.Add(new MissedChance(actor, "emptyShot", new[] { x.CardKey, N(x.EnergySpent) }));
             else if (!x.ImpaledLater) r.Events.Add(new MissedChance(actor, "notImpaled", new[] { x.CardKey, N(x.EnergySpent) }));
         foreach (var x in BuffsUnused(s, p))
-            r.Events.Add(new MissedChance(actor, "buffUnused", new[] { x.CardKey, N(x.EnergySpent) }));
+            r.Events.Add(new MissedChance(actor, x.PowersGiven.Contains(KiVersePower) ? "verseUnused" : "buffUnused", new[] { x.CardKey, N(x.EnergySpent) }));
 
         // A growing card could have been played with the energy left, or instead of a useless card (v0.17.7).
         var spareEnergy = energy + useless.Select(x => x.EnergySpent).DefaultIfEmpty(0).Max();
@@ -895,13 +936,13 @@ public static class TurnReview
         }
         if (s.NothingToKill) return;
         foreach (var relic in p.Relics.Where(x => !x.GivesBlock || p.Block < p.Incoming))
-            if (MissedRelicTrigger(relic, p.Plays, hand, energy, WorthPlaying))
+            if (MissedRelicTrigger(relic, p.Plays, p.MelodyTags, hand, energy, WorthPlaying))
                 r.Events.Add(new MissedChance(actor, "relic", new[] { relic.Key }));
     }
 
     /// One more card would have triggered the relic this turn, and a playable one was in hand.
-    private static bool MissedRelicTrigger(TurnRelic relic, Dictionary<CardKind, int> plays, List<TurnCard> hand, int energy,
-        Func<TurnCard, bool, bool> worthPlaying)
+    private static bool MissedRelicTrigger(TurnRelic relic, Dictionary<CardKind, int> plays, IReadOnlySet<string> melodies, List<TurnCard> hand,
+        int energy, Func<TurnCard, bool, bool> worthPlaying)
     {
         int Played(CardKind k) => plays.GetValueOrDefault(k);
         bool InHand(CardKind k) => hand.Any(c => c.Kind == k && worthPlaying(c, false));
@@ -923,6 +964,15 @@ public static class TurnReview
             case RelicTrigger.EmptyHand:
                 // Damage to all enemies when the hand is empty at the end of the turn: every card must be worth playing.
                 return hand.Count > 0 && hand.All(c => !c.CostsX && worthPlaying(c, false)) && hand.Sum(c => c.Cost) <= energy;
+            case RelicTrigger.AllMelodies:
+            {
+                // 1.2.2: Baguette de direction, Berceuse: two tags played, a card of the third worth playing in hand.
+                var missing = AllTags.Where(t => !melodies.Contains(t)).ToList();
+                return missing.Count == 1 && hand.Any(c => c.Melody.Contains(missing[0]) && worthPlaying(c, false));
+            }
+            case RelicTrigger.KiMelody:
+                // 1.2.2: Accordage, no Ki played.
+                return !melodies.Contains("KI") && hand.Any(c => c.Melody.Contains("KI") && worthPlaying(c, false));
             default:
                 return false;
         }

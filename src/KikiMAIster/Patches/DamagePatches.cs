@@ -46,11 +46,8 @@ public static class DamagePatches
     {
         public static bool Prepare() => !GameBranch.IsV113;
 
-        /// The beta adds a CardPlay at the end.
         public static System.Reflection.MethodBase TargetMethod() => AccessTools.Method(typeof(CreatureCmd), nameof(CreatureCmd.Damage),
-            GameBranch.IsBeta
-                ? new[] { typeof(PlayerChoiceContext), typeof(IEnumerable<Creature>), typeof(decimal), typeof(ValueProp), typeof(Creature), typeof(CardModel), typeof(CardPlay) }
-                : new[] { typeof(PlayerChoiceContext), typeof(IEnumerable<Creature>), typeof(decimal), typeof(ValueProp), typeof(Creature), typeof(CardModel) });
+            new[] { typeof(PlayerChoiceContext), typeof(IEnumerable<Creature>), typeof(decimal), typeof(ValueProp), typeof(Creature), typeof(CardModel), typeof(CardPlay) });
 
         public static void Prefix(IEnumerable<Creature>? targets, Creature? dealer, CardModel? cardSource) =>
             Record(targets, dealer, cardSource);

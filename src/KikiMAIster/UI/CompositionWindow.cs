@@ -65,7 +65,7 @@ public static class CompositionWindow
         {
             var solo = lobby.NetService.Type == NetGameType.Singleplayer;
             var known = Characters();
-            var players = LobbyPlayers(lobby);
+            var players = lobby.Players.Select(p => (Id: p.id, Character: (CharacterModel?)p.character)).ToList();
             var chars = players.Select(p => p.Character?.Id.Entry ?? "").ToList();
             var group = chars.Count > 0 && chars.All(known.Contains) ? Compositions.KeyOf(chars) : "";
             var ids = players.Select(p => p.Id).ToList();
@@ -73,19 +73,6 @@ public static class CompositionWindow
                 ids.Select(id => LobbyName(lobby.NetService, id)).ToList(), lobby.NetService.NetId);
         }
         return new Context(null, 0, null, "", Array.Empty<ulong>(), Array.Empty<string>());
-    }
-
-    /// The lobby's players, by reflection: StartRunLobbyPlayer on the beta, LobbyPlayer on the main branch (same fields).
-    private static List<(ulong Id, CharacterModel? Character)> LobbyPlayers(object lobby)
-    {
-        var list = new List<(ulong, CharacterModel?)>();
-        if (lobby.GetType().GetProperty("Players")?.GetValue(lobby) is not System.Collections.IEnumerable players) return list;
-        foreach (var p in players)
-        {
-            var t = p.GetType();
-            list.Add((t.GetField("id")?.GetValue(p) is ulong id ? id : 0, t.GetField("character")?.GetValue(p) as CharacterModel));
-        }
-        return list;
     }
 
     private static string LobbyName(INetGameService net, ulong id)

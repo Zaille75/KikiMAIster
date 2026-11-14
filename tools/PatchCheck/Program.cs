@@ -76,10 +76,10 @@ else
     }
 }
 
-// GameApi's main branch delegates (made by reflection at start-up): each must be found on the main branch.
+// GameApi's main branch delegates (made by reflection at start-up): each must be found on the main branch (v0.111.0).
 {
     var api = modAsm.GetType("KikiMAIster.GameApi")!;
-    var beta = (bool)modAsm.GetType("KikiMAIster.GameBranch")!.GetField("IsBeta")!.GetValue(null)!;
+    var beta = (bool)modAsm.GetType("KikiMAIster.GameBranch")!.GetField("IsV113")!.GetValue(null)!;
     Console.WriteLine($"INFO game branch detected: {(beta ? "beta" : "main")}");
     foreach (var f in api.GetFields(BindingFlags.NonPublic | BindingFlags.Static).Where(f => typeof(Delegate).IsAssignableFrom(f.FieldType)))
     {
