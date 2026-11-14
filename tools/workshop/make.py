@@ -16,11 +16,11 @@ IDS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "published_ids.js
 ITEMS = {
     "beta": ("KikiMAIster - Solo and Co-op stats",  # renamed on Steam by Zaille75 (2026-11-06)
              "Works on both game branches: beta v0.113.0 (the Fool, Blitz, Dread) and default v0.111.0. "
-             "Version 1.2.1 knows the Fool's arrows (no more false mistakes with Shots, new arrow mistakes, co-op arrows); "
-             "more Fool mechanics will follow (melodies, tarot cards).",
+             "Version 1.2.2 knows the Fool's arrows and melodies (Wah / Cho / Ki: cards played in the wrong order, melody powers "
+             "played late, Vers Ki wasted) and more arrow mistakes; tarot cards will follow.",
              "Marche sur les deux branches du jeu : bêta v0.113.0 (l'Insensé, Blitz, Dread) et par défaut v0.111.0. "
-             "La version 1.2.1 connaît les flèches de l'Insensé (plus de fausses erreurs avec les Tirs, nouvelles erreurs de flèches, "
-             "flèches en coop) ; d'autres mécaniques de l'Insensé suivront (mélodies, cartes de tarot)."),
+             "La version 1.2.2 connaît les flèches et les mélodies de l'Insensé (Wah / Cho / Ki : cartes jouées dans le mauvais ordre, "
+             "pouvoirs de mélodie joués trop tard, Vers Ki gâché) et d'autres erreurs de flèches ; les cartes de tarot suivront."),
 }
 
 

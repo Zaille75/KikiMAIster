@@ -8,14 +8,15 @@
 > Zaille75, item 3832591950 "KikiMAIster - Solo and Co-op stats"). `main` = released code, no open branch
 > (`feature/fool-arrows` merged). 1.2.1 is **not tested in game yet**: Zaille75's two games of 2026-11-13 were played with
 > 1.2.0 (their 12 reports are all handled in 1.2.1). One DLL for beta v0.113.0 and main v0.111.0.
-> **Branch `feature/drop-old-main` (1.2.2, unreleased, not tested in game):** old main v0.107.1 support dropped
+> **1.2.2 (2026-11-14, merged in `main`, not tested in game):** old main v0.107.1 support dropped
 > (`GameBranch.IsBeta`, the main-only patches, the `GameApi` damage delegates, beta-only reflection targets and the lobby
 > reflection removed). The Fool's melodies and more arrow mistakes (spec 01-metrics rows "The Fool's melodies" → "Tir répété at
 > 0 energy", 02-ui "1.2.2"): Core `FoolRules.cs` (partial `TurnReview`), capture `BlockAlternatives.Melodies` (`[BranchOnly]`) and
 > new `Arrows.Fill` fields (`ArrowHitsLeft`, `CardBonus`, `QuietusAtStart`, `HitDamage`), `TurnPlay.Created`
 > (`OnCardGenerated`). New kinds: Choix "melodyFirst", "melodyLate", "retrievalTarget", "retrievalOrder", "payoffTarget",
-> "repeatShotEmpty"; Gâché "verseUnused"; misses ending with a loss (`Overlay.LossKinds`, `why.lost*`). PatchCheck beta 78,
-> main 116; tests 230. Merge into `main` with the next inbox's fixes (Zaille75: 1.2.1 first tested in game).
+> "repeatShotEmpty", "repeatShotShort"; Gâché "verseUnused"; misses ending with a loss (`Overlay.LossKinds`, `why.lost*`); Vers
+> Ki on a weaker card (`VerseAtStart`), Chorale Cho's auto-plays (`AutoMelody`). PatchCheck beta 78, main 117; tests 233.
+> Zaille75 tests 1.2.1 + 1.2.2 together in game.
 > When Zaille75 sends a new inbox (`logs/inbox/<date_time>/`): **review and summarize every report first, wait for his go,
 > then implement the whole batch** (memory rules). Each send now also brings `KikiMAIster.names.txt` (game names in French):
 > copy it to `lib/beta/names.txt` when the game version changed.
@@ -27,11 +28,10 @@
    Visée, Flèches barbelées; **no** "energy left / free card" for Rappel / Empoignade / Déraciner without the player's own
    arrow, nor for a red Shot; no wasted-block alternative that is a red Shot; Galvanisé cards not suggested; panel no longer
    closes hover texts (rebuilds when the mouse leaves); l'Insensé yellow; run title "… · A<n>".
-2. **Fool ideas:** done on `feature/drop-old-main` (melodies, Récupération héroïque, payoff target, Estocade, Tir répété,
-   Abondance's Feu de couverture). **Tarot cards** (Forme mythique): Zaille75 waits for in-game play before deciding (all are
-   0-cost Exhaust tokens, so never a "free card" miss today). Not done (mention if relevant): Vers Ki on a weaker melody card;
-   Tir répété played with less energy than possible (only the 0-energy case); melody cards auto-played by Chorale Cho are not
-   counted as cards that could have come first (minimum).
+2. **Fool ideas:** done in 1.2.2 (melodies, Récupération héroïque, payoff target, Estocade, Tir répété, Abondance's Feu de
+   couverture, Vers Ki on a weaker card, Chorale Cho's auto-plays). **Tarot cards** (Forme mythique): Zaille75 waits for
+   in-game play before deciding (all are 0-cost Exhaust tokens, so never a "free card" miss today). In the next inbox also
+   check the 1.2.2 miss kinds (above) and `melody first` / `melody late` / `retrieval` / `repeat shot` log lines.
 3. **Known limits of the arrow rules** (estimates stay minimums): a Shot that kills gives its arrow back (ignored in the
    lethal checks); Visée's bonus is not scaled by Vulnérable / Tête chercheuse; an ally's arrows ready are not known
    (an ally's later successful Shot is taken as "it had one").

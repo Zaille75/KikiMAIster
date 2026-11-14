@@ -211,6 +211,10 @@ public class TurnPlay
     public int QuietusAtStart { get; set; }
     public int HitDamage { get; set; }
     public HashSet<object> Created { get; } = new(ReferenceEqualityComparer.Instance);
+    /// VerseAtStart: Vers Ki's power when it started (its melody card is played twice). AutoMelody: the cards it auto-played from the
+    /// hand (Chorale Cho) and their melody tags.
+    public int VerseAtStart { get; set; }
+    public List<(object Card, HashSet<string> Tags)> AutoMelody { get; } = new();
 
     /// The first enemy it hit, with all the raw damage it dealt to that enemy; null when it hit no enemy.
     public (object Target, int Damage)? FirstHit =>
@@ -801,7 +805,8 @@ public static partial class TurnReview
     /// card after it, 1.2.2: partly used, Vers Ki+'s power is still there).
     private static IEnumerable<TurnPlay> BuffsUnused(TurnState s, TurnPlayer p) =>
         s.Plays.Where(x => x.Owner == p.Actor && x.PowersGiven.Overlaps(p.UnusedBuffs) &&
-                           !(x.PowersGiven.Contains(KiVersePower) && s.Plays.SkipWhile(y => y != x).Skip(1).Any(y => y.Owner == p.Actor && y.Melody.Count > 0)));
+                           !(x.PowersGiven.Contains(KiVersePower) && s.Plays.SkipWhile(y => y != x).Skip(1)
+                               .Any(y => y.Owner == p.Actor && (y.Melody.Count > 0 || y.AutoMelody.Any(a => a.Tags.Count > 0)))));
 
     /// Per player: unused energy, growing card affordable, block card kept, Orichalcum beaten by a small block, relic
     /// triggers missed by one card.

@@ -166,6 +166,7 @@ public static class Loc
         ["why.retrievalOrder"] = ("{0} before {1}: played after, it freed your arrow, {2}", "{0} avant {1} : jouée après, elle libérait ta flèche, {2}"),
         ["why.payoffTarget"] = ("{0} on a target with no arrow while another enemy had one: {2}", "{0} sur une cible sans flèche alors qu'un autre ennemi en avait une : {2}"),
         ["why.repeatShotEmpty"] = ("{0} at 0 energy: with the energy of {1} ({2}), it dealt {3} damage instead of {4}", "{0} à 0 énergie : avec l'énergie de {1} ({2}), elle faisait {3} dégâts au lieu de {4}"),
+        ["why.repeatShotShort"] = ("{0} at {5} energy: with the energy of {1} too ({2}), it dealt {3} damage instead of {4}", "{0} à {5} énergie : avec aussi l'énergie de {1} ({2}), elle faisait {3} dégâts au lieu de {4}"),
         ["why.lostEnergy"] = ("{0} energy lost", "{0} énergie perdue"),
         ["why.lostDraws"] = ("{0} card(s) fewer drawn", "{0} carte(s) piochée(s) en moins"),
         ["why.lostPlays"] = ("{0} card(s) of the draw pile not played", "{0} carte(s) de la pioche non jouée(s)"),

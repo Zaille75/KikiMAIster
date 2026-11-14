@@ -691,6 +691,10 @@ public static class BlockAlternatives
         var hand = Capture.PlayerOf(cardPlay).PlayerCombatState?.Hand.Cards;
         if (cardPlay.IsAutoPlay || hand == null)
         {
+            // 1.2.2: a melody card auto-played from the hand by the player's card in progress (Chorale Cho).
+            if (cardPlay.IsAutoPlay && GameBranch.IsV113 && InProgress.TryPeek(out var parent) && parent != null &&
+                parent.Player == Capture.PlayerOf(cardPlay))
+                Capture.Safe("melodies (auto-play)", () => parent.AutoMelody.Add((cardPlay.Card, Melodies.TagsOf(cardPlay.Card))));
             InProgress.Push(null);
             return;
         }
@@ -1483,6 +1487,7 @@ public static class BlockAlternatives
             var card = cardPlay.Card;
             play.Melody = TagsOf(card);
             play.MelodyBefore = PlayedThisTurn(play.Player);
+            play.VerseAtStart = (int)play.Player.Creature.GetPowerAmount<KiVersePower>();
             play.MelodyUnit = card switch
             {
                 HarmonicShield => (double)card.DynamicVars.CalculationExtra.BaseValue,

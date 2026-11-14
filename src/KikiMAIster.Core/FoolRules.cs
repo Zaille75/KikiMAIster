@@ -46,6 +46,36 @@ public static partial class TurnReview
         {
             PayoffsTooEarly(s, p, r);
             PowersTooLate(s, p, r);
+            VerseOnWeakerCard(s, p);
+        }
+    }
+
+    /// The tags a melody card played after the payoff would have brought before it: its own, and (Chorale Cho) those of the cards it
+    /// auto-played that were already in hand when the payoff was played.
+    private static IEnumerable<string> TagsFor(TurnPlay payoff, TurnPlay m) =>
+        m.Melody.Concat(m.AutoMelody.Where(a => payoff.HandAtPlay.Any(h => ReferenceEquals(h, a.Card))).SelectMany(a => a.Tags)).Distinct();
+
+    /// Vers Ki (1.2.2) played a melody card twice while a melody card doing more (damage, block) was in hand and played later the same
+    /// turn without it: wrong order, the difference per play (its damage on the later card's target, its block). Not when the card
+    /// played twice did something else too (debuff, draw…: not measured).
+    private static void VerseOnWeakerCard(TurnState s, TurnPlayer p)
+    {
+        var mine = s.Plays.Where(x => x.Owner == p.Actor).ToList();
+        for (var i = 0; i < mine.Count; i++)
+        {
+            var twice = mine[i];
+            if (twice.VerseAtStart <= 0 || twice.Melody.Count == 0 || !twice.PlayedAgain || twice.HadNonDamageEffect) continue;
+            var damage = twice.Hits.Sum(h => h.Raw) / 2.0;
+            var block = twice.BlockAmount / 2.0;
+            var better = mine.Skip(i + 1).Where(y => y.Melody.Count > 0 && y.VerseAtStart == 0 && !y.PlayedAgain && InHandAt(twice, y) &&
+                                                     twice.EnergyBefore >= twice.EnergySpent + y.EnergySpent)
+                .Select(y => (Card: y, Damage: y.Hits.Sum(h => h.Raw) - damage, Block: y.BlockAmount - block))
+                .Where(c => c.Damage >= 0 && c.Block >= 0 && c.Damage + c.Block >= 1)
+                .OrderByDescending(c => c.Damage + c.Block).FirstOrDefault();
+            if (better.Card is not { } y) continue;
+            if (better.Damage >= 1 && (y.Target ?? y.Hits.FirstOrDefault().Target) is { } target)
+                s.OrderLosses.Add(new OrderLoss(twice, y.CardKey, "order", target, better.Damage));
+            if (better.Block >= 1) s.OrderLosses.Add(new OrderLoss(twice, y.CardKey, "orderBlock", null, better.Block));
         }
     }
 
@@ -78,7 +108,7 @@ public static partial class TurnReview
             foreach (var m in mine.Skip(i + 1))
             {
                 if (!InHandAt(payoff, m)) continue;
-                var adds = m.Melody.Where(t => counted.Contains(t) && !had.Contains(t) && !gained.Contains(t)).ToList();
+                var adds = TagsFor(payoff, m).Where(t => counted.Contains(t) && !had.Contains(t) && !gained.Contains(t)).ToList();
                 if (adds.Count == 0 || NeededPayoff(s, mine, payoff, m)) continue;
                 var extraThen = binary ? 1 : gained.Count + adds.Count;
                 if (payoff.EnergyBefore < energy + m.EnergySpent + CostAfter(id, payoff, extraThen)) continue;
@@ -280,16 +310,18 @@ public static partial class TurnReview
         }
     }
 
-    /// Tir répété played with 0 energy (it does nothing), when attacks played before it while it was in hand, dealing damage only,
-    /// cost energy it would have turned into more damage (spec "Tir répété at 0 energy"). Choix "repeatShotEmpty" (card, attacks,
-    /// energy, its damage, theirs).
+    /// Tir répété (1 hit per energy) played with 0 energy (it does nothing) or less energy than it could have had, when attacks played
+    /// before it while it was in hand, dealing damage only, cost energy it would have turned into more damage (spec "Tir répété at 0
+    /// energy"). Choix "repeatShotEmpty" (card, attacks, energy, its damage, theirs) or, with some energy, "repeatShotShort" (the
+    /// same, then the energy it had; its own damage counted with theirs).
     private static void RepeatShotEmpty(TurnState s, TurnPlayer p, TurnResult r)
     {
         var mine = s.Plays.Where(x => x.Owner == p.Actor).ToList();
         for (var i = 0; i < mine.Count; i++)
         {
             var x = mine[i];
-            if (CardId(x.CardKey) != "REPEAT_SHOT" || !x.CostsX || x.EnergySpent > 0 || x.HitDamage <= 0 || x.Target is not { } t) continue;
+            if (CardId(x.CardKey) != "REPEAT_SHOT" || !x.CostsX || x.HitDamage <= 0 || x.Target is not { } t) continue;
+            var own = x.Hits.Sum(h => h.Raw);
             var pure = mine.Take(i).Where(y => y.Kind == CardKind.Attack && y.EnergySpent > 0 && !y.HadNonDamageEffect && !y.GaveBlock &&
                                                !y.PlayedAgain && InHandAt(y, x)).Take(10).ToList();
             (List<TurnPlay> Line, int Energy, int Would, int Dealt)? best = null;
@@ -299,16 +331,17 @@ public static partial class TurnReview
                 // It needs an arrow: one ready, or the one a Shot of that line took.
                 if (x.ArrowsReady == 0 && !line.Any(y => y.ShotArrow)) continue;
                 var energy = line.Sum(y => y.EnergySpent);
-                var dealt = line.Sum(y => y.Hits.Sum(h => h.Raw));
+                var dealt = own + line.Sum(y => y.Hits.Sum(h => h.Raw));
                 var onTarget = line.Sum(y => y.Hits.Where(h => ReferenceEquals(h.Target, t)).Sum(h => h.Raw));
-                var would = Math.Min(energy * x.HitDamage, x.TargetLeftBefore + onTarget);
+                var would = Math.Min((x.EnergySpent + energy) * x.HitDamage, x.TargetLeftBefore + onTarget);
                 if (would - dealt >= 1 && (best == null || would - dealt > best.Value.Would - best.Value.Dealt))
                     best = (line, energy, would, dealt);
             }
             if (best is not { } b) continue;
-            r.Log.Add($"repeat shot at 0: {b.Energy} energy, {b.Would} instead of {b.Dealt}");
-            r.Events.Add(new MissedChance(p.Actor, "repeatShotEmpty", new[] { x.CardKey, string.Join('+', b.Line.Select(y => y.CardKey).Distinct()),
-                N(b.Energy), N(b.Would), N(b.Dealt) }));
+            r.Log.Add($"repeat shot at {x.EnergySpent}: +{b.Energy} energy, {b.Would} instead of {b.Dealt}");
+            var args = new List<string> { x.CardKey, string.Join('+', b.Line.Select(y => y.CardKey).Distinct()), N(b.Energy), N(b.Would), N(b.Dealt) };
+            if (x.EnergySpent > 0) args.Add(N(x.EnergySpent));
+            r.Events.Add(new MissedChance(p.Actor, x.EnergySpent > 0 ? "repeatShotShort" : "repeatShotEmpty", args.ToArray()));
         }
     }
 

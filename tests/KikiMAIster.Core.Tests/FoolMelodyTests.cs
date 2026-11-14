@@ -339,4 +339,42 @@ public class FoolMelodyTests
         Assert.Equal(new[] { "Card:ABUNDANCE^", "Card:FOOLISH_SHOT", "7" }, Missed(r, "coveringFireLate").Single().Args);
         Assert.Empty(Missed(r, "makerFirst"));
     }
+    [Fact]
+    public void KiVerse_OnAWeakerMelodyCard_ThanOnePlayedLater()
+    {
+        var weak = P("WAH_SWEEP", target: Enemy, hits: 2, raw: 8, tags: new[] { "WAH" });
+        weak.VerseAtStart = 1;
+        weak.PlayedAgain = true;
+        var strong = P("WAH_HAMMER", target: Enemy, hits: 1, raw: 14, tags: new[] { "WAH" }, before: new[] { "WAH" });
+        Hold(weak, strong);
+        Assert.Equal(new[] { "Card:WAH_SWEEP", "6", "0", "Card:WAH_HAMMER" },
+            Missed(TurnReview.Resolve(State(Me(new[] { "WAH" }), weak, strong)), "orderTurn").Single().Args);
+        // The card played twice also did something else (Vulnérable…): not measured, no miss.
+        weak.HadNonDamageEffect = true;
+        Assert.Empty(Missed(TurnReview.Resolve(State(Me(new[] { "WAH" }), weak, strong)), "orderTurn"));
+    }
+
+    [Fact]
+    public void RepeatShot_WithLessEnergyThanItCouldHaveHad()
+    {
+        var strike = P("STRIKE", target: Enemy, hits: 1, raw: 6);
+        var repeat = P("REPEAT_SHOT", energy: 1, target: Enemy, hits: 1, raw: 15, costsX: true, targetLeft: 40);
+        repeat.HitDamage = 15;
+        Hold(strike, repeat);
+        Assert.Equal(new[] { "Card:REPEAT_SHOT", "Card:STRIKE", "1", "30", "21", "1" },
+            Missed(TurnReview.Resolve(State(Me(), strike, repeat)), "repeatShotShort").Single().Args);
+    }
+
+    [Fact]
+    public void ChoChorus_AutoPlayingAWahCardInHand_CountsForThePayoffBeforeIt()
+    {
+        var wahCard = new object();
+        var shot = P("MELODIC_SHOT", target: Enemy, hits: 1, raw: 12, energyBefore: 4);
+        var chorus = P("CHO_CHORUS", energy: 3, kind: CardKind.Skill, tags: new[] { "CHO" });
+        chorus.AutoMelody.Add((wahCard, new HashSet<string> { "WAH" }));
+        Hold(shot, chorus);
+        shot.HandAtPlay.Add(wahCard);
+        Assert.Equal(new[] { "Card:MELODIC_SHOT", "24", "0", "Card:CHO_CHORUS" },
+            Missed(TurnReview.Resolve(State(Me(new[] { "CHO", "WAH" }), shot, chorus)), "orderTurn").Single().Args);
+    }
 }
