@@ -432,6 +432,7 @@ public static class CombatFlowPatches
                 return;
             }
             PlayLog.Note($"{card.Title} created for {PlayLog.Who(card.Owner)}");
+            BlockAlternatives.OnCardGenerated(card);
             // A card created in another player's piles (Blade Symphony passes no creator: the player acting made it).
             var giver = creator ?? Capture.CurrentActingPlayer;
             // Âme sœur: the Soul copied into the ally's draw pile is "created" by that ally; it is the Soulbound
