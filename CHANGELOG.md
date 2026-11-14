@@ -3,6 +3,9 @@
 Summary by version line. The detailed notes of every version are in [docs/specs/02-ui.md](docs/specs/02-ui.md)
 (interface) and [docs/specs/01-metrics.md](docs/specs/01-metrics.md) (rules).
 
+## 1.2.2 (unreleased)
+The old main branch (game v0.107.1) is no longer supported: the mod runs on the beta v0.113.0 and the main branch v0.111.0.
+
 ## 1.2.1 (2026-11-14) — the Fool's arrows
 The Fool's arrow cards, from the game code. Fixes: a Shot with no arrow ready is no longer a "free card" (Tir leste), a
 block alternative, a Stars / Carapace alternative or the "stronger attack"; Clouer with no arrow in any enemy and Rappel /

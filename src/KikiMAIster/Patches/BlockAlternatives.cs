@@ -281,9 +281,6 @@ public static class BlockAlternatives
     /// Wrong order (spec §E0): a boost (Vulnerable put on an enemy that had none, Strength, Dexterity, Focus, Calcification…)
     /// given by a card the player chose or a potion, after plays of the same turn it would have boosted (and while it was
     /// already in hand); or a Strength / Dexterity drop before plays it lowered.
-    [BranchOnly, System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    private static bool IsOneForAll(PowerModel power) => power is OneForAllPower;
-
     private static void CheckOrder(PowerModel power, decimal amount, bool stacked)
     {
         var caller = Capture.CallingModelType();
@@ -396,8 +393,8 @@ public static class BlockAlternatives
             case PhantomBladesPower when power.Owner == player.Creature:
                 PerHit(ThisTurn.Where(p => p.Player == player && p.Card.Tags.Contains(CardTag.Shiv)).Take(1).Intersect(attacks), (double)amount);
                 break;
-            // Un pour tous (beta only): each hit of an X-cost attack.
-            case PowerModel when GameBranch.IsBeta && IsOneForAll(power) && power.Owner == player.Creature:
+            // Un pour tous: each hit of an X-cost attack.
+            case OneForAllPower when power.Owner == player.Creature:
                 PerHit(attacks.Where(p => p.Card.EnergyCost.CostsX), (double)amount);
                 break;
             // Pistage: +50% on enemies with Weak.
@@ -1178,7 +1175,7 @@ public static class BlockAlternatives
         DebuffEffectPatches.Computing = true;
         try
         {
-            damage = GameApi.ModifyDamage(owner.RunState, card.CombatState, target, dealer, v.BaseValue, props, card, null,
+            damage = Hook.ModifyDamage(owner.RunState, card.CombatState, target, dealer, v.BaseValue, props, card, null,
                 ModifyDamageHookType.All, CardPreviewMode.None, out _);
         }
         finally
@@ -1209,7 +1206,7 @@ public static class BlockAlternatives
                     foreach (var intent in enemy.Monster.NextMove.Intents.OfType<AttackIntent>())
                     {
                         if (intent.DamageCalc is not { } calc) continue;
-                        var hit = GameApi.ModifyDamage(combat.RunState, combat, creature, enemy, calc(), ValueProp.Move, null, null,
+                        var hit = Hook.ModifyDamage(combat.RunState, combat, creature, enemy, calc(), ValueProp.Move, null, null,
                             ModifyDamageHookType.All, CardPreviewMode.None, out _);
                         incoming += Math.Max(0, (int)hit) * Math.Max(1, intent.Repeats);
                     }

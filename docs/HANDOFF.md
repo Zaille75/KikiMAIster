@@ -7,7 +7,10 @@
 > **State (2026-11-14):** **1.2.1 released** on GitHub (tag `v1.2.1`, by WTT27) and the Steam Workshop (uploaded by
 > Zaille75, item 3832591950 "KikiMAIster - Solo and Co-op stats"). `main` = released code, no open branch
 > (`feature/fool-arrows` merged). 1.2.1 is **not tested in game yet**: Zaille75's two games of 2026-11-13 were played with
-> 1.2.0 (their 12 reports are all handled in 1.2.1). One DLL for beta v0.113.0 and main v0.111.0 (and old main v0.107.1).
+> 1.2.0 (their 12 reports are all handled in 1.2.1). One DLL for beta v0.113.0 and main v0.111.0.
+> **Branch `feature/drop-old-main` (1.2.2, unreleased):** old main v0.107.1 support dropped (`GameBranch.IsBeta`, the
+> main-only patches, the `GameApi` damage delegates, beta-only reflection targets and the lobby reflection removed);
+> PatchCheck beta 78, main 92; tests 211.
 > When Zaille75 sends a new inbox (`logs/inbox/<date_time>/`): **review and summarize every report first, wait for his go,
 > then implement the whole batch** (memory rules). Each send now also brings `KikiMAIster.names.txt` (game names in French):
 > copy it to `lib/beta/names.txt` when the game version changed.
@@ -23,8 +26,7 @@
    tarot cards; Récupération héroïque on the wrong target (an enemy at 1 hit from freeing an arrow); a payoff card (Coup
    d'arc, Bond Ki, Marteau Wah, Clouer) on a target without an arrow while another enemy had one; Estocade on a weak Shot;
    Tir répété at 0 energy; Feu de couverture created by Abondance after Shots (today only "makerFirst").
-3. **Optional:** drop the old main v0.107.1 support (`GameBranch.Name` "main-old", PatchCheck by hand).
-4. **Known limits of the arrow rules** (estimates stay minimums): a Shot that kills gives its arrow back (ignored in the
+3. **Known limits of the arrow rules** (estimates stay minimums): a Shot that kills gives its arrow back (ignored in the
    lethal checks); Visée's bonus is not scaled by Vulnérable / Tête chercheuse; an ally's arrows ready are not known
    (an ally's later successful Shot is taken as "it had one").
 - **Talking to Zaille75:** French in-game names (table `lib/beta/names.txt`, e.g. Clouer = Nail, Estocade = Quietus,
@@ -40,8 +42,7 @@ Beta v0.113.0 (12 Nov, "biggest beta patch": the Fool, Blitz, Dread, ~140 cards 
 the same day (= our former `lib/beta`). Patch notes: Steam news API (`ISteamNews/GetNewsForApp`, appid 2868840): the
 Steam page / untapped / SteamDB block automated fetches.
 - **lib:** `lib/beta/` = v0.113.0 (from Zaille75, `lib/beta-v0.113.0/` raw copy), `lib/default/` = v0.111.0,
-  `lib/default-v0.107.1/` = old main (PatchCheck by hand: `dotnet run --project tools/PatchCheck -- lib/default-v0.107.1
-  build/mod/KikiMAIster.dll`). Both decompiled with `ilspycmd -p -o <dir>/decompiled <dir>/sts2.dll -r <dir>` (same layout:
+  `lib/default-v0.107.1/` = old main (no longer supported since 1.2.2). Both decompiled with `ilspycmd -p -o <dir>/decompiled <dir>/sts2.dll -r <dir>` (same layout:
   `diff -rq lib/default/decompiled lib/beta/decompiled`). `lib/beta/names.txt` is the v0.113.0 table (from Zaille75's game, 2026-11-14,
   the Fool's French names included; `Envoyer-a-Claude` now sends `KikiMAIster.names.txt` each time).
 - **Fixed:** `GameBranch.IsV113`; `GameApi.ShouldTakeExtraTurn`; damage funnel `DamageCommandV113` and kill funnel
