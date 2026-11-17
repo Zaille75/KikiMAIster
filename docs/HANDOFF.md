@@ -1,4 +1,4 @@
-# Handoff — state of the project (2026-11-17, v1.2.2)
+# Handoff — state of the project (2026-11-17, v1.2.3 on feature/1.2.3)
 
 > **Start here in a new conversation**, then `CLAUDE.md`, `docs/specs/01-metrics.md` (rules) and `docs/specs/02-ui.md`
 > (interface). The history of every version is in `CHANGELOG.md` and the specs' "vX.Y.Z" notes; the git history has the
@@ -8,6 +8,15 @@
 > Zaille75, item 3832591950 "KikiMAIster - Solo and Co-op stats", checked with the Steam API `GetPublishedFileDetails`).
 > `main` = released code, no open branch (`feature/drop-old-main` merged; its remote copy can be deleted). 1.2.1 and 1.2.2
 > are **not tested in game yet**: Zaille75 will try both together. One DLL for beta v0.113.0 and main v0.111.1.
+> **1.2.3 (2026-11-17, branch `feature/1.2.3`, not merged, not tested in game):** Zaille75's inbox `logs/inbox/2026-11-17_21-48-23`
+> (11 F9 reports, 1.2.2 games, no internal error; log archived `logs/2026-11-17_v1.2.2_fool-feedback.log`). Spec 01-metrics rows
+> "Played again with no arrow" → "Melody block card", 02-ui "1.2.3". Core `Rules1_2_3.cs` (partial `TurnReview`): "emptyReplay",
+> "makeEarlier", "aimCapped" (Choix), "overkillEarlier" (Gâché); `EnergyMissed` gates "emptyShot" / "notImpaled";
+> `MelodyCounted` (melody block card counted by a later payoff: never gâché); `Lethal.Find(deathBlock)` (Crabe furieux, read
+> generically in `BlockAlternatives.DeathBlock`); "overkill" has 6 args (old entries keep the 3-arg text). Capture: `OnCapped`
+> takes the stopped damage and cap key; `TurnPlay.EmptyReplay / CreatedToHand / PenNib / CapStopped / CapKeys / SlipperyOn`;
+> `EstimateBlock` × enchantment replays. UI: "Masquer chez le marchand" (`Cfg.HideAtMerchant`, `NMerchantRoom.Instance`), wasted
+> text as a sentence. Not changed (Zaille75): Encore left in hand stays a "free card" miss. PatchCheck beta 78, main 117; tests 241.
 > **Main v0.111.1 (2026-11-17, game hotfix of 13 Nov):** `sts2.dll` code identical to v0.111.0 (decompiled diff = commit
 > hash only); `lib/default/` = v0.111.1 (raw copy `lib/default-v0.111.1/`, v0.111.0 kept in `lib/default-v0.111.0/`).
 > PatchCheck beta 78, main 117, tests 233: nothing to change, no new version.

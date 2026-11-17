@@ -3,6 +3,17 @@
 Summary by version line. The detailed notes of every version are in [docs/specs/02-ui.md](docs/specs/02-ui.md)
 (interface) and [docs/specs/01-metrics.md](docs/specs/01-metrics.md) (rules).
 
+## 1.2.3 (unreleased) — feedback of 2026-11-17
+New: "Masquer chez le marchand" (on by default) hides the panel in a merchant room, Blitz's merchant too (F7 there: this visit
+only). New mistakes: a Shot played again (Duplicateur…) whose copy found no arrow (Choix); cards created into a full hand by a card
+that could have been played earlier without changing the turn (Choix); an attack whose hit the big attack's overkill covered
+(Pointe de stylo on the third Frappe into the same Larve: Gâché); Visée spent into a cap (Intangible…; Glissant only when it went
+away this turn and a later Shot lost Visée: Choix). Fixes: an empty Shot / a card on a target without an arrow is a mistake only
+when its energy would have paid another useful card (Rappel+ at 0 energy is fine); the lethal check counts Crabe furieux's 99
+block for the crab killed last; block estimates count the card's replay enchantment (Flèches sifflantes +6); a melody block card a
+later card counted (Fermeté Cho before Déflagration Wah) is never gâché. Clearer texts: wasted block as a sentence, and the
+overkill swap names Pointe de stylo.
+
 ## 1.2.2 (2026-11-14) — the Fool's melodies
 The Fool's melodies (Wah / Cho / Ki), from the game code: a card that reads the melodies played before melody cards already in
 hand (Tir mélodieux, Frappe rythmée, Déflagration Wah: hits lost; Bouclier harmonique: block; Cadence régulière: draws; Coda,

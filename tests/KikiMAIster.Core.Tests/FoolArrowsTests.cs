@@ -91,7 +91,8 @@ public class FoolArrowsTests
     {
         var nail = Play("NAIL", 2, target: Enemy);
         nail.NotImpaled = true;
-        var r = TurnReview.Resolve(State(new TurnPlayer { Actor = A }, nail));
+        // 1.2.3: its energy would have paid the Frappe+ left in hand.
+        var r = TurnReview.Resolve(State(new TurnPlayer { Actor = A, Hand = { Card("STRIKE", cost: 2, damage: 9) } }, nail));
         Assert.Equal(new[] { "Card:NAIL", "2" }, Missed(r, "notImpaled").Single().Args);
         Assert.Equal(2, r.Events.OfType<HelpGiven>().Where(h => h.Kind == "energyUseless").Sum(h => h.Amount));
         // Third attack of the turn with Kunai: it triggered the relic.

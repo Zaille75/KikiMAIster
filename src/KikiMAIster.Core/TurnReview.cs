@@ -216,6 +216,17 @@ public class TurnPlay
     public int VerseAtStart { get; set; }
     public List<(object Card, HashSet<string> Tags)> AutoMelody { get; } = new();
 
+    /// 1.2.3 (Zaille75). EmptyReplay: a copy of it (Duplicateur, Forme résonnante, Vers Ki… not its own enchantment) found no
+    /// arrow ready and shot nothing. CreatedToHand: the cards it created into the hand (those lost to a full hand included).
+    /// PenNib: Pointe de stylo doubled it. CapStopped / CapKeys: the damage caps stopped on its hits and which caps
+    /// ("Power:INTANGIBLE_POWER"…); SlipperyOn: the enemies whose Glissant stopped part of it.
+    public bool EmptyReplay { get; set; }
+    public int CreatedToHand { get; set; }
+    public bool PenNib { get; set; }
+    public double CapStopped { get; set; }
+    public HashSet<string> CapKeys { get; } = new();
+    public HashSet<object> SlipperyOn { get; } = new(ReferenceEqualityComparer.Instance);
+
     /// The first enemy it hit, with all the raw damage it dealt to that enemy; null when it hit no enemy.
     public (object Target, int Damage)? FirstHit =>
         Hits.Count == 0 ? null : (Hits[0].Target, Hits.Where(h => ReferenceEquals(h.Target, Hits[0].Target)).Sum(h => h.Raw));
@@ -297,6 +308,8 @@ public sealed class TurnState
     public object? LastEnemy { get; init; }
     /// Vulnérable stacks of each enemy alive at the end of the turn (v1.1.1).
     public Dictionary<object, int> EnemyVulnerable { get; init; } = new(ReferenceEqualityComparer.Instance);
+    /// Glissant stacks of each enemy alive at the end of the turn (1.2.3: Visée spent into it).
+    public Dictionary<object, int> EnemySlippery { get; init; } = new(ReferenceEqualityComparer.Instance);
 
     public TurnPlayer? Player(Actor a) => Players.FirstOrDefault(p => p.Actor == a);
 }
@@ -307,6 +320,8 @@ public sealed class TurnResult
     public List<string> Log { get; } = new();
     /// Growing cards that could have been played this turn (spec §E0: missed if never played in the fight).
     public List<object> GrowingAffordable { get; } = new();
+    /// Cards whose cards lost to a full hand were already explained ("handFull", "drawFirst"; 1.2.3: no "makeEarlier" then).
+    public HashSet<TurnPlay> FullHandExplained { get; } = new();
 }
 
 /// The misplay rules checked at the end of each players' turn (spec 01-metrics §E0 and §F): wrong order, weak attacks,
@@ -344,6 +359,9 @@ public static partial class TurnReview
             CappedAttacks(s, p, r);
             StampedeSwap(s, p, r);
             DrawBeforeMaking(s, p, r);
+            MakeEarlier(s, p, r);
+            EmptyReplays(s, p, r);
+            AimCapped(s, p, r);
             VulnerableLeft(s, p, r);
             MakersFirst(s, p, r);
             CoveringFireLate(s, p, r);
@@ -693,6 +711,9 @@ public static partial class TurnReview
                 r.Events.Add(new MissedChance(big.Owner, "overkillFollowUp", new[] { big.CardKey, followUp.Source, N(lost) }));
                 continue;
             }
+            // 1.2.3: the card that doubled it is named (Zaille75: "Frappe a tué… puis Frappe…" read as nonsense).
+            var boost = big.PenNib ? PenNibKey : "";
+            var swapped = false;
             var after = s.Plays.SkipWhile(p => p != big).Skip(1);
             foreach (var small in after.Where(p => p.Owner == big.Owner && p.Kind == CardKind.Attack && !p.HadNonDamageEffect))
             {
@@ -701,10 +722,36 @@ public static partial class TurnReview
                     !big.DamageOn.TryGetValue(hit.Target, out var bigThere)) continue;
                 var lost = Math.Min(bigThere - hit.Damage, Left(hit.Target));
                 if (lost < 1) continue;
-                r.Events.Add(new MissedChance(big.Owner, "overkill", new[] { big.CardKey, small.CardKey, N(lost) }));
+                r.Events.Add(new MissedChance(big.Owner, "overkill",
+                    new[] { big.CardKey, small.CardKey, N(lost), N(big.TargetLeftBefore), N(big.Overkill), boost }));
+                swapped = true;
                 break;
             }
+            if (!swapped) OverkillEarlier(s, r, big, boost);
         }
+    }
+
+    private const string PenNibKey = "Relic:PEN_NIB";
+
+    /// 1.2.3 (Zaille75: Pointe de stylo on the third Frappe into the same Larve): an earlier damage-only attack on the big attack's
+    /// target, with the big one in hand, whose damage the overkill covers: the target died anyway, and that attack on another enemy
+    /// alive at the end of the turn would have dealt its damage there. Gâché, "overkillEarlier" (earlier card, big card, damage, boost).
+    private static void OverkillEarlier(TurnState s, TurnResult r, TurnPlay big, string boost)
+    {
+        int Left(object enemy) => s.EnemiesLeft.GetValueOrDefault(enemy);
+        var best = (Play: (TurnPlay?)null, Lost: 0);
+        foreach (var early in s.Plays.TakeWhile(x => x != big).Where(x => x.Owner == big.Owner && x.Kind == CardKind.Attack &&
+                     !x.HadNonDamageEffect && ReferenceEquals(x.Target, big.Target) && !x.KilledTarget && InHandAt(x, big)))
+        {
+            var onTarget = early.Hits.Where(h => ReferenceEquals(h.Target, big.Target)).Sum(h => h.Raw);
+            if (onTarget <= 0 || onTarget > big.Overkill) continue;
+            var lost = early.DamageOn.Where(kv => !ReferenceEquals(kv.Key, big.Target) && Left(kv.Key) > 0)
+                .Select(kv => Math.Min(kv.Value, Left(kv.Key))).DefaultIfEmpty(0).Max();
+            if (lost > best.Lost) best = (early, lost);
+        }
+        if (best.Play is not { } e || best.Lost < 1) return;
+        r.Log.Add($"overkill earlier: {e.CardKey} before {big.CardKey}, {best.Lost} lost");
+        r.Events.Add(new MissedChance(big.Owner, "overkillEarlier", new[] { e.CardKey, big.CardKey, N(best.Lost), boost }));
     }
 
     /// Lethal missed at the end of the turn (v0.18.9, Zaille75: the last Putrilimace left at 1 HP while Frappes stayed in hand):
@@ -779,7 +826,8 @@ public static partial class TurnReview
     /// useless (Armement 5 + Défense+ 8 + Défense 5 against 10: only the last Défense was not needed, not both Défenses).
     public static List<TurnPlay> UselessPlays(TurnState s, TurnPlayer p)
     {
-        var mine = s.Plays.Where(x => x.Owner == p.Actor && x.EnergySpent > 0 && !x.HadOtherEffect).ToList();
+        // 1.2.3: a melody block card a later card counted did something besides its block.
+        var mine = s.Plays.Where(x => x.Owner == p.Actor && x.EnergySpent > 0 && !x.HadOtherEffect && !(x.GaveBlock && MelodyCounted(s, x))).ToList();
         var uselessBlock = new HashSet<TurnPlay>();
         var removed = 0.0;
         foreach (var x in Enumerable.Reverse(mine).Where(x => x.GaveBlock && !x.Ethereal))
@@ -885,7 +933,8 @@ public static partial class TurnReview
         // The Fool (1.2.0, Zaille75: "the most obvious mistake"): a Shot played with no arrow ready (the game shows it in red)
         // shoots nothing. Free ones too: the card is gone for the turn. 1.2.1: Nail / Recall / Uproot / Wrest on a target
         // without the arrow they need ("notImpaled"; "impaleFirst" instead when a Shot impaled it later), Quietus unused.
-        foreach (var x in s.Plays.Where(x => x.Owner == actor && DidNothing(p, x)))
+        // 1.2.3 (Zaille75): only when it cost energy that would have paid one more useful card left in hand.
+        foreach (var x in s.Plays.Where(x => x.Owner == actor && DidNothing(p, x) && EnergyMissed(s, p, x)))
             if (x.EmptyShot) r.Events.Add(new MissedChance(actor, "emptyShot", new[] { x.CardKey, N(x.EnergySpent) }));
             else if (!x.ImpaledLater) r.Events.Add(new MissedChance(actor, "notImpaled", new[] { x.CardKey, N(x.EnergySpent) }));
         foreach (var x in BuffsUnused(s, p))
@@ -1045,6 +1094,7 @@ public static partial class TurnReview
                 before.Add(later);
             }
             if (before.Count == 0) continue;
+            r.FullHandExplained.Add(maker);
             r.Events.Add(new MissedChance(p.Actor, "handFull",
                 new[] { maker.CardKey, N(before.Count) }.Concat(before.Select(x => x.CardKey).Distinct()).ToArray(), before.Count));
         }
@@ -1110,8 +1160,11 @@ public static partial class TurnReview
         foreach (var maker in s.Plays.Where(x => x.Owner == p.Actor && x.LostToFullHand > 0))
             foreach (var draw in s.Plays.TakeWhile(x => x != maker).Where(x => x.Owner == p.Actor && x.CardsDrawn > 0 &&
                          x.HandAtPlay.Any(h => ReferenceEquals(h, maker.CardRef)) && x.EnergyBefore >= x.EnergySpent + maker.EnergySpent))
+            {
+                r.FullHandExplained.Add(maker);
                 r.Events.Add(new MissedChance(p.Actor, "drawFirst",
                     new[] { draw.CardKey, maker.CardKey, N(Math.Min(maker.LostToFullHand, draw.CardsDrawn)) }));
+            }
     }
 
     /// Wasted block (spec §F): each block card played had a real alternative if a useful card in hand when it was played is
@@ -1128,7 +1181,7 @@ public static partial class TurnReview
             var room = p == null ? 0 : Math.Max(0, p.Block - p.Incoming);
             // A free card left in hand is its own miss (FreeCardsLeft); an attack into Thorns counts only if the block left
             // would still cover the Thorns damage.
-            var alternative = p == null || play.HadOtherEffect || play.Ethereal ? null : play.UsefulCardsInHand
+            var alternative = p == null || play.HadOtherEffect || play.Ethereal || MelodyCounted(s, play) ? null : play.UsefulCardsInHand
                 .Select(seen => p.InHand(seen.Card))
                 .FirstOrDefault(c => c != null && !used.Contains(c.Ref) && !c.KeptOnPurpose && !c.NoArrow && c.Cost <= budget && c.PlayableInstead &&
                                      !c.Free && c.Thorns <= room && !c.Punished);

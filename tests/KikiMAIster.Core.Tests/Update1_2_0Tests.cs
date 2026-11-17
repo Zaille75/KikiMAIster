@@ -34,7 +34,8 @@ public class Update1_2_0Tests
     [Fact]
     public void EmptyShot_IsWasted_AndItsEnergyForNothing()
     {
-        var r = TurnReview.Resolve(State(new TurnPlayer { Actor = A }, Shot()));
+        // 1.2.3: its energy would have paid the Frappe left in hand.
+        var r = TurnReview.Resolve(State(new TurnPlayer { Actor = A, Hand = { Card("STRIKE", damage: 6) } }, Shot()));
         Assert.Equal(new[] { "Card:FOOLISH_SHOT", "1" }, Missed(r, "emptyShot").Single().Args);
         Assert.Equal(1, r.Events.OfType<HelpGiven>().Where(h => h.Kind == "energyUseless").Sum(h => h.Amount));
     }

@@ -89,14 +89,14 @@ public static class DebuffEffectPatches
                                Capture.ToActor(dealer).IsPlayerSide;
                 if (slippery)
                     Capture.Safe("slippery cap", () => AddEnemyCapped(effects, runState, combatState, target, dealer, baseDamage, props,
-                        cardSource, cardPlay, 1));
+                        cardSource, cardPlay, 1, $"Power:{Capture.IdOf(target.GetPower<SlipperyPower>()!)}"));
                 if (caps.Count > 0 && Capture.ToActor(target).IsPlayerSide)
                     Capture.Safe("damage cap", () => AddCapped(effects, caps, runState, combatState, target, dealer, baseDamage, props, cardSource,
                         cardPlay, __result));
                 // Enemies with a cap (Dur à cuire) hit by a player: what the cap stopped counts in Excédent (v0.17.45).
                 if (caps.Count > 0 && target.IsEnemy && Capture.ToActor(dealer).IsPlayerSide)
                     Capture.Safe("enemy damage cap", () => AddEnemyCapped(effects, runState, combatState, target, dealer, baseDamage, props,
-                        cardSource, cardPlay, __result));
+                        cardSource, cardPlay, __result, $"Power:{Capture.IdOf(caps[0])}"));
                 var vulnerable = new List<Creature>();
                 var damage = (double)__result;
                 // The damage key of this hit in the stats (v0.17.45): parts a relic gave move from it to the relic.
@@ -291,7 +291,7 @@ public static class DebuffEffectPatches
 
         /// Dur à cuire on an enemy capped a player's hit: the damage without the cap minus the hit, counted in Excédent.
         private static void AddEnemyCapped(List<StatEvent> effects, IRunState runState, ICombatState? combatState, Creature target, Creature dealer,
-            decimal damage, ValueProp props, CardModel? cardSource, CardPlay? cardPlay, decimal capped)
+            decimal damage, ValueProp props, CardModel? cardSource, CardPlay? cardPlay, decimal capped, string cap)
         {
             decimal uncapped;
             Computing = true;
@@ -307,7 +307,7 @@ public static class DebuffEffectPatches
             var stopped = (double)(uncapped - capped);
             if (stopped <= 0) return;
             effects.Add(new DamageCapped(Capture.ToActor(dealer), Capture.ToActor(target), stopped));
-            BlockAlternatives.OnCapped(dealer, target);
+            BlockAlternatives.OnCapped(dealer, target, stopped, cap);
         }
 
         private static void AddApplied(List<StatEvent> effects, PowerModel p, Creature applier, Creature target, Creature dealer,
