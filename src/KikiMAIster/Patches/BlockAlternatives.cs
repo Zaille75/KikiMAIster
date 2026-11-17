@@ -48,6 +48,10 @@ public static class BlockAlternatives
         /// Enemies it put Doom on, and whether it put another debuff on an enemy (Doom-only cards, v0.18.6).
         public List<Creature> DoomTargets { get; } = new();
         public bool OtherDebuff { get; set; }
+        /// The copy being played now (0: the card itself; 1.2.3), and whether that copy comes from the card itself (its enchantment's
+        /// replay, its own Replay): not a choice of the player.
+        public int CopyNow { get; set; }
+        public bool OwnCopyNow { get; set; }
     }
 
     private static readonly ConditionalWeakTable<CardPlay, Play> Plays = new();
@@ -110,11 +114,15 @@ public static class BlockAlternatives
     }
 
     /// A damage cap stopped part of a hit of the player's card play in progress (v0.18.7), on that enemy (v0.18.9).
-    public static void OnCapped(Creature dealer, Creature target)
+    /// 1.2.3: how much it stopped and which cap ("Power:SLIPPERY_POWER"…), for Visée spent into it.
+    public static void OnCapped(Creature dealer, Creature target, double stopped, string cap)
     {
         if (!InProgress.TryPeek(out var play) || play == null || play.Player.Creature != dealer) return;
         play.Capped = true;
         play.CappedOn.Add(target);
+        play.CapStopped += stopped;
+        play.CapKeys.Add(cap);
+        if (cap == $"Power:{ModelDb.GetId<SlipperyPower>().Entry}") play.SlipperyOn.Add(target);
     }
 
     /// Enemies whose power gave them block when a card hit them (En boule, Pleutre, v0.18.9), the play that set it off and the
@@ -233,6 +241,7 @@ public static class BlockAlternatives
     public static void OnCardsCreated(Player owner, int count)
     {
         if (!InProgress.TryPeek(out var play) || play == null || play.Player != owner || owner.PlayerCombatState is not { } st) return;
+        play.CreatedToHand += count;
         var lost = st.Hand.Cards.Count + count - CardPile.MaxCardsInHand;
         if (lost <= 0) return;
         play.LostToFullHand += Math.Min(lost, count);
@@ -632,6 +641,16 @@ public static class BlockAlternatives
     public static void OnArrowShot(Player owner, bool hadArrow, CardModel? source)
     {
         if (source == null || !InProgress.TryPeek(out var play) || play == null || play.Card != source || play.Player != owner) return;
+        // 1.2.3 (Zaille75: Duplicateur on Tir céleste+ with one arrow): a copy that found no arrow, after the card itself shot one.
+        if (play.CopyNow > 0 && !hadArrow)
+        {
+            if (play.ShotArrow && !play.OwnCopyNow && !owner.Creature.Powers.Any(p => p.GetType().Name == "CoveringFirePower"))
+            {
+                play.EmptyReplay = true;
+                ModLog.Info($"empty replay: {Key(source)} by {owner.NetId} (copy {play.CopyNow}, no arrow ready)");
+            }
+            return;
+        }
         if (hadArrow)
         {
             play.ShotArrow = true;
@@ -702,6 +721,8 @@ public static class BlockAlternatives
         if (cardPlay.PlayIndex > 0 && FirstPlays.TryGetValue(cardPlay.Card, out var first))
         {
             first.PlayedAgain = true;
+            first.CopyNow = cardPlay.PlayIndex;
+            first.OwnCopyNow = cardPlay.PlayIndex <= cardPlay.Card.GetEnchantedReplayCount();
             Plays.AddOrUpdate(cardPlay, first);
             InProgress.Push(first);
             return;
@@ -749,7 +770,8 @@ public static class BlockAlternatives
         var energyBefore = (Capture.PlayerOf(cardPlay).PlayerCombatState?.Energy ?? 0) + cardPlay.Resources.EnergySpent;
         if (cardPlay.Card.Type == CardType.Attack && cardPlay.Target is { IsEnemy: true } target)
         {
-            if (IsDoubledByPenNib(cardPlay)) play.PenNibBetter = StrongerAttack(cardPlay.Card, target, hand, energyBefore, doubled: true);
+            if (IsDoubledByPenNib(cardPlay)) play.PenNib = true;
+            if (play.PenNib) play.PenNibBetter = StrongerAttack(cardPlay.Card, target, hand, energyBefore, doubled: true);
             else play.Stronger = StrongerAttack(cardPlay.Card, target, hand, Cost(cardPlay.Card), doubled: false);
         }
         if (cardPlay.Card.GainsBlock) play.BiggerBlock = BiggerBlock(cardPlay.Card, hand);
@@ -863,6 +885,7 @@ public static class BlockAlternatives
         {
             s.EnemiesLeft[e] = e.CurrentHp + e.Block;
             s.EnemyVulnerable[e] = e.GetPower<VulnerablePower>()?.Amount ?? 0;
+            s.EnemySlippery[e] = e.GetPower<SlipperyPower>()?.Amount ?? 0;
         }
         foreach (var player in combat.Players)
             Capture.Safe("turn snapshot", () =>
@@ -1069,6 +1092,8 @@ public static class BlockAlternatives
         if (!card.DynamicVars.TryGetValue("Block", out var v) || v is not BlockVar bv || card.CombatState is not { } cs) return 0;
         var block = Hook.ModifyBlock(cs, card.Owner.Creature, bv.BaseValue, bv.Props, card, null, out _);
         var times = card.DynamicVars.TryGetValue("Repeat", out var repeat) ? Math.Max(1, repeat.IntValue) : 1;
+        // 1.2.3 (Zaille75: Flèches sifflantes with a replay enchantment gives 6, not 3): the plays the card adds itself.
+        times *= 1 + Math.Max(0, card.GetEnchantedReplayCount());
         return Math.Max(0, (int)block) * times;
     }
 
@@ -1102,7 +1127,7 @@ public static class BlockAlternatives
             var maxPlays = player.Creature.GetPower<SlothPower>()?.Amount ?? int.MaxValue;
             // 1.2.1: no more Shots than the arrows ready.
             var found = Lethal.Find(attacks, energy, enemies.Select(e => e.CurrentHp + e.Block).ToList(), maxPlays,
-                GameBranch.IsV113 ? Arrows.Ready(player) : int.MaxValue);
+                GameBranch.IsV113 ? Arrows.Ready(player) : int.MaxValue, enemies.Select(DeathBlock).ToList());
             return found == null ? null : (found.ToArray(), enemies);
         }
         catch (Exception e)
@@ -1111,6 +1136,12 @@ public static class BlockAlternatives
             return null;
         }
     }
+
+    /// Block an enemy gains when another enemy dies (1.2.3, Crabe furieux: 99): its powers reacting to a death with a Block value.
+    private static int DeathBlock(Creature enemy) =>
+        enemy.Powers.Where(p => p.GetType().GetMethod(nameof(AbstractModel.AfterDeath))?.DeclaringType is { } t && t != typeof(AbstractModel) &&
+                                t != typeof(PowerModel) && p.DynamicVars.TryGetValue("Block", out var v) && v is BlockVar)
+            .Sum(p => (int)p.DynamicVars["Block"].BaseValue);
 
     /// An enemy whose death does not end the fight: it comes back (Adaptable, Reconnexion, Illusion) or keeps the fight
     /// going (Infesté, Stock, Éruption de vapeur, Surprise).

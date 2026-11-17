@@ -18,7 +18,7 @@ for branch in beta default; do
     echo "$check" | grep '^FAIL'; echo "Patch check failed for branch $branch" >&2; exit 1
   fi
 done
-dotnet test tests/KikiMAIster.Core.Tests --nologo -v q | grep -E "Passed!|Failed!"
+dotnet test tests/KikiMAIster.Core.Tests --nologo -v q | grep -E "Passed!|Failed!| error "
 out="dist/KikiMAIster"
 rm -rf "$out" && mkdir -p "$out"
 cp "build/mod/KikiMAIster.dll" "build/mod/KikiMAIster.json" "$out/"

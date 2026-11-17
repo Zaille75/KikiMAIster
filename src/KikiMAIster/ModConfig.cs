@@ -29,6 +29,8 @@ public sealed class ModConfig
     public bool ChartPerRound { get; set; }
     /// Hide a column when every player shows 0 in it (v0.17.0, on by default).
     public bool HideZeroColumns { get; set; } = true;
+    /// Hide the panel in a merchant room, Blitz's included (1.2.3, Zaille75: "to better see the cards"; on by default).
+    public bool HideAtMerchant { get; set; } = true;
     /// Show the group's composition and record line in the panel (v0.17.0, off by default).
     public bool ShowGroupLine { get; set; }
     /// Compositions window: order by "games" or "winrate", descending or not, and stats of this group of players only.

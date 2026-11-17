@@ -384,7 +384,7 @@ public static class DamagePatches
                 var dealerActor = Capture.ToActor(dealer);
                 if (!dealerActor.IsPlayerSide) return;
                 Capture.Emit(new DamageCapped(dealerActor, Capture.ToActor(target), (double)(amount - __result)));
-                if (dealer != null) BlockAlternatives.OnCapped(dealer, target);
+                if (dealer != null) BlockAlternatives.OnCapped(dealer, target, (double)(amount - __result), $"Power:{Capture.IdOf(__instance)}");
             });
     }
 

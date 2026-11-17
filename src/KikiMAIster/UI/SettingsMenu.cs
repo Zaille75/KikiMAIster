@@ -196,6 +196,11 @@ public static class SettingsMenu
             Cfg.HideZeroColumns = on;
             Changed();
         }));
+        _content.AddChild(Check(Loc.T("settings.hideMerchant"), Cfg.HideAtMerchant, on =>
+        {
+            Cfg.HideAtMerchant = on;
+            Changed();
+        }));
         _content.AddChild(Check(Loc.T("settings.groupLine"), Cfg.ShowGroupLine, on =>
         {
             Cfg.ShowGroupLine = on;

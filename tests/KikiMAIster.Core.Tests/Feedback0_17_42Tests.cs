@@ -40,7 +40,8 @@ public class Feedback0_17_42Tests : TestBase
         big.HandDamageOnTarget[small.CardRef] = 6; // Frappe would have killed the 3-HP enemy
         small.Hits.Add(new EnemyHit(_y, 6, -1));
         var miss = Missed(Resolve(big, small), "overkill").Single();
-        Assert.Equal(new[] { "Card:FALLING_STAR", "Card:STRIKE", "2" }, miss.Args);
+        // 1.2.3: then the target's HP + block, the overkill and what boosted the big one (nothing here).
+        Assert.Equal(new[] { "Card:FALLING_STAR", "Card:STRIKE", "2", "3", "5", "" }, miss.Args);
     }
 
     [Fact]

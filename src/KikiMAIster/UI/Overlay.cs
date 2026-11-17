@@ -203,6 +203,13 @@ public static class Overlay
         if (_panel == null || !GodotObject.IsInstanceValid(_panel)) return;
         // The lobby has its own choice (hidden by default: no stats there, v0.17.10).
         if (!InRun && CompositionWindow.InLobby) Cfg.LobbyPanelVisible = !Cfg.LobbyPanelVisible;
+        // At the merchant (1.2.3): F7 shows / hides the panel for this visit only.
+        else if (MerchantHides(ignoreOverride: true))
+        {
+            // Hidden before entering: F7 shows it, here too.
+            if (!Cfg.Visible) (Cfg.Visible, _merchantShown) = (true, true);
+            else _merchantShown = !_merchantShown;
+        }
         else Cfg.Visible = !Cfg.Visible;
         Cfg.Save();
         SyncVisibility();
@@ -221,14 +228,27 @@ public static class Overlay
         SyncVisibility();
     }
 
+    /// F7 pressed at the merchant: the panel shows there until the player leaves (1.2.3).
+    private static bool _merchantShown;
+
+    /// The player is in a merchant room (Blitz's merchant too), shown on screen.
+    private static bool AtMerchant =>
+        MegaCrit.Sts2.Core.Nodes.Rooms.NMerchantRoom.Instance is { } room && GodotObject.IsInstanceValid(room) && room.IsInsideTree() &&
+        room.IsVisibleInTree();
+
+    /// "Masquer chez le marchand" hides the panel now (1.2.3, Zaille75: "to better see the cards").
+    private static bool MerchantHides(bool ignoreOverride = false) =>
+        Cfg.HideAtMerchant && AtMerchant && (ignoreOverride || !_merchantShown);
+
     /// Shows the panel only in a run (and when not hidden with F7); outside a run every mod window is closed.
     private static void SyncVisibility()
     {
         if (_panel == null) return;
         var inRun = InRun;
+        if (_merchantShown && !AtMerchant) _merchantShown = false;
         // The character-select lobby also shows the panel (settings, compositions), without stats.
         var inLobby = !inRun && CompositionWindow.InLobby;
-        var show = inRun ? Cfg.Visible : inLobby && Cfg.LobbyPanelVisible;
+        var show = inRun ? Cfg.Visible && !MerchantHides() : inLobby && Cfg.LobbyPanelVisible;
         // Entering the lobby opens the Compositions window, unless the player closed it there last time.
         if (inLobby && !_wasInLobby && Cfg.CompoLobbyOpen) CompositionWindow.OpenInLobby();
         _wasInLobby = inLobby;
@@ -1056,6 +1076,11 @@ public static class Overlay
                 // 1.2.2: misses ending with what was lost: "Cadence régulière avant Toucher Wah : 1 carte(s) piochée(s) en moins".
                 : LossKinds.Contains(m.Kind) && m.Args.Count > 3
                 ? string.Format(Loc.T($"why.{m.Kind}"), Arg(m.Args[0]), Arg(m.Args[1]), string.Format(Loc.T($"why.lost{m.Args[2]}"), m.Args[3]))
+                // 1.2.3: overkill naming Pointe de stylo ("Frappe (Pointe de stylo) a tué une cible à 2 PV…"); older entries keep 3 args.
+                : m.Kind == "overkill" && m.Args.Count > 5
+                ? string.Format(Loc.T("why.overkill2"), Boosted(m.Args[0], m.Args[5]), Arg(m.Args[1]), m.Args[2], m.Args[3], m.Args[4])
+                : m.Kind == "overkillEarlier" && m.Args.Count > 3
+                ? string.Format(Loc.T("why.overkillEarlier"), Arg(m.Args[0]), Boosted(m.Args[1], m.Args[3]), m.Args[2])
                 // Miniature Tent: "Tente miniature : parti sans Repos, Forge".
                 : m.Kind == "tent" && m.Args.Count > 1
                 ? string.Format(Loc.T("why.tent"), GameNames.Of(m.Args[0]), string.Join(", ", m.Args.Skip(1).Select(GameNames.Of)))
@@ -1093,6 +1118,9 @@ public static class Overlay
         if (bar > 0) return $"{GameNames.Of(a[..bar])} ({AllyName(a[(bar + 1)..])})";
         return a.Contains(':') || a == "Unknown" ? GameNames.Of(a) : a;
     }
+
+    /// A card with what boosted it, when known: "Frappe (Pointe de stylo)" (1.2.3).
+    private static string Boosted(string card, string boost) => boost.Length == 0 ? Arg(card) : $"{Arg(card)} ({GameNames.Of(boost)})";
 
     /// Misses whose last two arguments are what was lost (Damage, Block, Energy, Draws, Plays, Retain) and how much (1.2.2).
     private static readonly HashSet<string> LossKinds = new() { "melodyFirst", "melodyLate", "retrievalTarget", "retrievalOrder", "payoffTarget" };

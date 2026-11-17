@@ -14,8 +14,9 @@ public static class Lethal
     /// Needs: HP + block of each enemy. Returns the attacks of a lethal combination (fewest energy), or null.
     /// MaxPlays: the most cards the player may still play this turn (Paresse, v0.17.38). MaxShots: the Fool's arrows ready
     /// (1.2.1: a Shot that kills gives its arrow back, ignored, so the check stays a minimum).
+    /// DeathBlock (1.2.3, Crabe furieux): block each enemy gains when another enemy dies; the one killed last gets it.
     public static IReadOnlyList<Attack>? Find(IReadOnlyList<Attack> attacks, int energy, IReadOnlyList<int> needs, int maxPlays = int.MaxValue,
-        int maxShots = int.MaxValue)
+        int maxShots = int.MaxValue, IReadOnlyList<int>? deathBlock = null)
     {
         if (needs.Count == 0) return null;
         var cards = attacks.Where(a => a.Cost <= energy && a.Damage.Count == needs.Count && a.Damage.Any(d => d > 0))
@@ -28,11 +29,25 @@ public static class Lethal
             if (chosen.Count > maxPlays || chosen.Count(a => a.Shot) > maxShots) continue;
             var cost = chosen.Sum(a => a.Cost);
             if (cost > energy || cost >= bestCost) continue;
-            if (!Kills(chosen, needs)) continue;
+            if (!KillsAll(chosen, needs, deathBlock)) continue;
             best = chosen;
             bestCost = cost;
         }
         return best;
+    }
+
+    /// With a death bonus, the best order is the one where the enemy that gains it dies last: one try per such enemy.
+    private static bool KillsAll(List<Attack> chosen, IReadOnlyList<int> needs, IReadOnlyList<int>? deathBlock)
+    {
+        if (deathBlock == null || needs.Count < 2 || deathBlock.All(b => b <= 0)) return Kills(chosen, needs);
+        for (var i = 0; i < needs.Count; i++)
+        {
+            if (deathBlock[i] <= 0) continue;
+            var withBlock = needs.ToArray();
+            withBlock[i] += deathBlock[i];
+            if (Kills(chosen, withBlock)) return true;
+        }
+        return false;
     }
 
     /// Attacks on all enemies hit everyone; each single-target attack goes, biggest first, to an enemy it can
