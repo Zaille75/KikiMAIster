@@ -8,7 +8,7 @@
 > Zaille75, item 3832591950 "KikiMAIster - Solo and Co-op stats", checked with the Steam API `GetPublishedFileDetails`).
 > `main` = released code, no open branch (`feature/drop-old-main` merged; its remote copy can be deleted). 1.2.1 and 1.2.2
 > are **not tested in game yet**: Zaille75 will try both together. One DLL for beta v0.113.0 and main v0.111.1.
-> **1.2.3 (2026-11-17, merged in `main`, release built: `dist/release/KikiMAIster-1.2.3.zip`, notes `notes-1.2.3.md`, Workshop files; GitHub release / Workshop upload run by Zaille75; not tested in game):** Zaille75's inbox `logs/inbox/2026-11-17_21-48-23`
+> **1.2.3 (2026-11-17) released** on GitHub (tag `v1.2.3`, by WTT27) and the Steam Workshop (item 3832591950, updated 2026-11-17 22:20, checked with `GetPublishedFileDetails`); `main` = released code; **not tested in game** (nor 1.2.1 / 1.2.2): Zaille75's inbox `logs/inbox/2026-11-17_21-48-23`
 > (11 F9 reports, 1.2.2 games, no internal error; log archived `logs/2026-11-17_v1.2.2_fool-feedback.log`). Spec 01-metrics rows
 > "Played again with no arrow" → "Melody block card", 02-ui "1.2.3". Core `Rules1_2_3.cs` (partial `TurnReview`): "emptyReplay",
 > "makeEarlier", "aimCapped" (Choix), "overkillEarlier" (Gâché); `EnergyMissed` gates "emptyShot" / "notImpaled";
