@@ -3,7 +3,7 @@
 Summary by version line. The detailed notes of every version are in [docs/specs/02-ui.md](docs/specs/02-ui.md)
 (interface) and [docs/specs/01-metrics.md](docs/specs/01-metrics.md) (rules).
 
-## 1.2.3 (unreleased) — feedback of 2026-11-17
+## 1.2.3 (2026-11-17) — merchant hide, more Fool mistakes
 New: "Masquer chez le marchand" (on by default) hides the panel in a merchant room, Blitz's merchant too (F7 there: this visit
 only). New mistakes: a Shot played again (Duplicateur…) whose copy found no arrow (Choix); cards created into a full hand by a card
 that could have been played earlier without changing the turn (Choix); an attack whose hit the big attack's overkill covered
