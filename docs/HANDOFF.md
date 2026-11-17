@@ -1,4 +1,4 @@
-# Handoff — state of the project (2026-11-14, v1.2.2)
+# Handoff — state of the project (2026-11-17, v1.2.2)
 
 > **Start here in a new conversation**, then `CLAUDE.md`, `docs/specs/01-metrics.md` (rules) and `docs/specs/02-ui.md`
 > (interface). The history of every version is in `CHANGELOG.md` and the specs' "vX.Y.Z" notes; the git history has the
@@ -7,7 +7,10 @@
 > **State (2026-11-14):** **1.2.2 released** on GitHub (tag `v1.2.2`, by WTT27) and the Steam Workshop (uploaded by
 > Zaille75, item 3832591950 "KikiMAIster - Solo and Co-op stats", checked with the Steam API `GetPublishedFileDetails`).
 > `main` = released code, no open branch (`feature/drop-old-main` merged; its remote copy can be deleted). 1.2.1 and 1.2.2
-> are **not tested in game yet**: Zaille75 will try both together. One DLL for beta v0.113.0 and main v0.111.0.
+> are **not tested in game yet**: Zaille75 will try both together. One DLL for beta v0.113.0 and main v0.111.1.
+> **Main v0.111.1 (2026-11-17, game hotfix of 13 Nov):** `sts2.dll` code identical to v0.111.0 (decompiled diff = commit
+> hash only); `lib/default/` = v0.111.1 (raw copy `lib/default-v0.111.1/`, v0.111.0 kept in `lib/default-v0.111.0/`).
+> PatchCheck beta 78, main 117, tests 233: nothing to change, no new version.
 > **1.2.2 (2026-11-14, released, not tested in game):** old main v0.107.1 support dropped
 > (`GameBranch.IsBeta`, the main-only patches, the `GameApi` damage delegates, beta-only reflection targets and the lobby
 > reflection removed). The Fool's melodies and more arrow mistakes (spec 01-metrics rows "The Fool's melodies" → "Tir répété at
@@ -47,7 +50,7 @@
 Beta v0.113.0 (12 Nov, "biggest beta patch": the Fool, Blitz, Dread, ~140 cards changed); the main branch moved to v0.111.0
 the same day (= our former `lib/beta`). Patch notes: Steam news API (`ISteamNews/GetNewsForApp`, appid 2868840): the
 Steam page / untapped / SteamDB block automated fetches.
-- **lib:** `lib/beta/` = v0.113.0 (from Zaille75, `lib/beta-v0.113.0/` raw copy), `lib/default/` = v0.111.0,
+- **lib:** `lib/beta/` = v0.113.0 (from Zaille75, `lib/beta-v0.113.0/` raw copy), `lib/default/` = v0.111.0 (v0.111.1 since 2026-11-17, same code),
   `lib/default-v0.107.1/` = old main (no longer supported since 1.2.2). Both decompiled with `ilspycmd -p -o <dir>/decompiled <dir>/sts2.dll -r <dir>` (same layout:
   `diff -rq lib/default/decompiled lib/beta/decompiled`). `lib/beta/names.txt` is the v0.113.0 table (from Zaille75's game, 2026-11-14,
   the Fool's French names included; `Envoyer-a-Claude` now sends `KikiMAIster.names.txt` each time).
