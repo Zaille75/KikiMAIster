@@ -3,7 +3,7 @@
 Summary by version line. The detailed notes of every version are in [docs/specs/02-ui.md](docs/specs/02-ui.md)
 (interface) and [docs/specs/01-metrics.md](docs/specs/01-metrics.md) (rules).
 
-## 1.2.4 (unreleased) — feedback of 2026-11-21
+## 1.2.4 (2026-11-21) — feedback of 2026-11-21
 New mistakes: Antipathie after a Shot on its enemy (an ally's Shot too); "Carte gratuite à jouer" spent on a card that already cost
 0; a lasting potion (Potion de pouvoir, Force…) drunk after turn 1 of the game's last boss. Fixes: no "shoot first" against
 Ralenti; no Visée lost into Dur à cuire when every enemy has it; Vers Ki unused at 0 energy is fine; Simplet is not "playable"
