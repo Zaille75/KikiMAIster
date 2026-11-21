@@ -8,7 +8,7 @@
 > Zaille75, item 3832591950 "KikiMAIster - Solo and Co-op stats", checked with the Steam API `GetPublishedFileDetails`).
 > `main` = released code, no open branch (`feature/drop-old-main` merged; its remote copy can be deleted). 1.2.1 and 1.2.2
 > are **not tested in game yet**: Zaille75 will try both together. One DLL for beta v0.113.0 and main v0.111.1.
-> **1.2.4 (2026-11-21) released** on GitHub (tag `v1.2.4`, by WTT27), merged in `main`; Workshop files built in `dist/workshop` (Zaille75 uploads with `Publier.bat`); **not tested in game**. From now on: merge a finished batch into `main` without asking, publish only on request. inbox `logs/inbox/2026-11-21_00-56-21` (18 F9 reports,
+> **1.2.4 (2026-11-21) released** on GitHub (tag `v1.2.4`, by WTT27), merged in `main`; Steam Workshop (item 3832591950, updated 2026-11-21 01:32, checked with `GetPublishedFileDetails`); **not tested in game**. From now on: merge a finished batch into `main` without asking, publish only on request. inbox `logs/inbox/2026-11-21_00-56-21` (18 F9 reports,
 > 1.2.2/1.2.3 games, no internal error; names.txt unchanged except its header). Spec 01-metrics rows "Shoot last against Ralenti" →
 > "Souplesse given by an ally", 02-ui "1.2.4". Core: `Rules1_2_3.FreeCardWasted` ("freeCardWasted", Choix), `DeathPotions`
 > (potion held at death counted only when it could save: "potion" args = count + potions, else "potionNoHelp" listed only),
