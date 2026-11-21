@@ -176,8 +176,16 @@ public sealed record PlayersSeen(IReadOnlyList<PlayerInfo> Players) : StatEvent;
 /// alive in a co-op fight.
 public sealed record PlayerRoundState(Actor Player, int Hp, bool Alive, bool Alone) : StatEvent;
 
-/// The other players waited Seconds for this one to choose the next floor on the map (v0.17.45, Godot).
+/// The other players waited Seconds for this one: next floor on the map (v0.17.45) or end of turn (1.2.5), for Godot.
 public sealed record WaitedFor(Actor Player, double Seconds) : StatEvent;
+
+/// Godot's end-of-turn rule (1.2.5): the first seconds of the gap behind the player before are not counted.
+public static class WaitRules
+{
+    public const double EndTurnGraceSeconds = 5;
+
+    public static double EndTurnWait(double gapSeconds) => Math.Max(0, gapSeconds - EndTurnGraceSeconds);
+}
 
 /// A player could have killed every enemy with the attacks in hand at the start of the turn (front hand),
 /// but the enemies were still alive at the end of it. Cards: "Card:ID" keys of the lethal combination.

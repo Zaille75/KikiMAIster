@@ -4,6 +4,10 @@
 > (interface). The history of every version is in `CHANGELOG.md` and the specs' "vX.Y.Z" notes; the git history has the
 > older handoff sections (v0.7 → v0.17).
 >
+> **1.2.5 (2026-11-22) merged in `main`, not released, not tested in game, version number not bumped yet:** Godot also counts the
+> wait for the last player's end of turn, minus 5 s per turn (spec 02-ui "1.2.5", `RunHistoryPatches.TurnEnded`,
+> `WaitRules`). In the next co-op log, check the `end of turn:` lines. PatchCheck beta 79, main 118; tests 253.
+>
 > **State (2026-11-14):** **1.2.2 released** on GitHub (tag `v1.2.2`, by WTT27) and the Steam Workshop (uploaded by
 > Zaille75, item 3832591950 "KikiMAIster - Solo and Co-op stats", checked with the Steam API `GetPublishedFileDetails`).
 > `main` = released code, no open branch (`feature/drop-old-main` merged; its remote copy can be deleted). 1.2.1 and 1.2.2
