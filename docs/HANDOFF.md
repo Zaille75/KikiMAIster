@@ -1,4 +1,4 @@
-# Handoff — state of the project (2026-11-21, v1.2.4 on feature/1.2.4)
+# Handoff — state of the project (2026-11-21, v1.2.4)
 
 > **Start here in a new conversation**, then `CLAUDE.md`, `docs/specs/01-metrics.md` (rules) and `docs/specs/02-ui.md`
 > (interface). The history of every version is in `CHANGELOG.md` and the specs' "vX.Y.Z" notes; the git history has the
@@ -8,7 +8,7 @@
 > Zaille75, item 3832591950 "KikiMAIster - Solo and Co-op stats", checked with the Steam API `GetPublishedFileDetails`).
 > `main` = released code, no open branch (`feature/drop-old-main` merged; its remote copy can be deleted). 1.2.1 and 1.2.2
 > are **not tested in game yet**: Zaille75 will try both together. One DLL for beta v0.113.0 and main v0.111.1.
-> **1.2.4 (2026-11-21, branch `feature/1.2.4`, not merged, not released):** inbox `logs/inbox/2026-11-21_00-56-21` (18 F9 reports,
+> **1.2.4 (2026-11-21) released** on GitHub (tag `v1.2.4`, by WTT27), merged in `main`; Workshop files built in `dist/workshop` (Zaille75 uploads with `Publier.bat`); **not tested in game**. From now on: merge a finished batch into `main` without asking, publish only on request. inbox `logs/inbox/2026-11-21_00-56-21` (18 F9 reports,
 > 1.2.2/1.2.3 games, no internal error; names.txt unchanged except its header). Spec 01-metrics rows "Shoot last against Ralenti" →
 > "Souplesse given by an ally", 02-ui "1.2.4". Core: `Rules1_2_3.FreeCardWasted` ("freeCardWasted", Choix), `DeathPotions`
 > (potion held at death counted only when it could save: "potion" args = count + potions, else "potionNoHelp" listed only),
