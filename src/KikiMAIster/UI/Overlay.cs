@@ -1044,17 +1044,21 @@ public static class Overlay
     /// Missed opportunities, most recent first (at most 3 of each kind).
     private static IReadOnlyList<Cell> MissedRow(ulong id, PlayerStats s)
     {
-        // v0.18.5: each column lists its own misses (most recent first).
-        var lethal = s.MissedLethalTurns.AsEnumerable().Reverse().Take(3)
-            .Select(m => string.Format(Loc.T("why.lethal"), At(m.Combat, m.Round), string.Join(" + ", m.Cards.Select(Arg)), m.EnemiesHp)).ToList();
-        var wasted = s.WastedPlays.OrderByDescending(w => w.PlayId).Take(3)
-            .Select(w => string.Format(Loc.T("why.wasted"), At(w.Combat, w.Round), w.Choice.IncomingDamage, w.Choice.BlockAtTurnEnd,
-                GameNames.Of(w.Choice.BlockCard), N(w.Amount), GameNames.Of(w.Choice.Alternative))).ToList();
-        var weak = s.WeakAttackPlays.AsEnumerable().Reverse().Take(3)
-            .Select(w => string.Format(Loc.T("why.weak"), At(w.Combat, w.Round), GameNames.Of(w.Played), w.PlayedDamage, GameNames.Of(w.Better), w.BetterDamage))
-            .ToList();
-        var byColumn = new Dictionary<string, List<string>>();
-        foreach (var m in s.MissedEntries.AsEnumerable().Reverse())
+        // 1.2.4 (Zaille75): each column lists its misses in chronological order (the 6 most recent), all kinds mixed.
+        var items = new List<(int Combat, int Round, int Seq, string Text, string[] Columns)>();
+        var seq = 0;
+        foreach (var m in s.MissedLethalTurns)
+            items.Add((m.Combat, m.Round, seq++, string.Format(Loc.T("why.lethal"), At(m.Combat, m.Round), string.Join(" + ", m.Cards.Select(Arg)), m.EnemiesHp),
+                new[] { "col.lethal" }));
+        foreach (var w in s.WastedPlays.OrderBy(w => w.PlayId))
+            items.Add((w.Combat, w.Round, seq++, string.Format(Loc.T("why.wasted"), At(w.Combat, w.Round), w.Choice.IncomingDamage, w.Choice.BlockAtTurnEnd,
+                GameNames.Of(w.Choice.BlockCard), N(w.Amount), GameNames.Of(w.Choice.Alternative)), new[] { "col.wastedBlock", MisplaysKey }));
+        foreach (var w in s.WeakAttackPlays)
+            items.Add((w.Combat, w.Round, seq++, string.Format(Loc.T("why.weak"), At(w.Combat, w.Round), GameNames.Of(w.Played), w.PlayedDamage,
+                GameNames.Of(w.Better), w.BetterDamage), new[] { "col.choices", MisplaysKey }));
+        // A miss outside fights (combat 0) comes after the fight before it.
+        var lastCombat = 0;
+        foreach (var m in s.MissedEntries)
         {
             var column = MissedColumn(m.Kind);
             var columns = column != MisplaysKey ? new[] { column }
@@ -1082,25 +1086,27 @@ public static class Overlay
                 : m.Kind == "overkillEarlier" && m.Args.Count > 3
                 ? string.Format(Loc.T("why.overkillEarlier"), Arg(m.Args[0]), Boosted(m.Args[1], m.Args[3]), m.Args[2])
                 // Miniature Tent: "Tente miniature : parti sans Repos, Forge".
+                // 1.2.4: the potions held, those that could have saved the player first ("potion"), or none could ("potionNoHelp").
+                : m.Kind == "potion" && m.Args.Count > 1
+                ? string.Format(Loc.T("why.potionSave"), string.Join(", ", m.Args.Skip(1).Select(GameNames.Of)))
+                : m.Kind == "potionNoHelp"
+                ? string.Format(Loc.T("why.potionNoHelp"), string.Join(", ", m.Args.Select(GameNames.Of)))
                 : m.Kind == "tent" && m.Args.Count > 1
                 ? string.Format(Loc.T("why.tent"), GameNames.Of(m.Args[0]), string.Join(", ", m.Args.Skip(1).Select(GameNames.Of)))
                 : string.Format(Loc.T($"why.{m.Kind}"), m.Args.Select(a => (object)Arg(a)).ToArray()));
-            foreach (var c in columns)
-            {
-                if (!byColumn.TryGetValue(c, out var list)) byColumn[c] = list = new List<string>();
-                if (list.Count < 6) list.Add(text);
-            }
+            if (m.Combat > 0) lastCombat = m.Combat;
+            items.Add((m.Combat > 0 ? m.Combat : lastCombat, m.Combat > 0 ? m.Round : int.MaxValue, seq++, text, columns));
         }
-        string Tip(string column, IEnumerable<string>? first = null) =>
-            string.Join('\n', (first ?? Array.Empty<string>()).Concat(byColumn.GetValueOrDefault(column) ?? new List<string>()));
+        string Tip(string column) => string.Join('\n', items.Where(i => i.Columns.Contains(column))
+            .OrderBy(i => i.Combat).ThenBy(i => i.Round).ThenBy(i => i.Seq).TakeLast(6).Select(i => i.Text));
         double K(string kind) => s.MissedByKind.GetValueOrDefault(kind);
         // v0.18.6 (Zaille75): Gâché and Choix list their own misses; Erreurs lists both.
         return new[]
         {
-            new Cell("col.lethal", N(s.MissedLethals), string.Join('\n', lethal)),
-            new Cell("col.wastedBlock", N(s.MissedWasted), Tip("col.wastedBlock", wasted)),
-            new Cell("col.choices", N(s.MissedChoices), Tip("col.choices", weak)),
-            new Cell(MisplaysKey, N(s.MissedWasted + s.MissedChoices), Tip(MisplaysKey, wasted.Concat(weak))),
+            new Cell("col.lethal", N(s.MissedLethals), Tip("col.lethal")),
+            new Cell("col.wastedBlock", N(s.MissedWasted), Tip("col.wastedBlock")),
+            new Cell("col.choices", N(s.MissedChoices), Tip("col.choices")),
+            new Cell(MisplaysKey, N(s.MissedWasted + s.MissedChoices), Tip(MisplaysKey)),
             new Cell("col.unusedEnergy", N(K("energy")), Tip("col.unusedEnergy")),
             new Cell("col.hpAvoidable", N(s.AvoidableHp), Tip("col.hpAvoidable")),
             new Cell("col.relicTrigger", N(K("relic") + K("paelsTears")), Tip("col.relicTrigger")),
@@ -1137,7 +1143,7 @@ public static class Overlay
         "energy" => "col.unusedEnergy",
         "blockKept" or "allyBlockKept" => "col.hpAvoidable",
         "relic" or "paelsTears" => "col.relicTrigger",
-        "potion" => "col.potionsLeft",
+        "potion" or "potionNoHelp" => "col.potionsLeft",
         "maxHpAfterHeal" => "col.missedOutside",
         _ => MisplaysKey
     };

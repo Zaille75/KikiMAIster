@@ -13,6 +13,7 @@ using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Cards;
 using MegaCrit.Sts2.Core.Models.Powers;
+using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
 
 namespace KikiMAIster.Patches;
@@ -163,6 +164,14 @@ public static class CombatFlowPatches
             RunHistoryPatches.PreFight(runState);
             if (combatState?.Encounter is { } encounter)
                 Capture.Safe("rest before the boss", () => RestSitePatches.OnCombatStarted(runState, encounter.RoomType));
+            Capture.Safe("final boss potions", () =>
+            {
+                HeldAtStart.Clear();
+                _round = 1;
+                _finalBoss = combatState?.Encounter is { RoomType: RoomType.Boss } && runState.CurrentActIndex == runState.Acts.Count - 1;
+                if (_finalBoss)
+                    foreach (var p in (combatState?.Players ?? runState.Players).SelectMany(pl => pl.Potions)) HeldAtStart.Add(p);
+            });
             KikiMAIster.UI.Overlay.EnsureAttached("combat start");
             KikiMAIster.UI.CombatSummary.HideAutoShown();
             var players = combatState?.Players ?? runState.Players;
@@ -181,6 +190,7 @@ public static class CombatFlowPatches
             if (side != CombatSide.Player) return;
             DamagePatches.FlushPending();
             DebuffEffectPatches.ResetOffense();
+            _round = combatState.RoundNumber;
             Capture.Emit(new RoundStarted(combatState.RoundNumber));
             BlockAndPowerPatches.GiveNextTurnHelp();
             ActingEnemy = null;
@@ -262,11 +272,47 @@ public static class CombatFlowPatches
             // After a victory the game kills every player to close the run (v0.18.10): not a death.
             if (wasRemovalPrevented || !creature.IsPlayer || _runOver) return;
             Capture.Emit(new PlayerDied(Capture.ToActor(creature)));
-            // Died with potions that could have been drunk in combat (spec §E0).
-            var potions = creature.Player?.Potions.Count(p => p.Usage is PotionUsage.CombatOnly or PotionUsage.AnyTime) ?? 0;
-            if (potions > 0)
-                Capture.Emit(new MissedChance(Capture.ToActor(creature), "potion", new[] { potions.ToString(System.Globalization.CultureInfo.InvariantCulture) }, potions));
+            // Died with potions that could have been drunk in combat (spec §E0). 1.2.4 (Zaille75): a mistake only when one of them
+            // could have prevented the death ("potion": the count, then those potions); otherwise only listed ("potionNoHelp").
+            var held = creature.Player?.Potions.Where(p => p.Usage is PotionUsage.CombatOnly or PotionUsage.AnyTime).ToList() ?? new();
+            if (held.Count == 0) return;
+            var blow = KillingHits.TryGetValue(creature, out var box) ? box.Value : default;
+            var turn = creature.Player is { } dead ? BlockAlternatives.LastTurnOf(dead) : null;
+            var savers = held.Where(p => DeathPotions.CouldSave(View(p, creature), blow.Overkill + 1, blow.Damage, turn))
+                .Select(p => $"Potion:{Capture.IdOf(p)}").ToList();
+            if (savers.Count > 0)
+                Capture.Emit(new MissedChance(Capture.ToActor(creature), "potion",
+                    new[] { savers.Count.ToString(System.Globalization.CultureInfo.InvariantCulture) }.Concat(savers).ToArray(), savers.Count));
+            else
+                Capture.Emit(new MissedChance(Capture.ToActor(creature), "potionNoHelp", held.Select(p => $"Potion:{Capture.IdOf(p)}").ToArray(), 0));
         });
+    }
+
+    /// The blow that killed each player (overkill, damage with the blocked part), for the potions held at death (1.2.4).
+    private static readonly ConditionalWeakTable<Creature, StrongBox<(int Overkill, int Damage)>> KillingHits = new();
+
+    public static void OnPlayerKilled(Creature player, int overkill, int damage) =>
+        KillingHits.AddOrUpdate(player, new StrongBox<(int Overkill, int Damage)>((overkill, damage)));
+
+    private static double Var(PotionModel p, string name) => p.DynamicVars.TryGetValue(name, out var v) ? (double)v.BaseValue : 0;
+
+    /// What a potion could have done for its holder (matched by id: the beta and the main branch share them).
+    private static PotionView View(PotionModel p, Creature holder)
+    {
+        var key = $"Potion:{Capture.IdOf(p)}";
+        return Capture.IdOf(p) switch
+        {
+            "BLOCK_POTION" or "SHIP_IN_A_BOTTLE" => new PotionView(key, Block: Var(p, "Block")),
+            "BLOOD_POTION" or "AMBERGRIS" => new PotionView(key, Heal: Math.Floor(holder.MaxHp * Var(p, "HealPercent") / 100)),
+            "REGEN_POTION" => new PotionView(key, Heal: Var(p, "RegenPower")),
+            "FRUIT_JUICE" => new PotionView(key, Heal: Var(p, "MaxHp")),
+            "HEART_OF_IRON" => new PotionView(key, Plating: Var(p, "PlatingPower")),
+            "GHOST_IN_A_JAR" => new PotionView(key, Intangible: true),
+            "WEAK_POTION" => new PotionView(key, Weak: true),
+            "ENERGY_POTION" or "CURE_ALL" => new PotionView(key, Energy: (int)Var(p, "Energy")),
+            "FORTIFIER" => new PotionView(key, DoublesBlock: true),
+            _ => new PotionView(key)
+        };
     }
 
     /// The run has ended (its first OnEnded): later deaths and OnEnded calls are the game closing it.
@@ -558,11 +604,25 @@ public static class CombatFlowPatches
             Capture.PotionUser = potion.Owner;
             Capture.PotionId = $"Potion:{Capture.IdOf(potion)}";
             Capture.Emit(new PotionUsed(Capture.ToActor(potion.Owner)));
+            // 1.2.4 (Zaille75): in the game's last boss fight, a potion with a lasting effect held since the start and drunk after
+            // the first turn lost its turns of effect (earlier fights: it may have been kept for later; Choix, "potionLate").
+            if (_finalBoss && _round > 1 && HeldAtStart.Contains(potion) && LastingPotions.Contains(Capture.IdOf(potion)) && potion.Owner != null)
+                Capture.Emit(new MissedChance(Capture.ToActor(potion.Owner), "potionLate",
+                    new[] { Capture.PotionId, _round.ToString(System.Globalization.CultureInfo.InvariantCulture) }));
             // A potion that could do nothing (v0.18.6): an error, in Gâché.
             if (potion.Owner?.Creature.CombatState != null && BlockAlternatives.UselessPotion(potion, target))
                 Capture.Emit(new MissedChance(Capture.ToActor(potion.Owner), "potionUseless", new[] { Capture.PotionId }));
         });
     }
+
+    /// Potions whose effect lasts the whole fight (1.2.4): Potion de pouvoir, Force, Dextérité, Focalisation, Cœur de fer (Placage),
+    /// Bronze liquide (Épines), Huile de poissâme.
+    private static readonly HashSet<string> LastingPotions = new()
+        { "POWER_POTION", "STRENGTH_POTION", "DEXTERITY_POTION", "FOCUS_POTION", "HEART_OF_IRON", "LIQUID_BRONZE", "FYSH_OIL" };
+    /// The last boss of the game (last act's boss) is being fought, the round, and the potions held when it started.
+    private static bool _finalBoss;
+    private static int _round;
+    private static readonly HashSet<PotionModel> HeldAtStart = new(ReferenceEqualityComparer.Instance);
 
     [HarmonyPatch(typeof(Hook), nameof(Hook.AfterPotionUsed))]
     public static class PotionEnd

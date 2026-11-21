@@ -4,6 +4,7 @@ namespace KikiMAIster.Core;
 public static partial class TurnReview
 {
     private const string SlipperyKey = "Power:SLIPPERY_POWER";
+    private const string HardToKillKey = "Power:HARD_TO_KILL_POWER";
 
     /// A Shot played again (Duplicateur, Forme résonnante, Vers Ki…) whose copy found no arrow ready: Choix, "emptyReplay".
     private static void EmptyReplays(TurnState s, TurnPlayer p, TurnResult r)
@@ -56,6 +57,8 @@ public static partial class TurnReview
             string cap;
             if (other != null)
             {
+                // 1.2.4 (Zaille75): Dur à cuire never goes away; when every enemy has it, Visée could not be used better.
+                if (other == HardToKillKey && s.EnemiesLeft.Keys.All(s.EnemyHardToKill.Contains)) continue;
                 lost = (int)Math.Round(Math.Min(x.AimAtStart * x.AimFactor, x.CapStopped));
                 cap = other;
             }
@@ -72,6 +75,27 @@ public static partial class TurnReview
             if (lost < 1) continue;
             r.Log.Add($"aim capped: {x.CardKey} into {cap}, {lost} lost");
             r.Events.Add(new MissedChance(p.Actor, "aimCapped", new[] { x.CardKey, cap, N(lost) }));
+        }
+    }
+
+    /// 1.2.4 (Zaille75: Serlfa played a 0-cost card with "Carte gratuite à jouer"): the free card spent on a card that already cost
+    /// 0, while a card paid with energy came after it (already in hand) or a useful card costing energy was kept: Choix,
+    /// "freeCardWasted" (the 0-cost card, the card that could have been free).
+    private static void FreeCardWasted(TurnState s, TurnPlayer p, TurnResult r)
+    {
+        var mine = s.Plays.Where(x => x.Owner == p.Actor).ToList();
+        for (var i = 0; i < mine.Count; i++)
+        {
+            var x = mine[i];
+            if (!x.FreeCardWasted) continue;
+            var later = mine.Skip(i + 1).Where(y => y.EnergySpent > 0 && !y.CostsX && InHandAt(x, y)).OrderByDescending(y => y.EnergySpent)
+                .Select(y => y.CardKey).FirstOrDefault();
+            var kept = p.Hand.Where(c => c.Cost > 0 && !c.CostsX && !c.StatusOrCurse && c.PlayableExceptEnergy && !c.KeptOnPurpose && !c.NoArrow &&
+                                         x.HandAtPlay.Any(h => ReferenceEquals(h, c.Ref)))
+                .OrderByDescending(c => c.Cost).Select(c => c.Key).FirstOrDefault();
+            if ((later ?? kept) is not { } instead) continue;
+            r.Log.Add($"free card wasted: {x.CardKey}, {instead} could have been free");
+            r.Events.Add(new MissedChance(p.Actor, "freeCardWasted", new[] { x.CardKey, instead }));
         }
     }
 
