@@ -1,6 +1,7 @@
 using System.Globalization;
 using HarmonyLib;
 using KikiMAIster.Core;
+using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Entities.TreasureRelicPicking;
 using MegaCrit.Sts2.Core.Entities.Cards;
@@ -292,6 +293,36 @@ public static class RunHistoryPatches
                 ModLog.Info($"map vote: {Capture.PlayerName(last, players.Count)} chose last, {waited:0.0} s after the others");
                 Capture.Emit(new WaitedFor(Capture.ToActor(last), waited));
             });
+    }
+
+    /// End of turn (1.2.5, Godot): the last player to end the turn made the others wait the time since the one before, minus
+    /// the grace. A prefix, because the last call can resume the combat before a postfix runs. Players made ready by the game
+    /// (dead, or out of someone's extra turn) have no time. Every other ready player was set this turn, so nothing needs resetting.
+    private static readonly Dictionary<ulong, double> EndTurnTimes = new();
+
+    [HarmonyPatch(typeof(CombatManager), nameof(CombatManager.SetReadyToEndTurn))]
+    public static class TurnEnded
+    {
+        public static void Prefix(CombatManager __instance, Player player) => Capture.Safe("TurnEnded", () =>
+        {
+            if (!__instance.IsInProgress || __instance.IsPlayerReadyToEndTurn(player)) return;
+            var extra = __instance.PlayersTakingExtraTurn;
+            var played = !player.Creature.IsDead && (extra.Count == 0 || extra.Contains(player));
+            var now = Clock.Elapsed.TotalSeconds;
+            if (played) EndTurnTimes[player.NetId] = now;
+            else EndTurnTimes.Remove(player.NetId);
+
+            var players = player.RunState?.Players ?? new List<Player>();
+            if (!played || players.Count < 2) return;
+            var others = players.Where(p => p != player).ToList();
+            if (!others.All(__instance.IsPlayerReadyToEndTurn)) return;
+            var before = others.Where(p => EndTurnTimes.ContainsKey(p.NetId)).Select(p => EndTurnTimes[p.NetId]).DefaultIfEmpty(double.NaN).Max();
+            if (double.IsNaN(before)) return;
+            var waited = WaitRules.EndTurnWait(now - before);
+            if (waited <= 0) return;
+            ModLog.Info($"end of turn: {Capture.PlayerName(player, players.Count)} ended last, {now - before:0.0} s after the others ({waited:0.0} s counted)");
+            Capture.Emit(new WaitedFor(Capture.ToActor(player), waited));
+        });
     }
 
     /// Several players picked the same relic: the game plays rock-paper-scissors until one is left.
