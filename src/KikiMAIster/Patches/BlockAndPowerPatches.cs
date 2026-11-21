@@ -82,7 +82,10 @@ public static class BlockAndPowerPatches
                 Capture.Emit(new PetHpBlock(Capture.ToActor(receiver), receiver.Player?.Osty is { } osty ? Capture.ToActor(osty) : default));
             // Oubli (temporary Dexterity from an ally, v0.17.38): the Dexterity they gave added to a card's block.
             if (call?.Source.Kind == SourceKind.Card && receiver.IsPlayer)
+            {
                 Capture.Safe("block enabled", () => EnabledByAllyDexterity(receiver, amount));
+                Capture.Safe("block enabled (Souplesse)", () => EnabledByAllyStretch(receiver, amount));
+            }
             BlockAlternatives.OnBlockGained(call?.PlayId ?? 0, amount);
             // En boule / Pleutre (v0.18.9): an enemy's block set off by a player's hit.
             if (receiver.IsEnemy && call?.Source is { Kind: SourceKind.Power } guard &&
@@ -119,6 +122,31 @@ public static class BlockAndPowerPatches
         var scale = Math.Min(1, dexterity / total);
         foreach (var p in given)
             Capture.Emit(new BlockEnabled(Capture.ToActor(receiver), Capture.ToActor(p.Applier), Math.Min(amount, p.Amount * scale)));
+    }
+
+    /// Souplesse (beta v0.113, matched by id; 1.2.4, Zaille75): who gave the stacks a player holds (Yoga gives every player 6; the
+    /// power keeps one applier only). Cleared when the power goes (its next block card used it).
+    private static readonly ConditionalWeakTable<Creature, List<(Creature Giver, double Amount)>> StretchGivers = new();
+    private const string StretchId = "STRETCH_POWER";
+
+    private static void OnStretch(PowerModel power, decimal amount, Creature? applier)
+    {
+        if (!power.Owner.IsPlayer || Capture.IdOf(power) != StretchId) return;
+        var givers = StretchGivers.GetOrCreateValue(power.Owner);
+        if (amount <= 0) givers.Clear();
+        else givers.Add((applier ?? power.Owner, (double)amount));
+    }
+
+    /// The Souplesse an ally gave added its stacks to this card's block: each giver's share is block they enabled.
+    private static void EnabledByAllyStretch(Creature receiver, int amount)
+    {
+        if (amount <= 0 || !StretchGivers.TryGetValue(receiver, out var givers) || givers.Count == 0) return;
+        var stretch = receiver.Powers.FirstOrDefault(p => Capture.IdOf(p) == StretchId);
+        if (stretch == null || stretch.Amount <= 0) return;
+        var total = givers.Sum(g => g.Amount);
+        var bonus = Math.Min(amount, (double)stretch.Amount);
+        foreach (var g in givers.Where(g => g.Giver != receiver && g.Giver.IsPlayer).GroupBy(g => g.Giver))
+            Capture.Emit(new BlockEnabled(Capture.ToActor(receiver), Capture.ToActor(g.Key), bonus * g.Sum(x => x.Amount) / total));
     }
 
     /// Strength players removed from each enemy for good (Strength down cards, potions…), v0.17.38. Temporary losses are read
@@ -159,6 +187,7 @@ public static class BlockAndPowerPatches
         {
             var enabledBy = EnabledBy(applier);
             BlockAlternatives.OnPowerApplied(power, amount, Stacking.Remove(power));
+            OnStretch(power, amount, applier);
             // Strength given by another player (Blaze…): counts for the giver. Temporary Strength (Coordinate) is read from
             // its own power at each hit instead.
             if (power is StrengthPower && amount > 0 && power.Owner.IsPlayer && applier is { IsPlayer: true } giver &&

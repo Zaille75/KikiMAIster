@@ -65,6 +65,8 @@ public static class BlockAlternatives
     private static readonly Dictionary<Player, Dictionary<CardType, int>> TurnPlays = new();
     /// Enemies given their first Vulnerable this turn, and the play that gave it (useless until someone hits them).
     private static readonly Dictionary<Creature, Play> PendingVulnerable = new();
+    /// Players whose "Carte gratuite à jouer" was just used up by the card about to start (1.2.4).
+    private static readonly HashSet<Player> FreeCardSpent = new();
     /// Growing cards that could be played at the end of some turn of this fight, and those that were played.
     private static readonly HashSet<CardModel> GrowingAffordable = new(ReferenceEqualityComparer.Instance);
     private static readonly HashSet<CardModel> GrowingPlayed = new(ReferenceEqualityComparer.Instance);
@@ -107,6 +109,7 @@ public static class BlockAlternatives
         _justFinished = null;
         TurnPlays.Clear();
         PendingVulnerable.Clear();
+        FreeCardSpent.Clear();
         PetSacrificed.Clear();
         StampedeShort.Clear();
         StampedeAll.Clear();
@@ -267,10 +270,14 @@ public static class BlockAlternatives
     /// Stacked: the power was already on its owner (adding turns to it is always an effect).
     public static void OnPowerApplied(PowerModel power, decimal amount, bool stacked)
     {
+        // 1.2.4: "Carte gratuite à jouer" used up just before a card starts (FreeCardPower.BeforeCardPlayed).
+        if (amount < 0 && power.Owner.Player is { } freePlayer && Capture.IdOf(power) == "FREE_CARD_POWER") FreeCardSpent.Add(freePlayer);
         Capture.Safe("wrong order", () => CheckOrder(power, amount, stacked));
         // A power the card put on its own player (v0.18.6): later cards it feeds were not in the wrong order.
         if (InProgress.TryPeek(out var giver) && giver != null && amount > 0)
         {
+            // 1.2.4: the enemies it gave their first Vulnérable (makerFirst: the card made after it hit them for more).
+            if (power is VulnerablePower && power.Owner.IsEnemy && !stacked) giver.VulnerableOn.Add(power.Owner);
             if (power.Owner == giver.Player.Creature) giver.PowersGiven.Add($"Power:{Capture.IdOf(power)}");
             else if (power is DoomPower && power.Owner.IsEnemy) giver.DoomTargets.Add(power.Owner);
             else if (power.Owner.IsEnemy) giver.OtherDebuff = true;
@@ -349,11 +356,21 @@ public static class BlockAlternatives
         var attacks = earlier.Where(p => p.Card.Type == CardType.Attack && !p.OtherThanDebuff).ToList();
         var blocks = earlier.Where(p => p.GaveBlock && p.BlockGains > 0 && !p.HadOtherEffect).ToList();
         // Damage per hit added to some of the player's own hits (not the pet's) on each enemy, Vulnerable included.
+        // 1.2.4 (Zaille75: Heurt before Frappe préparatoire): Vulnérable counts on the hits that had it when they landed (not one
+        // the earlier card put on its target itself), and what the earlier card's first Vulnérable added to this card's own hits
+        // comes off (that card played first, it would have lost it).
         void PerHit(IEnumerable<Play> plays, double perHit)
         {
             foreach (var e in plays)
                 foreach (var g in OwnHits(e).GroupBy(h => (Creature)h.Target))
-                    OrderLosses.Add(new OrderLoss(e, boost, "order", g.Key, perHit * g.Count() * Vulnerable(g.Key, player)));
+                {
+                    var factor = Vulnerable(g.Key, player);
+                    if (factor <= 1) factor = 1.5;
+                    var lost = g.Sum(h => perHit * (h.Vulnerable ? factor : 1));
+                    if (play != null && e.VulnerableOn.Contains(g.Key))
+                        lost -= play.Hits.Where(h => ReferenceEquals(h.Target, g.Key) && h.Vulnerable).Sum(h => h.Raw) * (1 - 1 / factor);
+                    if (lost > 0) OrderLosses.Add(new OrderLoss(e, boost, "order", g.Key, lost));
+                }
         }
         switch (power)
         {
@@ -439,6 +456,16 @@ public static class BlockAlternatives
                 {
                     var raw = OwnHits(e).Where(h => ReferenceEquals(h.Target, power.Owner)).Sum(h => h.Raw);
                     if (raw > 0) OrderLosses.Add(new OrderLoss(e, boost, "order", power.Owner, raw));
+                }
+                break;
+            // 1.2.4 (Zaille75): Antipathie (beta v0.113, matched by id) adds Amount% to every arrow hit on that enemy this turn, from
+            // any player: a Shot made before it, while it was already in the player's hand, lost that much (an ally's: their miss).
+            case var _ when power.Owner.IsEnemy && !stacked && Capture.IdOf(power) == "DISLIKE_YOU_POWER":
+                foreach (var e in attacks.Concat(AlliesBefore(play, player)).Where(p => p.ShotArrow))
+                {
+                    var raw = e.Hits.Where(h => ReferenceEquals(h.Target, power.Owner)).Sum(h => h.Raw);
+                    if (raw > 0) OrderLosses.Add(new OrderLoss(e, TurnReview.Owned(boost, Capture.ToActor(player), e.Owner), "order", power.Owner,
+                        raw * (double)amount / 100));
                 }
                 break;
             // Co-op: Encerclement and Renverser multiply the allies' attack damage on that enemy; an ally's attack made while the
@@ -762,6 +789,9 @@ public static class BlockAlternatives
             HandAtPlay = hand.Where(c => c != cardPlay.Card).ToList<object>(),
             KindCount = counts[cardPlay.Card.Type]
         };
+        // 1.2.4: the free card spent on a card that already cost 0 (its own cost, no modifier).
+        if (FreeCardSpent.Remove(play.Player) && !cardPlay.Card.EnergyCost.CostsX &&
+            cardPlay.Card.EnergyCost.GetWithModifiers(CostModifiers.None) == 0) play.FreeCardWasted = true;
         if (GameBranch.IsV113)
         {
             Capture.Safe("arrows", () => Arrows.Fill(play, cardPlay));
@@ -866,6 +896,11 @@ public static class BlockAlternatives
         ClearTurn();
     }
 
+    /// Each player's end of their last turn (energy, block, block cards kept), for the potions held at death (1.2.4).
+    private static readonly ConditionalWeakTable<Player, LastTurnView> LastTurns = new();
+
+    public static LastTurnView? LastTurnOf(Player player) => LastTurns.TryGetValue(player, out var v) ? v : null;
+
     /// What the rules need from the game at the end of the turn.
     private static TurnState Snapshot(ICombatState combat)
     {
@@ -886,11 +921,16 @@ public static class BlockAlternatives
             s.EnemiesLeft[e] = e.CurrentHp + e.Block;
             s.EnemyVulnerable[e] = e.GetPower<VulnerablePower>()?.Amount ?? 0;
             s.EnemySlippery[e] = e.GetPower<SlipperyPower>()?.Amount ?? 0;
+            if (e.HasPower<HardToKillPower>()) s.EnemyHardToKill.Add(e);
         }
         foreach (var player in combat.Players)
             Capture.Safe("turn snapshot", () =>
             {
-                if (PlayerView(combat, player) is { } view) s.Players.Add(view);
+                if (PlayerView(combat, player) is not { } view) return;
+                s.Players.Add(view);
+                LastTurns.AddOrUpdate(player, new LastTurnView(view.Energy, view.Block,
+                    view.Hand.Where(c => c.GainsBlock && c.PlayableExceptEnergy && !c.CostsX && c.BlockFor != BlockTarget.OneAlly)
+                        .Select(c => (c.Cost, c.Block)).ToList()));
             });
         foreach (var play in ThisTurn)
         {
@@ -1356,6 +1396,8 @@ public static class BlockAlternatives
     {
         if (card.CombatState is not { } combat) return false;
         if (card.Affliction is Tainted) return combat.HittableEnemies.Any(Attacks);
+        // 1.2.4 (Zaille75): Simplet auto-plays the cheapest card each turn, often a Souillé skill under Étincelle vitale.
+        if (card.Id.Entry == "SIMPLETON" && combat.HittableEnemies.Any(e => e.HasPower<VitalSparkPower>())) return true;
         if (card.Type != CardType.Attack || card.CombatState is not { } cs) return false;
         var enemies = cs.HittableEnemies.Where(e => e.HpDisplay == HpDisplay.Normal).ToList();
         if (enemies.Count == 0) return false;

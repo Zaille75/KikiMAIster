@@ -273,6 +273,8 @@ public static class DamagePatches
         if (source is { Kind: SourceKind.Orb } hitOrb && target.IsEnemy && r.UnblockedDamage > 0 && dealer?.GetPower<FocusPower>() is { Amount: > 0 } focus &&
             (hitOrb.Id == ModelDb.GetId<LightningOrb>().Entry || hitOrb.Id == ModelDb.GetId<GlassOrb>().Entry))
             Capture.Emit(new DamageModifier(dealerActor, $"Power:{Capture.IdOf(focus)}", Math.Min(r.UnblockedDamage, (double)focus.Amount), source.ToString()));
+        if (target.IsPlayer && r.WasTargetKilled)
+            CombatFlowPatches.OnPlayerKilled(target, r.OverkillDamage, r.BlockedDamage + r.UnblockedDamage + r.OverkillDamage);
         Capture.Emit(new DamageDealt(dealerActor, Capture.ToActor(target),
             r.BlockedDamage, r.UnblockedDamage, r.OverkillDamage, r.WasTargetKilled, source, kind, avoidable));
         if (card != null && target.IsEnemy && r.UnblockedDamage > 0) CreditHelpers(card, dealer, target, r.UnblockedDamage);

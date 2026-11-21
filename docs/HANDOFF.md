@@ -1,4 +1,4 @@
-# Handoff — state of the project (2026-11-17, v1.2.3)
+# Handoff — state of the project (2026-11-21, v1.2.4 on feature/1.2.4)
 
 > **Start here in a new conversation**, then `CLAUDE.md`, `docs/specs/01-metrics.md` (rules) and `docs/specs/02-ui.md`
 > (interface). The history of every version is in `CHANGELOG.md` and the specs' "vX.Y.Z" notes; the git history has the
@@ -8,6 +8,17 @@
 > Zaille75, item 3832591950 "KikiMAIster - Solo and Co-op stats", checked with the Steam API `GetPublishedFileDetails`).
 > `main` = released code, no open branch (`feature/drop-old-main` merged; its remote copy can be deleted). 1.2.1 and 1.2.2
 > are **not tested in game yet**: Zaille75 will try both together. One DLL for beta v0.113.0 and main v0.111.1.
+> **1.2.4 (2026-11-21, branch `feature/1.2.4`, not merged, not released):** inbox `logs/inbox/2026-11-21_00-56-21` (18 F9 reports,
+> 1.2.2/1.2.3 games, no internal error; names.txt unchanged except its header). Spec 01-metrics rows "Shoot last against Ralenti" →
+> "Souplesse given by an ally", 02-ui "1.2.4". Core: `Rules1_2_3.FreeCardWasted` ("freeCardWasted", Choix), `DeathPotions`
+> (potion held at death counted only when it could save: "potion" args = count + potions, else "potionNoHelp" listed only),
+> `TurnPlay.VulnerableOn / FreeCardWasted`, `TurnState.EnemyHardToKill`; shootFirst skipped on Ralenti hits, aimCapped skipped on
+> Dur à cuire everywhere, BuffsUnused miss only with energy, Larmes de Paël `lostEnergy = energy − 1`, MakersFirst skips fed cards.
+> Capture: Antipathie order (`CheckOrder`, id "DISLIKE_YOU_POWER"), PerHit Vulnérable per hit + the earlier card's Vulnérable gain
+> netted, Souplesse givers (`BlockAndPowerPatches.OnStretch` → `BlockEnabled`), free card (`FreeCardSpent`), Simplet Punished under
+> Étincelle vitale, "potionLate" (`CombatFlowPatches`: last act's boss, lasting potions), `LastTurnOf` / `OnPlayerKilled` for
+> potions at death. UI: chronological misplay tooltips, makerFirst reworded. PatchCheck beta 78, main 117; tests 248.
+> Zaille75 debates later: "potionLate" in any fight (not only the last boss).
 > **1.2.3 (2026-11-17) released** on GitHub (tag `v1.2.3`, by WTT27) and the Steam Workshop (item 3832591950, updated 2026-11-17 22:20, checked with `GetPublishedFileDetails`); `main` = released code; **not tested in game** (nor 1.2.1 / 1.2.2): Zaille75's inbox `logs/inbox/2026-11-17_21-48-23`
 > (11 F9 reports, 1.2.2 games, no internal error; log archived `logs/2026-11-17_v1.2.2_fool-feedback.log`). Spec 01-metrics rows
 > "Played again with no arrow" → "Melody block card", 02-ui "1.2.3". Core `Rules1_2_3.cs` (partial `TurnReview`): "emptyReplay",

@@ -226,6 +226,10 @@ public class TurnPlay
     public double CapStopped { get; set; }
     public HashSet<string> CapKeys { get; } = new();
     public HashSet<object> SlipperyOn { get; } = new(ReferenceEqualityComparer.Instance);
+    /// 1.2.4: the enemies it gave their first Vulnérable (a later card hitting them got more from it). FreeCardUsed: it used up
+    /// "Carte gratuite à jouer" (Accordage…) on a card that already cost 0.
+    public HashSet<object> VulnerableOn { get; } = new(ReferenceEqualityComparer.Instance);
+    public bool FreeCardWasted { get; set; }
 
     /// The first enemy it hit, with all the raw damage it dealt to that enemy; null when it hit no enemy.
     public (object Target, int Damage)? FirstHit =>
@@ -310,6 +314,8 @@ public sealed class TurnState
     public Dictionary<object, int> EnemyVulnerable { get; init; } = new(ReferenceEqualityComparer.Instance);
     /// Glissant stacks of each enemy alive at the end of the turn (1.2.3: Visée spent into it).
     public Dictionary<object, int> EnemySlippery { get; init; } = new(ReferenceEqualityComparer.Instance);
+    /// Enemies alive with Dur à cuire (a cap on every hit that never goes away; 1.2.4).
+    public HashSet<object> EnemyHardToKill { get; init; } = new(ReferenceEqualityComparer.Instance);
 
     public TurnPlayer? Player(Actor a) => Players.FirstOrDefault(p => p.Actor == a);
 }
@@ -362,6 +368,7 @@ public static partial class TurnReview
             MakeEarlier(s, p, r);
             EmptyReplays(s, p, r);
             AimCapped(s, p, r);
+            FreeCardWasted(s, p, r);
             VulnerableLeft(s, p, r);
             MakersFirst(s, p, r);
             CoveringFireLate(s, p, r);
@@ -538,6 +545,8 @@ public static partial class TurnReview
             var hitters = before.Where(x => x.Owner == shot.Owner && x.Kind == CardKind.Attack && !x.OwnArrowIn.Contains(enemy) && HitsOn(x) > 0).ToList();
             var hits = hitters.Sum(HitsOn);
             if (hits < HitsToFreeArrow) continue;
+            // 1.2.4 (Zaille75): against Ralenti the biggest hit goes last (each card played adds 10%), so shooting last was right.
+            if (shot.Hits.Any(h => ReferenceEquals(h.Target, enemy) && h.Slow >= 0)) continue;
             r.Log.Add($"shoot first: {shot.CardKey} after {hits} hits on its target");
             r.Events.Add(new MissedChance(shot.Owner, "shootFirst",
                 new[] { shot.CardKey, string.Join('+', hitters.Select(x => x.CardKey).Distinct()), N(hits) }));
@@ -597,8 +606,14 @@ public static partial class TurnReview
         {
             var maker = s.Plays[i];
             if (maker.Owner != p.Actor || !CardMakers.Contains(CardId(maker.CardKey)) || counted.Contains(maker)) continue;
+            // 1.2.4 (Zaille75): nor cards that fed the maker or the card it made (Ignorer la douleur before Lame infernale, which
+            // exhausts; Intimidation's Vulnérable on the target of the attack it made).
+            var made = s.Plays.Where(y => maker.Created.Contains(y.CardRef)).ToList();
+            bool Fed(TurnPlay x) => x.PowersGiven.Overlaps(maker.PowersTriggered) || made.Any(y => x.PowersGiven.Overlaps(y.PowersTriggered) ||
+                                                                                                  y.Hits.Any(h => h.Vulnerable && x.VulnerableOn.Contains(h.Target)));
             var earlier = s.Plays.Take(i).Where(x => x.Owner == p.Actor && x.HandAtPlay.Any(h => ReferenceEquals(h, maker.CardRef)) &&
-                                                     x.CardsDrawn == 0 && x.EnergyGiven == 0 && !CardMakers.Contains(CardId(x.CardKey))).ToList();
+                                                     x.CardsDrawn == 0 && x.EnergyGiven == 0 && !CardMakers.Contains(CardId(x.CardKey)) &&
+                                                     !Fed(x)).ToList();
             if (earlier.Count == 0) continue;
             var first = earlier[0];
             if (first.EnergyBefore < maker.EnergySpent + first.EnergySpent || first.HandAtPlay.Count + 1 >= MaxHandSize) continue;
@@ -863,7 +878,9 @@ public static partial class TurnReview
         var actor = p.Actor;
         var energy = p.Energy;
         var hand = p.Hand;
-        var energyLost = p.EnergyResets && p.PaelsTears == null;
+        // 1.2.4 (Zaille75): Larmes de Paël gives 2 energy next turn as soon as 1 is left: the rest is lost.
+        var energyLost = p.EnergyResets && (p.PaelsTears == null || energy > 1);
+        var lostEnergy = p.PaelsTears == null ? energy : energy - 1;
 
         // Unused energy. Cards kept on purpose are left out (v0.17.0); so is a block card when the block already covers
         // the incoming attack (v0.17.1), and an attack into Thorns the block cannot afford (v0.17.34).
@@ -875,20 +892,22 @@ public static partial class TurnReview
         // pet is dead (unless the player's own card killed it this turn: the attack could have come first).
         bool CanHit(TurnCard c) => c.Kind != CardKind.Attack || (s.OpenEnemy && !s.NothingToKill);
         bool PetReady(TurnCard c) => (!c.NeedsPet || p.PetAlive || p.PetSacrificedThisTurn) && !c.NoArrow;
-        bool WouldHelp(TurnCard c) => p.Affordable(c) && !c.KeptOnPurpose && !NeedlessBlock(c) && !Punished(c) && CanHit(c) && PetReady(c);
-        var missedEnergy = energy > 0 && !s.NothingToKill && !s.EnemyAsleep && energyLost && hand.Any(WouldHelp);
+        // With Larmes de Paël, only a card the energy beyond the 1 kept could pay.
+        bool Fits(TurnCard c) => p.PaelsTears == null || (!c.CostsX && c.Cost <= lostEnergy);
+        bool WouldHelp(TurnCard c) => p.Affordable(c) && Fits(c) && !c.KeptOnPurpose && !NeedlessBlock(c) && !Punished(c) && CanHit(c) && PetReady(c);
+        var missedEnergy = lostEnergy > 0 && !s.NothingToKill && !s.EnemyAsleep && energyLost && hand.Any(WouldHelp);
         if (missedEnergy)
         {
             // Args: the energy, then the cards it could have paid (most expensive first, at most 3).
             var playable = hand.Where(WouldHelp).GroupBy(c => c.Key).Select(g => g.First())
                 .OrderByDescending(c => c.CostsX ? energy : c.Cost).Take(3).Select(c => c.Key);
-            r.Events.Add(new MissedChance(actor, "energy", new[] { N(energy) }.Concat(playable).ToArray(), energy));
+            r.Events.Add(new MissedChance(actor, "energy", new[] { N(lostEnergy) }.Concat(playable).ToArray(), lostEnergy));
         }
         // Energy lost with nothing useful to spend it on (v0.17.29): counted for the trophy "Survolté".
         // v0.18.6: cards kept on purpose (Danse des lames…) do not stop it from counting.
-        var energySurplus = !missedEnergy && energy > 0 && !s.EnemyAsleep && energyLost &&
-                      (s.NothingToKill || !hand.Any(c => p.Affordable(c) && !c.KeptOnPurpose && !NeedlessBlock(c) && !Punished(c) && CanHit(c) && PetReady(c)))
-            ? energy : 0;
+        var energySurplus = !missedEnergy && lostEnergy > 0 && !s.EnemyAsleep && energyLost &&
+                      (s.NothingToKill || !hand.Any(c => p.Affordable(c) && Fits(c) && !c.KeptOnPurpose && !NeedlessBlock(c) && !Punished(c) && CanHit(c) && PetReady(c)))
+            ? lostEnergy : 0;
 
         if (energySurplus > 0) r.Events.Add(new HelpGiven(actor, "energySurplus", energySurplus));
 
@@ -937,7 +956,8 @@ public static partial class TurnReview
         foreach (var x in s.Plays.Where(x => x.Owner == actor && DidNothing(p, x) && EnergyMissed(s, p, x)))
             if (x.EmptyShot) r.Events.Add(new MissedChance(actor, "emptyShot", new[] { x.CardKey, N(x.EnergySpent) }));
             else if (!x.ImpaledLater) r.Events.Add(new MissedChance(actor, "notImpaled", new[] { x.CardKey, N(x.EnergySpent) }));
-        foreach (var x in BuffsUnused(s, p))
+        // 1.2.4 (Zaille75): only when it cost energy (0 energy lost is not a misplay).
+        foreach (var x in BuffsUnused(s, p).Where(x => x.EnergySpent > 0))
             r.Events.Add(new MissedChance(actor, x.PowersGiven.Contains(KiVersePower) ? "verseUnused" : "buffUnused", new[] { x.CardKey, N(x.EnergySpent) }));
 
         // A growing card could have been played with the energy left, or instead of a useless card (v0.17.7).
