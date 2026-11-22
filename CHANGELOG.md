@@ -3,7 +3,7 @@
 Summary by version line. The detailed notes of every version are in [docs/specs/02-ui.md](docs/specs/02-ui.md)
 (interface) and [docs/specs/01-metrics.md](docs/specs/01-metrics.md) (rules).
 
-## 1.2.5 (not released) — Godot counts the end of turn
+## 1.2.5 (2026-11-22) — Godot counts the end of turn, feedback of 2026-11-22
 The Godot trophy also counts the time the others waited for the last player to end the turn in combat, minus 5 seconds per turn. Extra turns given by a card or relic are not counted. Time spent drawing on the map is not counted either.
 New mistakes: a kill before Compostage, one Erreur per card the leftover energy could have paid, a card drawn by Toupie perpétuelle
 left in hand, L'Insensé played with an empty hand. Fixes: attacks left in hand are no mistake once every enemy is condemned by

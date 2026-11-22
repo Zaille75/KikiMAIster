@@ -16,14 +16,13 @@ IDS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "published_ids.js
 ITEMS = {
     "beta": ("KikiMAIster - Solo and Co-op stats",  # renamed on Steam by Zaille75 (2026-11-06)
              "Works on both game branches: beta v0.113.0 (the Fool, Blitz, Dread) and default v0.111.0. "
-             "Version 1.2.4 knows the Fool's arrows and melodies (Wah / Cho / Ki: cards played in the wrong order, melody powers "
-             "played late, Vers Ki wasted, Visée spent into a cap, Antipathie after a Shot), counts Souplesse given to allies and only "
-             "blames potions kept at death when one could have saved you; tarot cards will follow.",
+             "Version 1.2.5 knows the Fool's arrows and melodies (Wah / Cho / Ki: cards played in the wrong order, melody powers "
+             "played late, Vers Ki wasted, Visée spent into a cap, Antipathie after a Shot), counts one mistake per card left unplayed "
+             "with energy to spare, and the Godot trophy now also counts the wait for the last player's end of turn.",
              "Marche sur les deux branches du jeu : bêta v0.113.0 (l'Insensé, Blitz, Dread) et par défaut v0.111.0. "
-             "La version 1.2.4 connaît les flèches et les mélodies de l'Insensé (Wah / Cho / Ki : cartes jouées dans le mauvais ordre, "
-             "pouvoirs de mélodie joués trop tard, Vers Ki gâché, Visée dépensée dans une limite, Antipathie après un Tir), compte la "
-             "Souplesse donnée aux alliés et ne reproche les potions gardées à la mort que si l'une pouvait vous sauver ; "
-             "les cartes de tarot suivront."),
+             "La version 1.2.5 connaît les flèches et les mélodies de l'Insensé (Wah / Cho / Ki : cartes jouées dans le mauvais ordre, "
+             "pouvoirs de mélodie joués trop tard, Vers Ki gâché, Visée dépensée dans une limite, Antipathie après un Tir), compte une "
+             "erreur par carte non jouée avec de l'énergie en trop, et le trophée Godot compte aussi l'attente de la dernière fin de tour."),
 }
 
 
