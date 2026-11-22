@@ -18,6 +18,8 @@ public static class ReflectionTargets
     public static readonly Target RestSiteLocalPlayer = new("MegaCrit.Sts2.Core.Multiplayer.Game.RestSiteSynchronizer", "LocalPlayer");
     public static readonly Target SoulboundAddingSoul = new("MegaCrit.Sts2.Core.Models.Powers.SoulboundPower", "IsAddingSoul");
     public static readonly Target PenNibAttackToDouble = new("MegaCrit.Sts2.Core.Models.Relics.PenNib", "AttackToDouble");
+    public static readonly Target MapDrawBegin = new("MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapDrawings", "BeginLine", 3);
+    public static readonly Target MapDrawStop = new("MegaCrit.Sts2.Core.Nodes.Screens.Map.NMapDrawings", "StopDrawingLine", 1);
 
     public static IEnumerable<Target> All => typeof(ReflectionTargets).GetFields(BindingFlags.Public | BindingFlags.Static)
         .Where(f => f.FieldType == typeof(Target)).Select(f => (Target)f.GetValue(null)!);

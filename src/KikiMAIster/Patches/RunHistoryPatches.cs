@@ -260,6 +260,7 @@ public static class RunHistoryPatches
         _playersSig = "";
         _failedAt = -1;
         LoggedEvents.Clear();
+        Strokes.Clear();
     }
 
     /// Map votes (v0.17.45, Godot): when every player has chosen the next floor, the last one made the others wait the time
@@ -281,6 +282,7 @@ public static class RunHistoryPatches
                     _voteSource = key;
                     VoteTimes.Clear();
                     _voteDone = false;
+                    foreach (var strokes in Strokes.Values) strokes.RemoveAll(s => s.End.HasValue); // a stroke in progress stays
                 }
                 if (destination.HasValue) VoteTimes[player.NetId] = Clock.Elapsed.TotalSeconds;
                 else VoteTimes.Remove(player.NetId);
@@ -288,11 +290,51 @@ public static class RunHistoryPatches
                 if (_voteDone || players.Count < 2 || players.Any(p => !__instance.GetVote(p).HasValue || !VoteTimes.ContainsKey(p.NetId))) return;
                 _voteDone = true;
                 var order = VoteTimes.OrderByDescending(kv => kv.Value).ToList();
-                var waited = order[0].Value - order[1].Value;
+                var gap = order[0].Value - order[1].Value;
                 var last = players.First(p => p.NetId == order[0].Key);
-                ModLog.Info($"map vote: {Capture.PlayerName(last, players.Count)} chose last, {waited:0.0} s after the others");
+                var drawn = Strokes.TryGetValue(last.NetId, out var own)
+                    ? own.Select(s => (s.Start, End: s.End ?? order[0].Value)).ToList()
+                    : new List<(double Start, double End)>();
+                var waited = WaitRules.MapWait(order[1].Value, order[0].Value, drawn);
+                ModLog.Info($"map vote: {Capture.PlayerName(last, players.Count)} chose last, {gap:0.0} s after the others ({gap - waited:0.0} s drawing, {waited:0.0} s counted)");
                 Capture.Emit(new WaitedFor(Capture.ToActor(last), waited));
             });
+    }
+
+    /// Pen-down times on the map per player (1.2.5, Godot): drawing is not making the others wait. Every player's strokes reach
+    /// this game through NMapDrawings' private BeginLine / StopDrawingLine (same code on both game branches).
+    private const int MaxStrokes = 500;
+    private static readonly Dictionary<ulong, List<(double Start, double? End)>> Strokes = new();
+
+    private static ulong? DrawingPlayer(object state) => AccessTools.Field(state.GetType(), "playerId")?.GetValue(state) as ulong?;
+
+    [HarmonyPatch]
+    public static class DrawBegin
+    {
+        public static bool Prepare() => ReflectionTargets.Method(ReflectionTargets.MapDrawBegin) != null;
+        public static System.Reflection.MethodBase TargetMethod() => ReflectionTargets.Method(ReflectionTargets.MapDrawBegin)!;
+
+        public static void Postfix(object state) => Capture.Safe("MapDrawBegin", () =>
+        {
+            if (DrawingPlayer(state) is not { } id) return;
+            if (!Strokes.TryGetValue(id, out var list)) Strokes[id] = list = new();
+            if (list.Count > 0 && list[^1].End == null) return;
+            if (list.Count >= MaxStrokes) list.RemoveAt(0);
+            list.Add((Clock.Elapsed.TotalSeconds, null));
+        });
+    }
+
+    [HarmonyPatch]
+    public static class DrawStop
+    {
+        public static bool Prepare() => ReflectionTargets.Method(ReflectionTargets.MapDrawStop) != null;
+        public static System.Reflection.MethodBase TargetMethod() => ReflectionTargets.Method(ReflectionTargets.MapDrawStop)!;
+
+        public static void Postfix(object state) => Capture.Safe("MapDrawStop", () =>
+        {
+            if (DrawingPlayer(state) is not { } id || !Strokes.TryGetValue(id, out var list) || list.Count == 0 || list[^1].End != null) return;
+            list[^1] = (list[^1].Start, Clock.Elapsed.TotalSeconds);
+        });
     }
 
     /// End of turn (1.2.5, Godot): the last player to end the turn made the others wait the time since the one before, minus

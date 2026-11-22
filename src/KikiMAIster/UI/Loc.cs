@@ -433,7 +433,7 @@ public static class Loc
         ["trophy.oneHp"] = ("Just a scratch", "Ce n'est qu'une égratinure"),
         ["trophy.oneHp.tip"] = ("Most rounds started and ended at 1 HP (no heal in between)", "Le plus de tours commencés et finis à 1 PV (sans soin entre les deux)"),
         ["trophy.waited"] = ("Godot", "Godot"),
-        ["trophy.waited.tip"] = ("Most seconds the others waited for this player: choosing the next floor on the map, and ending the turn in combat (first 5 s of each turn not counted)", "Le plus de secondes d'attente des autres pour ce joueur : choix de l'étage sur la carte, et fin de tour en combat (5 premières secondes de chaque tour non comptées)"),
+        ["trophy.waited.tip"] = ("Most seconds the others waited for this player: choosing the next floor on the map (time spent drawing not counted), and ending the turn in combat (first 5 s of each turn and extra turns not counted)", "Le plus de secondes d'attente des autres pour ce joueur : choix de l'étage sur la carte (temps passé à dessiner non compté), et fin de tour en combat (5 premières secondes de chaque tour et tours supplémentaires non comptés)"),
         ["trophy.participation"] = ("Participation trophy", "Trophée de participation"),
         ["trophy.participation.tip"] = ("For every player who won no main trophy in this run (the fun ones do not count)", "Pour chaque joueur qui n'a gagné aucun trophée principal de la partie (les trophées pour rire ne comptent pas)"),
         ["trophy.maxHpLost"] = ("Wasting away", "Peau sur les os"),
