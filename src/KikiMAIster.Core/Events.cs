@@ -185,6 +185,22 @@ public static class WaitRules
     public const double EndTurnGraceSeconds = 5;
 
     public static double EndTurnWait(double gapSeconds) => Math.Max(0, gapSeconds - EndTurnGraceSeconds);
+
+    /// Map vote: the time between the two votes, minus the strokes the last player drew in it (overlaps counted once).
+    public static double MapWait(double from, double to, IEnumerable<(double Start, double End)> strokes)
+    {
+        var drawing = 0.0;
+        var reached = from;
+        foreach (var (start, end) in strokes.OrderBy(s => s.Start))
+        {
+            var clippedStart = Math.Max(start, reached);
+            var clippedEnd = Math.Min(end, to);
+            if (clippedEnd <= clippedStart) continue;
+            drawing += clippedEnd - clippedStart;
+            reached = clippedEnd;
+        }
+        return Math.Max(0, to - from - drawing);
+    }
 }
 
 /// A player could have killed every enemy with the attacks in hand at the start of the turn (front hand),

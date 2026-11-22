@@ -4,7 +4,7 @@ Summary by version line. The detailed notes of every version are in [docs/specs/
 (interface) and [docs/specs/01-metrics.md](docs/specs/01-metrics.md) (rules).
 
 ## 1.2.5 (not released) — Godot counts the end of turn
-The Godot trophy also counts the time the others waited for the last player to end the turn in combat, minus 5 seconds per turn. Extra turns given by a card or relic are not counted.
+The Godot trophy also counts the time the others waited for the last player to end the turn in combat, minus 5 seconds per turn. Extra turns given by a card or relic are not counted. Time spent drawing on the map is not counted either.
 
 ## 1.2.4 (2026-11-21) — feedback of 2026-11-21
 New mistakes: Antipathie after a Shot on its enemy (an ally's Shot too); "Carte gratuite à jouer" spent on a card that already cost
