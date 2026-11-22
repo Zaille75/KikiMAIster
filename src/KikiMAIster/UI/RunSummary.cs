@@ -427,6 +427,14 @@ public static class RecordStore
                     ModConfig.Current.Save();
                     ModLog.Info("Distrait records cleared (misplay rules changed)");
                 }
+                // Once per game mode (1.2.5): Erreurs now count one per card left unplayed, so "Distrait" starts over.
+                if (ModConfig.Current.MissedRecordsCleared125.Add(mode))
+                {
+                    book.Clear("trophy.missed");
+                    if (FilePath != null && File.Exists(FilePath)) File.WriteAllText(FilePath, book.Write());
+                    ModConfig.Current.Save();
+                    ModLog.Info($"Distrait records cleared for mode {mode} (1.2.5: one Erreur per card left unplayed)");
+                }
                 // Once (v0.17.1): "Maître des malus" counted À l'attaque !, which is no debuff: its records start over.
                 if (ModConfig.Current.DebuffRecordsCleared) return;
                 book.Clear("trophy.debuffs");

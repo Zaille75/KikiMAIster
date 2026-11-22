@@ -7,7 +7,10 @@
 > **1.2.5 (2026-11-22) merged in `main`, not released, not tested in game, version number not bumped yet:** Godot also counts the
 > wait for the last player's end of turn, minus 5 s per turn, never extra turns; pen-down time on the map is not counted
 > (spec 02-ui "1.2.5", `RunHistoryPatches.TurnEnded / DrawBegin / DrawStop`, `WaitRules`). In the next co-op log, check the
-> `end of turn:` and `map vote: … s drawing` lines. PatchCheck beta 83, main 122; tests 259.
+> `end of turn:` and `map vote: … s drawing` lines. Also the inbox `logs/inbox/2026-11-22_01-19-14` (6 F9 reports, 1.2.4 games, no
+> internal error): new misses "compostLate" (for the killer), "energyCard" (one Erreur per card), "topForgotten", "foolEmptyHand"
+> (`Rules1_2_5.cs`); `TurnState.EnemiesDoomed`; formatted names in `GameNames`; record notices cleared at run start; Distrait
+> records cleared once per mode (`missedRecordsCleared125`). Spec 01-metrics rows "Kill before Compostage" → "Enemies condemned". PatchCheck beta 84, main 123; tests 270.
 >
 > **State (2026-11-14):** **1.2.2 released** on GitHub (tag `v1.2.2`, by WTT27) and the Steam Workshop (uploaded by
 > Zaille75, item 3832591950 "KikiMAIster - Solo and Co-op stats", checked with the Steam API `GetPublishedFileDetails`).
