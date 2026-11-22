@@ -296,8 +296,8 @@ public static class RunHistoryPatches
     }
 
     /// End of turn (1.2.5, Godot): the last player to end the turn made the others wait the time since the one before, minus
-    /// the grace. A prefix, because the last call can resume the combat before a postfix runs. Players made ready by the game
-    /// (dead, or out of someone's extra turn) have no time. Every other ready player was set this turn, so nothing needs resetting.
+    /// the grace. A prefix, because the last call can resume the combat before a postfix runs. Extra turns are ignored; a dead
+    /// player, made ready by the game, has no time. Every other ready player was set this turn, so nothing needs resetting.
     private static readonly Dictionary<ulong, double> EndTurnTimes = new();
 
     [HarmonyPatch(typeof(CombatManager), nameof(CombatManager.SetReadyToEndTurn))]
@@ -305,9 +305,8 @@ public static class RunHistoryPatches
     {
         public static void Prefix(CombatManager __instance, Player player) => Capture.Safe("TurnEnded", () =>
         {
-            if (!__instance.IsInProgress || __instance.IsPlayerReadyToEndTurn(player)) return;
-            var extra = __instance.PlayersTakingExtraTurn;
-            var played = !player.Creature.IsDead && (extra.Count == 0 || extra.Contains(player));
+            if (!__instance.IsInProgress || __instance.PlayersTakingExtraTurn.Count > 0 || __instance.IsPlayerReadyToEndTurn(player)) return;
+            var played = !player.Creature.IsDead;
             var now = Clock.Elapsed.TotalSeconds;
             if (played) EndTurnTimes[player.NetId] = now;
             else EndTurnTimes.Remove(player.NetId);
