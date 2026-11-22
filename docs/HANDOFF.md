@@ -1,10 +1,10 @@
-# Handoff — state of the project (2026-11-21, v1.2.4)
+# Handoff — state of the project (2026-11-22, v1.2.5)
 
 > **Start here in a new conversation**, then `CLAUDE.md`, `docs/specs/01-metrics.md` (rules) and `docs/specs/02-ui.md`
 > (interface). The history of every version is in `CHANGELOG.md` and the specs' "vX.Y.Z" notes; the git history has the
 > older handoff sections (v0.7 → v0.17).
 >
-> **1.2.5 (2026-11-22) merged in `main`, version bumped, zip and Workshop files built; Zaille75 runs the GitHub release and the Workshop upload; not tested in game:** Godot also counts the
+> **1.2.5 (2026-11-22) released** on GitHub (tag `v1.2.5`, by WTT27), merged in `main`; Steam Workshop (item 3832591950, updated 2026-11-22 00:52 UTC, checked with `GetPublishedFileDetails`); **not tested in game:** Godot also counts the
 > wait for the last player's end of turn, minus 5 s per turn, never extra turns; pen-down time on the map is not counted
 > (spec 02-ui "1.2.5", `RunHistoryPatches.TurnEnded / DrawBegin / DrawStop`, `WaitRules`). In the next co-op log, check the
 > `end of turn:` and `map vote: … s drawing` lines. Also the inbox `logs/inbox/2026-11-22_01-19-14` (6 F9 reports, 1.2.4 games, no
