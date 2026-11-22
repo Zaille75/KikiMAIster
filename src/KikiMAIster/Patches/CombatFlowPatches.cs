@@ -107,6 +107,7 @@ public static class CombatFlowPatches
         Capture.Safe("run key", () => _runKey = RunStore.KeyOf(runState));
         if (_runKey != null) RunStore.TryRestore(_runKey, _floor, Capture.Engine);
         RunHistoryPatches.Reset();
+        UI.FightRecordStore.Notes.Clear(); // 1.2.5: stored by fight number, which starts over with each run.
         RunHistoryPatches.Read(runState);
         // Composition stats are rebuilt from the game's history before this run can end (it would be counted twice).
         _ = UI.CompositionStore.Data;
@@ -392,6 +393,14 @@ public static class CombatFlowPatches
         });
     }
 
+    /// The hand emptied (1.2.5): the next card drawn is Toupie perpétuelle's.
+    [HarmonyPatch(typeof(Hook), nameof(Hook.AfterHandEmptied))]
+    public static class HandEmptied
+    {
+        public static void Prefix(MegaCrit.Sts2.Core.Entities.Players.Player player) =>
+            Capture.Safe("AfterHandEmptied", () => BlockAlternatives.OnHandEmptied(player));
+    }
+
     // Effects other than block during a card play (spec §F, F4): draw, orb, created card.
     [HarmonyPatch(typeof(Hook), nameof(Hook.AfterCardDrawn))]
     public static class CardDrawn
@@ -400,6 +409,7 @@ public static class CombatFlowPatches
         {
             BlockAlternatives.OnEffect();
             BlockAlternatives.OnCardDrawn(card.Owner, fromHandDraw);
+            if (!fromHandDraw) BlockAlternatives.OnTopDraw(card);
             // Drawn for an ally (Huddle Up…): help given by the player acting.
             if (!fromHandDraw && Capture.CurrentActingPlayer is { } giver && card.Owner != giver)
                 Capture.Emit(new HelpGiven(Capture.ToActor(giver), "cards", 1));

@@ -54,6 +54,8 @@ public sealed class ModConfig
     public bool DebuffRecordsCleared { get; set; }
     /// The "Champion des erreurs" records were cleared once (v0.18.9, Zaille75: the misplay rules changed).
     public bool MissedRecordsCleared { get; set; }
+    /// The game modes whose "Distrait" records were cleared for 1.2.5 (Erreurs now count one per card left unplayed).
+    public HashSet<string> MissedRecordsCleared125 { get; set; } = new();
     /// Hotkeys (v0.18.9, Zaille75): the panel, the group compositions and the report window (Godot key names).
     public string KeyPanel { get; set; } = "F7";
     public string KeyCompositions { get; set; } = "F8";
@@ -133,6 +135,7 @@ public sealed class ModConfig
                     case "compoFolded": c.CompoFolded = v == "true"; break;
                     case "debuffRecordsCleared": c.DebuffRecordsCleared = v == "true"; break;
                     case "missedRecordsCleared": c.MissedRecordsCleared = v == "true"; break;
+                    case "missedRecordsCleared125": c.MissedRecordsCleared125 = v.Split(',', StringSplitOptions.RemoveEmptyEntries).ToHashSet(); break;
                     case "keyPanel": c.KeyPanel = v; break;
                     case "keyCompositions": c.KeyCompositions = v; break;
                     case "keyReport": c.KeyReport = v; break;
@@ -178,6 +181,7 @@ public sealed class ModConfig
                 $"compoFolded={(CompoFolded ? "true" : "false")}", $"detached={string.Join(',', Detached)}",
                 $"debuffRecordsCleared={(DebuffRecordsCleared ? "true" : "false")}",
                 $"missedRecordsCleared={(MissedRecordsCleared ? "true" : "false")}",
+                $"missedRecordsCleared125={string.Join(',', MissedRecordsCleared125)}",
                 $"keyPanel={KeyPanel}", $"keyCompositions={KeyCompositions}", $"keyReport={KeyReport}",
                 $"funTrophiesShown={(FunTrophiesShown ? "true" : "false")}", $"chifumiRecordsOpen={(ChifumiRecordsOpen ? "true" : "false")}",
                 $"dateFormat={DateFormat}"

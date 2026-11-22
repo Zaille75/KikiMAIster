@@ -32,6 +32,8 @@ public sealed class TurnCard
     /// Retained, paid with Stars or Exhaust, consuming the hand, only giving energy (Sursis…), or killing the player's pet
     /// (Détonation osseuse…): not playing it is a choice.
     public bool KeptOnPurpose { get; init; }
+    /// Drawn by Toupie perpétuelle when the hand emptied, and kept on purpose only because it Exhausts (1.2.5).
+    public bool DrawnByTop { get; init; }
     /// An attack made by the pet (Cliquetis…, v0.17.45): it does nothing while the pet is dead.
     public bool NeedsPet { get; init; }
     /// The Fool (1.2.0): a Shot with no arrow ready (the game shows it in red): playing it now would do nothing.
@@ -226,6 +228,8 @@ public class TurnPlay
     public double CapStopped { get; set; }
     public HashSet<string> CapKeys { get; } = new();
     public HashSet<object> SlipperyOn { get; } = new(ReferenceEqualityComparer.Instance);
+    /// 1.2.5: L'Insensé played with no other card in hand (it auto-played nothing).
+    public bool NoCardToAutoPlay { get; set; }
     /// 1.2.4: the enemies it gave their first Vulnérable (a later card hitting them got more from it). FreeCardUsed: it used up
     /// "Carte gratuite à jouer" (Accordage…) on a card that already cost 0.
     public HashSet<object> VulnerableOn { get; } = new(ReferenceEqualityComparer.Instance);
@@ -316,6 +320,10 @@ public sealed class TurnState
     public Dictionary<object, int> EnemySlippery { get; init; } = new(ReferenceEqualityComparer.Instance);
     /// Enemies alive with Dur à cuire (a cap on every hit that never goes away; 1.2.4).
     public HashSet<object> EnemyHardToKill { get; init; } = new(ReferenceEqualityComparer.Instance);
+    /// 1.2.5: every enemy alive has Fatalité ≥ its HP and none comes back: more attacks change nothing.
+    public bool EnemiesDoomed { get; init; }
+    /// 1.2.5: the kills of this turn made before a Compostage in hand.
+    public List<KillBeforeCompost> KillsBeforeCompost { get; init; } = new();
 
     public TurnPlayer? Player(Actor a) => Players.FirstOrDefault(p => p.Actor == a);
 }
@@ -355,9 +363,11 @@ public static partial class TurnReview
         WeakPlays(s, r);
         Overkills(s, r);
         LethalLeft(s, r);
+        CompostLate(s, r);
         foreach (var p in s.Players.Where(p => p.Alive)) EndOfTurnChecks(s, p, r);
         foreach (var p in s.Players.Where(p => p.Alive))
         {
+            FoolEmptyHand(s, p, r);
             FreeCardsLeft(s, p, r);
             Stampede(s, p, r);
             DrawBlocked(s, p, r);
@@ -890,7 +900,8 @@ public static partial class TurnReview
         bool NeedlessBlock(TurnCard c) => blockCovered && c.GainsBlock && c.Kind == CardKind.Skill;
         // v0.17.45: an attack is no use when every enemy is at its damage cap (Carapace endurcie), nor a pet attack while the
         // pet is dead (unless the player's own card killed it this turn: the attack could have come first).
-        bool CanHit(TurnCard c) => c.Kind != CardKind.Attack || (s.OpenEnemy && !s.NothingToKill);
+        // 1.2.5: nor when every enemy is already condemned by Fatalité.
+        bool CanHit(TurnCard c) => c.Kind != CardKind.Attack || (s.OpenEnemy && !s.NothingToKill && !s.EnemiesDoomed);
         bool PetReady(TurnCard c) => (!c.NeedsPet || p.PetAlive || p.PetSacrificedThisTurn) && !c.NoArrow;
         // With Larmes de Paël, only a card the energy beyond the 1 kept could pay.
         bool Fits(TurnCard c) => p.PaelsTears == null || (!c.CostsX && c.Cost <= lostEnergy);
@@ -902,7 +913,16 @@ public static partial class TurnReview
             var playable = hand.Where(WouldHelp).GroupBy(c => c.Key).Select(g => g.First())
                 .OrderByDescending(c => c.CostsX ? energy : c.Cost).Take(3).Select(c => c.Key);
             r.Events.Add(new MissedChance(actor, "energy", new[] { N(lostEnergy) }.Concat(playable).ToArray(), lostEnergy));
+            // 1.2.5: one Erreur per card that energy could have paid.
+            var paid = CardsEnergyPaid(p, lostEnergy, WouldHelp);
+            if (paid.Count > 0)
+                r.Events.Add(new MissedChance(actor, "energyCard", new[] { N(paid.Count), N(lostEnergy), string.Join('+', paid.Select(c => c.Key)) }, paid.Count));
         }
+        // 1.2.5: the card Toupie perpétuelle drew, left in hand (an Exhaust card is otherwise "kept on purpose").
+        if (!s.NothingToKill && !s.EnemyAsleep)
+            foreach (var c in hand.Where(c => c.DrawnByTop && c.KeptOnPurpose && p.Affordable(c) && Fits(c) && (energyLost || c.Free) &&
+                                              !NeedlessBlock(c) && !Punished(c) && CanHit(c) && PetReady(c)))
+                r.Events.Add(new MissedChance(actor, "topForgotten", new[] { c.Key, TopKey }));
         // Energy lost with nothing useful to spend it on (v0.17.29): counted for the trophy "Survolté".
         // v0.18.6: cards kept on purpose (Danse des lames…) do not stop it from counting.
         var energySurplus = !missedEnergy && lostEnergy > 0 && !s.EnemyAsleep && energyLost &&
@@ -1123,7 +1143,7 @@ public static partial class TurnReview
     /// A card left in hand that would have been worth playing with more energy (v0.18.7).
     private static bool UsefulLeft(TurnState s, TurnPlayer p, TurnCard c) =>
         !c.StatusOrCurse && c.PlayableExceptEnergy && !c.KeptOnPurpose && !c.Punished && !c.CostsX && !c.LacksStars &&
-        (!c.GainsBlock || p.Block < p.Incoming) && (c.Kind != CardKind.Attack || (s.OpenEnemy && !s.NothingToKill && c.DealsDamage)) &&
+        (!c.GainsBlock || p.Block < p.Incoming) && (c.Kind != CardKind.Attack || (s.OpenEnemy && !s.NothingToKill && !s.EnemiesDoomed && c.DealsDamage)) &&
         (!c.NeedsPet || p.PetAlive) && !c.NoArrow;
 
     /// The useful card left in hand that only the saved energy would have paid (not already affordable).
@@ -1204,7 +1224,7 @@ public static partial class TurnReview
             var alternative = p == null || play.HadOtherEffect || play.Ethereal || MelodyCounted(s, play) ? null : play.UsefulCardsInHand
                 .Select(seen => p.InHand(seen.Card))
                 .FirstOrDefault(c => c != null && !used.Contains(c.Ref) && !c.KeptOnPurpose && !c.NoArrow && c.Cost <= budget && c.PlayableInstead &&
-                                     !c.Free && c.Thorns <= room && !c.Punished);
+                                     !c.Free && c.Thorns <= room && !c.Punished && !(s.EnemiesDoomed && c.Kind == CardKind.Attack));
             if (alternative != null)
             {
                 used.Add(alternative.Ref);

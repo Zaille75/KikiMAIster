@@ -277,6 +277,8 @@ public static class DamagePatches
             CombatFlowPatches.OnPlayerKilled(target, r.OverkillDamage, r.BlockedDamage + r.UnblockedDamage + r.OverkillDamage);
         Capture.Emit(new DamageDealt(dealerActor, Capture.ToActor(target),
             r.BlockedDamage, r.UnblockedDamage, r.OverkillDamage, r.WasTargetKilled, source, kind, avoidable));
+        if (target.IsEnemy && r.WasTargetKilled && (dealer?.Player ?? dealer?.PetOwner) is { } killer)
+            Capture.Safe("kill before Compostage", () => BlockAlternatives.OnEnemyKilled(target, killer, card, source.ToString()));
         if (card != null && target.IsEnemy && r.UnblockedDamage > 0) CreditHelpers(card, dealer, target, r.UnblockedDamage);
         if (card == null && source.Kind == SourceKind.Potion && target.IsEnemy && r.WasTargetKilled && Capture.PotionUser is { } drinker)
             Capture.Safe("potion after attacks", () => BlockAlternatives.OnPotionHit(drinker, $"Potion:{source.Id}", target,

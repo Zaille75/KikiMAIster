@@ -87,6 +87,11 @@ public static class BlockAlternatives
     private static readonly Dictionary<Player, int> StampedeShort = new();
     /// The attacks Ruée played for free when it had a play for each of them (v0.18.7).
     private static readonly Dictionary<Player, List<CardModel>> StampedeAll = new();
+    /// 1.2.5: players with Toupie perpétuelle whose hand just emptied, and the cards it drew this turn.
+    private static readonly HashSet<Player> TopPending = new();
+    private static readonly HashSet<CardModel> TopDrawn = new(ReferenceEqualityComparer.Instance);
+    /// 1.2.5: enemies killed this turn while a playable Compostage was in a hand.
+    private static readonly List<KillBeforeCompost> KillsBeforeCompost = new();
 
     public static void Reset()
     {
@@ -114,6 +119,35 @@ public static class BlockAlternatives
         StampedeShort.Clear();
         StampedeAll.Clear();
         BlockOnHit.Clear();
+        TopPending.Clear();
+        TopDrawn.Clear();
+        KillsBeforeCompost.Clear();
+    }
+
+    /// The hand emptied (1.2.5): with Toupie perpétuelle, the next card drawn is the relic's.
+    public static void OnHandEmptied(Player player)
+    {
+        if (player.GetRelic<UnceasingTop>() != null) TopPending.Add(player);
+    }
+
+    public static void OnTopDraw(CardModel card)
+    {
+        if (TopPending.Remove(card.Owner)) TopDrawn.Add(card);
+    }
+
+    /// An enemy died (1.2.5): in the players' turn, each playable Compostage still in a hand lost its energy. Judged at the end
+    /// of the turn: a fight won that turn never gets there. Compostage is matched by id (not on the game's main branch yet).
+    public static void OnEnemyKilled(Creature target, Player killer, CardModel? card, string source)
+    {
+        if (target.CombatState is not { } combat || combat.CurrentSide != CombatSide.Player || ComesBack(target)) return;
+        var alive = combat.Players.Count(p => p.Creature.IsAlive);
+        foreach (var holder in combat.Players.Where(p => p.Creature.IsAlive))
+        {
+            if (holder.PlayerCombatState is not { } st) continue;
+            foreach (var compost in st.Hand.Cards.Where(c => c != card && Capture.IdOf(c) == "COMPOST" && PlayableExceptEnergy(c) && Cost(c) <= st.Energy))
+                KillsBeforeCompost.Add(new KillBeforeCompost(Capture.ToActor(killer), card != null ? Key(card) : source, Key(compost),
+                    Capture.ToActor(holder), (int)compost.DynamicVars.Energy.BaseValue * alive));
+        }
     }
 
     /// A damage cap stopped part of a hit of the player's card play in progress (v0.18.7), on that enemy (v0.18.9).
@@ -792,6 +826,8 @@ public static class BlockAlternatives
         // 1.2.4: the free card spent on a card that already cost 0 (its own cost, no modifier).
         if (FreeCardSpent.Remove(play.Player) && !cardPlay.Card.EnergyCost.CostsX &&
             cardPlay.Card.EnergyCost.GetWithModifiers(CostModifiers.None) == 0) play.FreeCardWasted = true;
+        // 1.2.5: L'Insensé (matched by id: not on the game's main branch yet) plays cards from a hand that has none left.
+        play.NoCardToAutoPlay = Capture.IdOf(cardPlay.Card) == "THE_FOOL" && hand.All(c => c == cardPlay.Card);
         if (GameBranch.IsV113)
         {
             Capture.Safe("arrows", () => Arrows.Fill(play, cardPlay));
@@ -912,6 +948,8 @@ public static class BlockAlternatives
             LastEnemy = real.Count == 1 && !ComesBack(real[0]) && combat.Enemies.Count(e => e.IsAlive) == 1 ? real[0] : null,
             EnemyAsleep = real.Any(e => e.HasPower<AsleepPower>()),
             OpenEnemy = real.Any(e => !(e.GetPower<HardenedShellPower>() is { } p && p.DisplayAmount <= 0)),
+            // 1.2.5: the game's own test for Fatalité (HP ≤ its amount), on every enemy alive.
+            EnemiesDoomed = real.Count > 0 && combat.Enemies.Where(e => e.IsAlive).All(e => e.GetPower<DoomPower>() is { } doom && e.CurrentHp <= doom.Amount && !ComesBack(e)),
             // The cap met: Carapace endurcie, or the enemy shown with infinite HP (Géant de la Cascade about to explode).
             ShellKey = real.Count == 0 && combat.Enemies.FirstOrDefault(e => e.IsAlive && e.Monster != null) is { Monster: { } giant }
                 ? $"Monster:{Capture.IdOf(giant)}" : $"Power:{ModelDb.GetId<HardenedShellPower>().Entry}"
@@ -938,6 +976,7 @@ public static class BlockAlternatives
             s.Plays.Add(play);
         }
         s.OrderLosses.AddRange(OrderLosses);
+        s.KillsBeforeCompost.AddRange(KillsBeforeCompost);
         return s;
     }
 
@@ -989,6 +1028,7 @@ public static class BlockAlternatives
         PlayableInstead = PlayableInstead(c),
         LacksStars = LacksStars(c),
         KeptOnPurpose = KeptOnPurpose(c, combat),
+        DrawnByTop = TopDrawn.Contains(c) && !KeptForAnotherReason(c, combat),
         NeedsPet = c.Tags.Contains(CardTag.OstyAttack),
         NoArrow = IdleNow(c),
         Shot = IsShot(c),
@@ -1334,7 +1374,11 @@ public static class BlockAlternatives
     /// exhausts or transforms other cards of the hand (v0.17.44, Zaille75: HORS DE MA VUE ! kept not to lose a card), or it
     /// costs HP to play (v0.18.4, Zaille75: Percée kept at 3 HP is a choice), or it only evokes orbs (v0.18.5, Activation double).
     private static bool KeptOnPurpose(CardModel card, ICombatState combat) =>
-        card.ShouldRetainThisTurn || card.CurrentStarCost > 0 || card.HasStarCostX || card.Keywords.Contains(CardKeyword.Exhaust) ||
+        card.Keywords.Contains(CardKeyword.Exhaust) || KeptForAnotherReason(card, combat);
+
+    /// Every reason but Exhaust (1.2.5: a card Toupie perpétuelle drew is a miss even if it Exhausts).
+    private static bool KeptForAnotherReason(CardModel card, ICombatState combat) =>
+        card.ShouldRetainThisTurn || card.CurrentStarCost > 0 || card.HasStarCostX ||
         ConsumesHand.Contains(card.Id.Entry) || EnergyOnly.Contains(card.Id.Entry) || SacrificesPet.Contains(card.Id.Entry) ||
         CostsHp.Contains(card.Id.Entry) || EvokesOrbs.Contains(card.Id.Entry) || !Hook.ShouldFlush(combat, card.Owner) ||
         DoesNothingNow(card) || DiscardsForNothing(card) || card.Affliction is Galvanized ||

@@ -5,6 +5,10 @@ Summary by version line. The detailed notes of every version are in [docs/specs/
 
 ## 1.2.5 (not released) — Godot counts the end of turn
 The Godot trophy also counts the time the others waited for the last player to end the turn in combat, minus 5 seconds per turn. Extra turns given by a card or relic are not counted. Time spent drawing on the map is not counted either.
+New mistakes: a kill before Compostage, one Erreur per card the leftover energy could have paid, a card drawn by Toupie perpétuelle
+left in hand, L'Insensé played with an empty hand. Fixes: attacks left in hand are no mistake once every enemy is condemned by
+Fatalité; melody card names no longer show `{MelodyKiText}`; a fight no longer shows a "new record" from another run. The Distrait
+records start over.
 
 ## 1.2.4 (2026-11-21) — feedback of 2026-11-21
 New mistakes: Antipathie after a Shot on its enemy (an ally's Shot too); "Carte gratuite à jouer" spent on a card that already cost

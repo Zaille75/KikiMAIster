@@ -91,7 +91,17 @@ public static class GameNames
         {
             try
             {
-                var text = LocString.GetIfExists(table, id + ".title")?.GetRawText();
+                if (LocString.GetIfExists(table, id + ".title") is not { } name) continue;
+                // 1.2.5: formatted, so that a name built from variables reads "Ki Wah", not "{MelodyKiText} {MelodyWaText}".
+                string text;
+                try
+                {
+                    text = name.GetFormattedText();
+                }
+                catch (Exception)
+                {
+                    text = name.GetRawText();
+                }
                 if (!string.IsNullOrWhiteSpace(text)) return text;
             }
             catch (Exception)
